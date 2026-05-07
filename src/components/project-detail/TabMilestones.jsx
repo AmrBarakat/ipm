@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { formatDate } from '@/lib/constants';
-import { Plus, Flag } from 'lucide-react';
+import { Plus, Flag, Pencil, Trash2, Save, X } from 'lucide-react';
 import PanelWrapper from '@/components/ui/PanelWrapper';
 
 const STATUS_COLORS = {
@@ -16,6 +16,8 @@ export default function TabMilestones({ projectId }) {
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ title: '', planned_date: '', weight: '' });
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({});
 
   useEffect(() => { load(); }, [projectId]);
 
@@ -40,25 +42,39 @@ export default function TabMilestones({ projectId }) {
     load();
   }
 
+  function startEdit(m) {
+    setEditingId(m.id);
+    setEditForm({ title: m.title, planned_date: m.planned_date || '', weight: m.weight || '' });
+  }
+
+  async function saveEdit(id) {
+    await base44.entities.Milestone.update(id, { ...editForm, weight: Number(editForm.weight) || 0 });
+    setEditingId(null);
+    load();
+  }
+
+  async function deleteMilestone(id) {
+    if (!confirm('Delete this milestone?')) return;
+    await base44.entities.Milestone.delete(id);
+    load();
+  }
+
   if (loading) return <Spinner />;
 
   return (
     <div>
       <div className="flex justify-between items-center mb-4">
         <p className="text-sm text-slate-500">{milestones.length} milestone{milestones.length !== 1 ? 's' : ''}</p>
-        <button onClick={() => setAdding(v => !v)}
-          className="flex items-center gap-1 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold text-sm rounded">
+        <button onClick={() => setAdding(v => !v)} className="flex items-center gap-1 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold text-sm rounded">
           <Plus className="w-4 h-4" /> Add Milestone
         </button>
       </div>
 
       {adding && (
         <form onSubmit={create} className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4 grid grid-cols-1 md:grid-cols-3 gap-3">
-          <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-            placeholder="Milestone title *" className={inp} required />
+          <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="Milestone title *" className={inp} required />
           <input type="date" value={form.planned_date} onChange={e => setForm(f => ({ ...f, planned_date: e.target.value }))} className={inp} />
-          <input type="number" value={form.weight} onChange={e => setForm(f => ({ ...f, weight: e.target.value }))}
-            placeholder="Weight %" className={inp} min="0" max="100" />
+          <input type="number" value={form.weight} onChange={e => setForm(f => ({ ...f, weight: e.target.value }))} placeholder="Weight %" className={inp} min="0" max="100" />
           <div className="flex gap-2">
             <button type="submit" className="px-4 py-2 bg-amber-500 text-slate-900 font-semibold text-sm rounded hover:bg-amber-400">Save</button>
             <button type="button" onClick={() => setAdding(false)} className="px-4 py-2 border border-slate-300 text-slate-600 text-sm rounded hover:bg-slate-100">Cancel</button>
@@ -72,44 +88,65 @@ export default function TabMilestones({ projectId }) {
           <p className="text-sm">No milestones yet.</p>
         </div>
       ) : (
-        <PanelWrapper
-          title="Milestones"
-          exportData={milestones}
-          exportCols={[
-            { key: 'title', label: 'Title' },
-            { key: 'status', label: 'Status' },
-            { key: 'planned_date', label: 'Planned Date' },
-            { key: 'completed_date', label: 'Completed Date' },
-            { key: 'weight', label: 'Weight %' },
-            { key: 'progress', label: 'Progress %' },
-          ]}
-        >
-        <div className="space-y-2">
-          {milestones.map(m => (
-            <div key={m.id} className="bg-white rounded-lg shadow-sm px-4 py-3 flex flex-wrap items-center gap-4">
-              <Flag className="w-4 h-4 text-amber-500 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <div className="font-semibold text-slate-800 text-sm">{m.title}</div>
-                {m.planned_date && <div className="text-xs text-slate-500">Planned: {formatDate(m.planned_date)}</div>}
-              </div>
-              {m.weight > 0 && <span className="text-xs text-slate-500">{m.weight}%</span>}
-              <select value={m.status} onChange={e => updateStatus(m, e.target.value)}
-                className={`text-xs px-2 py-1 rounded font-semibold border-0 cursor-pointer ${STATUS_COLORS[m.status] || 'bg-slate-100 text-slate-600'}`}>
-                {['pending','in_progress','completed','overdue'].map(s => (
-                  <option key={s} value={s}>{s.replace(/_/g,' ')}</option>
-                ))}
-              </select>
-              {m.progress > 0 && (
-                <div className="flex items-center gap-1 w-24">
-                  <div className="flex-1 bg-slate-200 rounded-full h-1.5">
-                    <div className="bg-amber-500 h-1.5 rounded-full" style={{ width: `${m.progress}%` }} />
+        <PanelWrapper title="Milestones" exportData={milestones} exportCols={[
+          { key: 'title', label: 'Title' }, { key: 'status', label: 'Status' },
+          { key: 'planned_date', label: 'Planned Date' }, { key: 'completed_date', label: 'Completed Date' },
+          { key: 'weight', label: 'Weight %' }, { key: 'progress', label: 'Progress %' },
+        ]}>
+          <div className="space-y-2">
+            {milestones.map(m => {
+              const isEditing = editingId === m.id;
+              return (
+                <div key={m.id} className="bg-white rounded-lg shadow-sm px-4 py-3 flex flex-wrap items-center gap-4">
+                  <Flag className="w-4 h-4 text-amber-500 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    {isEditing ? (
+                      <div className="flex gap-2 flex-wrap">
+                        <input value={editForm.title} onChange={e => setEditForm(f => ({ ...f, title: e.target.value }))} className={inp} placeholder="Title" style={{ maxWidth: 200 }} />
+                        <input type="date" value={editForm.planned_date} onChange={e => setEditForm(f => ({ ...f, planned_date: e.target.value }))} className={inp} style={{ maxWidth: 160 }} />
+                        <input type="number" value={editForm.weight} onChange={e => setEditForm(f => ({ ...f, weight: e.target.value }))} placeholder="Weight %" className={inp} min="0" max="100" style={{ maxWidth: 100 }} />
+                      </div>
+                    ) : (
+                      <>
+                        <div className="font-semibold text-slate-800 text-sm">{m.title}</div>
+                        {m.planned_date && <div className="text-xs text-slate-500">Planned: {formatDate(m.planned_date)}</div>}
+                      </>
+                    )}
                   </div>
-                  <span className="text-xs text-slate-500">{m.progress}%</span>
+                  {!isEditing && m.weight > 0 && <span className="text-xs text-slate-500">{m.weight}%</span>}
+                  {!isEditing && (
+                    <select value={m.status} onChange={e => updateStatus(m, e.target.value)}
+                      className={`text-xs px-2 py-1 rounded font-semibold border-0 cursor-pointer ${STATUS_COLORS[m.status] || 'bg-slate-100 text-slate-600'}`}>
+                      {['pending', 'in_progress', 'completed', 'overdue'].map(s => (
+                        <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
+                      ))}
+                    </select>
+                  )}
+                  {!isEditing && m.progress > 0 && (
+                    <div className="flex items-center gap-1 w-24">
+                      <div className="flex-1 bg-slate-200 rounded-full h-1.5">
+                        <div className="bg-amber-500 h-1.5 rounded-full" style={{ width: `${m.progress}%` }} />
+                      </div>
+                      <span className="text-xs text-slate-500">{m.progress}%</span>
+                    </div>
+                  )}
+                  <div className="flex gap-1">
+                    {isEditing ? (
+                      <>
+                        <button onClick={() => saveEdit(m.id)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Save className="w-4 h-4" /></button>
+                        <button onClick={() => setEditingId(null)} className="p-1 text-slate-400 hover:bg-slate-100 rounded"><X className="w-4 h-4" /></button>
+                      </>
+                    ) : (
+                      <>
+                        <button onClick={() => startEdit(m)} className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded"><Pencil className="w-4 h-4" /></button>
+                        <button onClick={() => deleteMilestone(m.id)} className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-4 h-4" /></button>
+                      </>
+                    )}
+                  </div>
                 </div>
-              )}
-            </div>
-          ))}
-        </div>
+              );
+            })}
+          </div>
         </PanelWrapper>
       )}
     </div>
