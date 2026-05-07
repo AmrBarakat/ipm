@@ -142,7 +142,7 @@ export default function ProjectDetail() {
             {activeTab === 'tasks'      && <TabTasks      projectId={id} />}
             {activeTab === 'milestones' && <TabMilestones projectId={id} />}
             {activeTab === 'bom'        && <TabBOM        projectId={id} />}
-            {activeTab === 'financials' && <TabFinancials projectId={id} />}
+            {activeTab === 'financials' && <TabFinancials projectId={id} project={project} />}
             {activeTab === 'documents'  && <TabDocuments  projectId={id} />}
           </div>
         </>

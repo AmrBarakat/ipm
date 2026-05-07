@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import PanelWrapper from '@/components/ui/PanelWrapper';
 import { formatCurrency, formatDate, INVOICE_STATUS_LABELS, EXPENSE_CATEGORY_LABELS, EXPENSE_STATUS_LABELS } from '@/lib/constants';
-import { Plus, TrendingUp, TrendingDown } from 'lucide-react';
+import { Plus, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
 
 const INV_STATUS_COLORS = {
   planned: 'bg-slate-100 text-slate-600',
@@ -13,7 +13,7 @@ const INV_STATUS_COLORS = {
   cancelled: 'bg-slate-200 text-slate-500',
 };
 
-export default function TabFinancials({ projectId }) {
+export default function TabFinancials({ projectId, project }) {
   const [invoices, setInvoices] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -55,10 +55,30 @@ export default function TabFinancials({ projectId }) {
   const totalPaid = invoices.filter(i => i.status === 'paid').reduce((s, i) => s + (i.paid_amount || i.actual_amount || i.planned_amount || 0), 0);
   const totalExpenses = expenses.reduce((s, e) => s + (e.actual_amount || e.planned_amount || 0), 0);
 
+  const budget = project?.contract_value || 0;
+  const exceedsInvoiced = totalExpenses > totalInvoiced && totalInvoiced > 0;
+  const exceedsBudget = budget > 0 && totalExpenses > budget;
+  const hasWarning = exceedsInvoiced || exceedsBudget;
+
   if (loading) return <Spinner />;
 
   return (
     <div className="space-y-6">
+      {/* Warning banner */}
+      {hasWarning && (
+        <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-300 rounded-lg text-red-800">
+          <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+          <div className="text-sm space-y-1">
+            {exceedsBudget && (
+              <p><strong>Budget overrun:</strong> Total expenses ({formatCurrency(totalExpenses, 'SAR')}) exceed the project budget ({formatCurrency(budget, 'SAR')}) by {formatCurrency(totalExpenses - budget, 'SAR')}.</p>
+            )}
+            {exceedsInvoiced && !exceedsBudget && (
+              <p><strong>Expenses exceed invoiced amount:</strong> Total expenses ({formatCurrency(totalExpenses, 'SAR')}) exceed total invoiced ({formatCurrency(totalInvoiced, 'SAR')}) by {formatCurrency(totalExpenses - totalInvoiced, 'SAR')}.</p>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Summary */}
       <div className="grid grid-cols-3 gap-4">
         <div className="bg-white rounded-lg shadow-sm p-4 text-center">
@@ -69,9 +89,12 @@ export default function TabFinancials({ projectId }) {
           <div className="text-xs text-slate-500 uppercase tracking-wide mb-1">Total Paid</div>
           <div className="text-lg font-bold text-emerald-700">{formatCurrency(totalPaid, 'SAR')}</div>
         </div>
-        <div className="bg-white rounded-lg shadow-sm p-4 text-center">
-          <div className="text-xs text-slate-500 uppercase tracking-wide mb-1">Total Expenses</div>
-          <div className="text-lg font-bold text-red-700">{formatCurrency(totalExpenses, 'SAR')}</div>
+        <div className={`rounded-lg shadow-sm p-4 text-center ${hasWarning ? 'bg-red-50 border-2 border-red-400' : 'bg-white'}`}>
+          <div className="text-xs text-slate-500 uppercase tracking-wide mb-1 flex items-center justify-center gap-1">
+            {hasWarning && <AlertTriangle className="w-3.5 h-3.5 text-red-500" />}
+            Total Expenses
+          </div>
+          <div className={`text-lg font-bold ${hasWarning ? 'text-red-600' : 'text-red-700'}`}>{formatCurrency(totalExpenses, 'SAR')}</div>
         </div>
       </div>
 
