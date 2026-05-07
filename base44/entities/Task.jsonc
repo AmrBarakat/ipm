@@ -6,6 +6,10 @@
       "type": "string",
       "description": "Reference to Project"
     },
+    "milestone_id": {
+      "type": "string",
+      "description": "Optional link to Milestone"
+    },
     "title": {
       "type": "string"
     },

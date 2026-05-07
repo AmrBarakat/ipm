@@ -22,26 +22,33 @@ const PRIORITY_COLORS = {
 
 export default function TabTasks({ projectId }) {
   const [tasks, setTasks] = useState([]);
+  const [milestones, setMilestones] = useState([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [newTask, setNewTask] = useState({ title: '', priority: 'medium', assignee: '', start_date: '', due_date: '', predecessor_ids: [] });
+  const [newTask, setNewTask] = useState({ title: '', priority: 'medium', assignee: '', start_date: '', due_date: '', predecessor_ids: [], milestone_id: '' });
   const [editForm, setEditForm] = useState({});
 
-  useEffect(() => { loadTasks(); }, [projectId]);
+  useEffect(() => { loadAll(); }, [projectId]);
 
-  async function loadTasks() {
+  async function loadAll() {
     setLoading(true);
-    const t = await base44.entities.Task.filter({ project_id: projectId }, 'start_date', 200);
+    const [t, m] = await Promise.all([
+      base44.entities.Task.filter({ project_id: projectId }, 'start_date', 200),
+      base44.entities.Milestone.filter({ project_id: projectId }, 'planned_date', 100),
+    ]);
     setTasks(t);
+    setMilestones(m);
     setLoading(false);
   }
+
+  function loadTasks() { loadAll(); }
 
   async function createTask(e) {
     e.preventDefault();
     if (!newTask.title.trim()) return;
     await base44.entities.Task.create({ ...newTask, project_id: projectId, status: 'todo' });
-    setNewTask({ title: '', priority: 'medium', assignee: '', start_date: '', due_date: '', predecessor_ids: [] });
+    setNewTask({ title: '', priority: 'medium', assignee: '', start_date: '', due_date: '', predecessor_ids: [], milestone_id: '' });
     setAdding(false);
     loadTasks();
   }
@@ -61,6 +68,7 @@ export default function TabTasks({ projectId }) {
       predecessor_ids: task.predecessor_ids || [],
       priority: task.priority,
       progress: task.progress || 0,
+      milestone_id: task.milestone_id || '',
     });
   }
 
@@ -121,6 +129,12 @@ export default function TabTasks({ projectId }) {
               placeholder="Assignee" className={inp} />
             <input type="date" value={newTask.start_date} onChange={e => setNewTask(f => ({ ...f, start_date: e.target.value }))} className={inp} placeholder="Start Date" />
             <input type="date" value={newTask.due_date} onChange={e => setNewTask(f => ({ ...f, due_date: e.target.value }))} className={inp} />
+            {milestones.length > 0 && (
+              <select value={newTask.milestone_id} onChange={e => setNewTask(f => ({ ...f, milestone_id: e.target.value }))} className={inp}>
+                <option value="">— No Milestone —</option>
+                {milestones.map(m => <option key={m.id} value={m.id}>{m.title}</option>)}
+              </select>
+            )}
           </div>
           {tasks.length > 0 && (
             <div>
@@ -174,6 +188,7 @@ export default function TabTasks({ projectId }) {
                 <th className="px-4 py-3 text-left">Assignee</th>
                 <th className="px-4 py-3 text-left">Start</th>
                 <th className="px-4 py-3 text-left">Due</th>
+                <th className="px-4 py-3 text-left">Milestone</th>
                 <th className="px-4 py-3 text-left">Predecessors</th>
                 <th className="px-4 py-3 text-left">Progress</th>
                 <th className="px-4 py-3 text-left"></th>
@@ -245,6 +260,18 @@ export default function TabTasks({ projectId }) {
                       {isEditing ? (
                         <input type="date" value={editForm.due_date} onChange={e => setEditForm(f => ({ ...f, due_date: e.target.value }))} className={inp} />
                       ) : formatDate(t.due_date)}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600 max-w-[140px]">
+                      {isEditing ? (
+                        <select value={editForm.milestone_id} onChange={e => setEditForm(f => ({ ...f, milestone_id: e.target.value }))} className={inp}>
+                          <option value="">— None —</option>
+                          {milestones.map(m => <option key={m.id} value={m.id}>{m.title}</option>)}
+                        </select>
+                      ) : (
+                        <span className="text-xs">
+                          {milestones.find(m => m.id === t.milestone_id)?.title || <span className="text-slate-400">—</span>}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-slate-600 max-w-[160px]">
                       {isEditing ? (
