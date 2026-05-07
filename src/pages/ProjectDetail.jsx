@@ -10,9 +10,11 @@ import TabMilestones from '@/components/project-detail/TabMilestones';
 import TabBOM from '@/components/project-detail/TabBOM';
 import TabFinancials from '@/components/project-detail/TabFinancials';
 import TabDocuments from '@/components/project-detail/TabDocuments';
+import TabGantt from '@/components/project-detail/TabGantt';
 
 const TABS = [
   { id: 'overview',   label: 'Overview'    },
+  { id: 'gantt',      label: 'Gantt'       },
   { id: 'tasks',      label: 'Tasks'       },
   { id: 'milestones', label: 'Milestones'  },
   { id: 'bom',        label: 'BOM'         },
@@ -136,6 +138,7 @@ export default function ProjectDetail() {
 
           <div>
             {activeTab === 'overview'   && <TabOverview   project={project} onRefresh={loadProject} />}
+            {activeTab === 'gantt'      && <TabGantt      projectId={id} project={project} />}
             {activeTab === 'tasks'      && <TabTasks      projectId={id} />}
             {activeTab === 'milestones' && <TabMilestones projectId={id} />}
             {activeTab === 'bom'        && <TabBOM        projectId={id} />}
