@@ -32,8 +32,8 @@ export default function ProjectDetail() {
 
   async function loadProject() {
     setLoading(true);
-    const p = await base44.entities.Project.get(id);
-    setProject(p);
+    const results = await base44.entities.Project.filter({ id });
+    setProject(results[0] || null);
     setLoading(false);
   }
 
