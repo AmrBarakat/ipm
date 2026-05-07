@@ -9,6 +9,7 @@ import AppLayout from '@/components/layout/AppLayout';
 // Add page imports here
 import Portfolio from '@/pages/Portfolio';
 import Projects from '@/pages/Projects';
+import NewProject from '@/pages/NewProject';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -35,6 +36,7 @@ const AuthenticatedApp = () => {
       <Route element={<AppLayout />}>
         <Route path="/" element={<Portfolio />} />
         <Route path="/projects" element={<Projects />} />
+        <Route path="/projects/new" element={<NewProject />} />
         {/* More routes will be added here */}
       </Route>
       <Route path="*" element={<PageNotFound />} />
