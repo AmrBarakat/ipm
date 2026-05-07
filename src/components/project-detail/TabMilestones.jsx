@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { formatDate } from '@/lib/constants';
 import { Plus, Flag } from 'lucide-react';
+import PanelWrapper from '@/components/ui/PanelWrapper';
 
 const STATUS_COLORS = {
   pending: 'bg-slate-100 text-slate-600',
@@ -71,6 +72,18 @@ export default function TabMilestones({ projectId }) {
           <p className="text-sm">No milestones yet.</p>
         </div>
       ) : (
+        <PanelWrapper
+          title="Milestones"
+          exportData={milestones}
+          exportCols={[
+            { key: 'title', label: 'Title' },
+            { key: 'status', label: 'Status' },
+            { key: 'planned_date', label: 'Planned Date' },
+            { key: 'completed_date', label: 'Completed Date' },
+            { key: 'weight', label: 'Weight %' },
+            { key: 'progress', label: 'Progress %' },
+          ]}
+        >
         <div className="space-y-2">
           {milestones.map(m => (
             <div key={m.id} className="bg-white rounded-lg shadow-sm px-4 py-3 flex flex-wrap items-center gap-4">
@@ -97,6 +110,7 @@ export default function TabMilestones({ projectId }) {
             </div>
           ))}
         </div>
+        </PanelWrapper>
       )}
     </div>
   );

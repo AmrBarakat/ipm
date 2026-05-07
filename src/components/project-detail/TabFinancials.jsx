@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
+import PanelWrapper from '@/components/ui/PanelWrapper';
 import { formatCurrency, formatDate, INVOICE_STATUS_LABELS, EXPENSE_CATEGORY_LABELS, EXPENSE_STATUS_LABELS } from '@/lib/constants';
 import { Plus, TrendingUp, TrendingDown } from 'lucide-react';
 
@@ -101,6 +102,19 @@ export default function TabFinancials({ projectId }) {
         {invoices.length === 0 ? (
           <div className="bg-white rounded-lg shadow-sm py-8 text-center text-slate-400 text-sm">No invoices yet.</div>
         ) : (
+          <PanelWrapper
+            title="Invoices"
+            exportData={invoices}
+            exportCols={[
+              { key: 'description', label: 'Description' },
+              { key: 'planned_amount', label: 'Planned Amount' },
+              { key: 'actual_amount', label: 'Actual Amount' },
+              { key: 'planned_date', label: 'Planned Date' },
+              { key: 'actual_invoice_date', label: 'Invoice Date' },
+              { key: 'status', label: 'Status' },
+              { key: 'invoice_number', label: 'Invoice No.' },
+            ]}
+          >
           <div className="bg-white rounded-lg shadow-sm overflow-hidden">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-slate-500 text-xs uppercase border-b">
@@ -127,6 +141,7 @@ export default function TabFinancials({ projectId }) {
               </tbody>
             </table>
           </div>
+          </PanelWrapper>
         )}
       </div>
 
@@ -161,6 +176,20 @@ export default function TabFinancials({ projectId }) {
         {expenses.length === 0 ? (
           <div className="bg-white rounded-lg shadow-sm py-8 text-center text-slate-400 text-sm">No expenses yet.</div>
         ) : (
+          <PanelWrapper
+            title="Expenses"
+            exportData={expenses}
+            exportCols={[
+              { key: 'description', label: 'Description' },
+              { key: 'category', label: 'Category' },
+              { key: 'vendor', label: 'Vendor' },
+              { key: 'planned_amount', label: 'Planned Amount' },
+              { key: 'actual_amount', label: 'Actual Amount' },
+              { key: 'planned_date', label: 'Date' },
+              { key: 'status', label: 'Status' },
+              { key: 'reference_number', label: 'Ref No.' },
+            ]}
+          >
           <div className="bg-white rounded-lg shadow-sm overflow-hidden">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-slate-500 text-xs uppercase border-b">
@@ -191,6 +220,7 @@ export default function TabFinancials({ projectId }) {
               </tbody>
             </table>
           </div>
+          </PanelWrapper>
         )}
       </div>
     </div>

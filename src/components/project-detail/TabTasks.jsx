@@ -3,6 +3,7 @@ import { base44 } from '@/api/base44Client';
 import { formatDate } from '@/lib/constants';
 import { computeDependencyImpact, toDateStr } from '@/lib/dependencies';
 import { Plus, CheckSquare, AlertTriangle, X, Pencil, Save } from 'lucide-react';
+import PanelWrapper from '@/components/ui/PanelWrapper';
 
 const STATUS_COLORS = {
   todo:        'bg-slate-100 text-slate-600',
@@ -150,6 +151,19 @@ export default function TabTasks({ projectId }) {
           <p className="text-sm">No tasks yet.</p>
         </div>
       ) : (
+        <PanelWrapper
+          title="Tasks"
+          exportData={tasks}
+          exportCols={[
+            { key: 'title', label: 'Title' },
+            { key: 'status', label: 'Status' },
+            { key: 'priority', label: 'Priority' },
+            { key: 'assignee', label: 'Assignee' },
+            { key: 'start_date', label: 'Start Date' },
+            { key: 'due_date', label: 'Due Date' },
+            { key: 'progress', label: 'Progress %' },
+          ]}
+        >
         <div className="bg-white rounded-lg shadow-sm overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-slate-500 text-xs uppercase border-b border-slate-200">
@@ -295,6 +309,7 @@ export default function TabTasks({ projectId }) {
             </tbody>
           </table>
         </div>
+        </PanelWrapper>
       )}
 
       {/* Delay warning summary */}

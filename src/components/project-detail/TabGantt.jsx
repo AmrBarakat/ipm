@@ -3,6 +3,7 @@ import { base44 } from '@/api/base44Client';
 import { formatDate } from '@/lib/constants';
 import { computeDependencyImpact } from '@/lib/dependencies';
 import { ChevronLeft, ChevronRight, Flag, CheckSquare, ZoomIn, ZoomOut, Calendar, AlertTriangle } from 'lucide-react';
+import PanelWrapper from '@/components/ui/PanelWrapper';
 
 const TASK_STATUS_COLORS = {
   todo:        { bar: 'bg-slate-400'   },
@@ -209,6 +210,19 @@ export default function TabGantt({ projectId, project }) {
   const taskSectionStart = SECTION_H + msSection; // header row (36) + ms content
 
   return (
+    <PanelWrapper
+      title="Gantt Chart"
+      exportData={taskRows}
+      exportCols={[
+        { key: 'title', label: 'Task' },
+        { key: 'status', label: 'Status' },
+        { key: 'priority', label: 'Priority' },
+        { key: 'assignee', label: 'Assignee' },
+        { key: 'start_date', label: 'Start Date' },
+        { key: 'due_date', label: 'Due Date' },
+        { key: 'progress', label: 'Progress %' },
+      ]}
+    >
     <div className="space-y-4">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -447,5 +461,6 @@ export default function TabGantt({ projectId, project }) {
         </div>
       )}
     </div>
+    </PanelWrapper>
   );
 }

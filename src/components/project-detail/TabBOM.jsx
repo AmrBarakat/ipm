@@ -3,6 +3,7 @@ import { base44 } from '@/api/base44Client';
 import { formatCurrency } from '@/lib/constants';
 import { BOM_CATEGORY_LABELS } from '@/lib/constants';
 import { Plus, Package } from 'lucide-react';
+import PanelWrapper from '@/components/ui/PanelWrapper';
 
 const DELIVERY_COLORS = {
   pending: 'bg-slate-100 text-slate-600',
@@ -95,6 +96,23 @@ export default function TabBOM({ projectId }) {
           <p className="text-sm">No BOM items yet.</p>
         </div>
       ) : (
+        <PanelWrapper
+          title="Bill of Materials"
+          exportData={items.map(i => ({ ...i, total_cost: i.cost_price * i.quantity, total_sell: i.selling_price * i.quantity }))}
+          exportCols={[
+            { key: 'description', label: 'Description' },
+            { key: 'category', label: 'Category' },
+            { key: 'manufacturer', label: 'Manufacturer' },
+            { key: 'manufacturer_part_number', label: 'Part No.' },
+            { key: 'quantity', label: 'Qty' },
+            { key: 'unit', label: 'Unit' },
+            { key: 'cost_price', label: 'Unit Cost' },
+            { key: 'total_cost', label: 'Total Cost' },
+            { key: 'selling_price', label: 'Unit Sell' },
+            { key: 'total_sell', label: 'Total Sell' },
+            { key: 'delivery_status', label: 'Delivery' },
+          ]}
+        >
         <div className="bg-white rounded-lg shadow-sm overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-slate-500 text-xs uppercase border-b border-slate-200">
@@ -128,11 +146,12 @@ export default function TabBOM({ projectId }) {
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
+              </table>
+            </div>
+            </PanelWrapper>
+            )}
+            </div>
+            );
 }
 
 const inp = 'border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white w-full';
