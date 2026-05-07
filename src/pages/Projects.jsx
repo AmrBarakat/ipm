@@ -8,10 +8,12 @@ import {
   TYPE_LABELS,
 } from '@/lib/constants';
 import { Plus, Search, FolderOpen, Filter } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const ALL = 'all';
 
 export default function Projects() {
+  const navigate = useNavigate();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -143,7 +145,7 @@ export default function Projects() {
                   <tr
                     key={p.id}
                     className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer"
-                    onClick={() => window.location.href = `/projects/${p.id}`}
+                    onClick={() => navigate(`/projects/${p.id}`)}
                   >
                     <td className="px-4 py-3 font-mono text-xs text-slate-500 whitespace-nowrap">{p.code}</td>
                     <td className="px-4 py-3">

@@ -3,8 +3,10 @@ import { Link } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { formatCurrency, formatDate, RAG_COLORS, TYPE_LABELS, STATUS_COLORS, STATUS_LABELS, PRIORITY_COLORS, PRIORITY_LABELS } from '@/lib/constants';
 import { TrendingUp, Folder, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 export default function Portfolio() {
+  const navigate = useNavigate();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -75,7 +77,7 @@ export default function Portfolio() {
               <tbody>
                 {projects.map(p => (
                   <tr key={p.id} className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer"
-                    onClick={() => window.location.href = `/projects/${p.id}`}>
+                    onClick={() => navigate(`/projects/${p.id}`)}>
                     <td className="px-4 py-3 font-mono text-xs text-slate-600">{p.code}</td>
                     <td className="px-4 py-3">
                       <div className="font-semibold text-slate-800">{p.name}</div>
