@@ -1,0 +1,76 @@
+{
+  "name": "Extraction",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string"
+    },
+    "document_id": {
+      "type": "string"
+    },
+    "document_title": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "processing",
+        "completed",
+        "failed"
+      ],
+      "default": "pending"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "proposals": {
+      "type": "array",
+      "description": "Array of AI-proposed records to apply",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "target_table": {
+            "type": "string"
+          },
+          "target_action": {
+            "type": "string",
+            "enum": [
+              "create",
+              "update"
+            ]
+          },
+          "display_label": {
+            "type": "string"
+          },
+          "payload": {
+            "type": "object"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "applied",
+              "rejected"
+            ]
+          },
+          "confidence": {
+            "type": "number"
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "input_text": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "project_id"
+  ]
+}

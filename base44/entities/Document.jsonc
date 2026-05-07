@@ -1,0 +1,57 @@
+{
+  "name": "Document",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "charter",
+        "contract",
+        "po",
+        "offer",
+        "delivery_note",
+        "engineering",
+        "report",
+        "invoice",
+        "other"
+      ],
+      "default": "other"
+    },
+    "file_url": {
+      "type": "string",
+      "description": "URL from UploadFile integration"
+    },
+    "file_name": {
+      "type": "string"
+    },
+    "file_size": {
+      "type": "number"
+    },
+    "content_type": {
+      "type": "string"
+    },
+    "reference_number": {
+      "type": "string"
+    },
+    "document_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "version": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "project_id",
+    "title"
+  ]
+}

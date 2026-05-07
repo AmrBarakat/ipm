@@ -1,0 +1,66 @@
+{
+  "name": "Deliverable",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string"
+    },
+    "milestone_id": {
+      "type": "string",
+      "description": "Optional link to Milestone"
+    },
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "hardware",
+        "software",
+        "document",
+        "service",
+        "training",
+        "other"
+      ],
+      "default": "hardware"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "in_progress",
+        "delivered",
+        "accepted",
+        "rejected"
+      ],
+      "default": "pending"
+    },
+    "quantity": {
+      "type": "number",
+      "default": 1
+    },
+    "unit": {
+      "type": "string",
+      "default": "pc"
+    },
+    "planned_delivery_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "actual_delivery_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "acceptance_date": {
+      "type": "string",
+      "format": "date"
+    }
+  },
+  "required": [
+    "project_id",
+    "name"
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "name": "Note",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string"
+    },
+    "author": {
+      "type": "string"
+    },
+    "body": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "project_id",
+    "body"
+  ]
+}

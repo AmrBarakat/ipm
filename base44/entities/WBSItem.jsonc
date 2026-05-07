@@ -1,0 +1,78 @@
+{
+  "name": "WBSItem",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to Project"
+    },
+    "parent_id": {
+      "type": "string",
+      "description": "Reference to parent WBSItem (for hierarchy)"
+    },
+    "wbs_code": {
+      "type": "string",
+      "description": "e.g. 1.2.3"
+    },
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "assignee": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "not_started",
+        "in_progress",
+        "completed",
+        "blocked"
+      ],
+      "default": "not_started"
+    },
+    "progress": {
+      "type": "number",
+      "default": 0
+    },
+    "weight": {
+      "type": "number",
+      "default": 0
+    },
+    "planned_start": {
+      "type": "string",
+      "format": "date"
+    },
+    "planned_end": {
+      "type": "string",
+      "format": "date"
+    },
+    "actual_start": {
+      "type": "string",
+      "format": "date"
+    },
+    "actual_end": {
+      "type": "string",
+      "format": "date"
+    },
+    "planned_hours": {
+      "type": "number"
+    },
+    "actual_hours": {
+      "type": "number"
+    },
+    "planned_cost": {
+      "type": "number"
+    },
+    "actual_cost": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "project_id",
+    "wbs_code",
+    "name"
+  ]
+}

@@ -1,0 +1,83 @@
+{
+  "name": "Project",
+  "type": "object",
+  "properties": {
+    "code": {
+      "type": "string",
+      "description": "Unique project code e.g. AUT-2025-001"
+    },
+    "name": {
+      "type": "string",
+      "description": "Project name"
+    },
+    "client": {
+      "type": "string"
+    },
+    "location": {
+      "type": "string"
+    },
+    "project_type": {
+      "type": "string",
+      "enum": [
+        "automation",
+        "energy",
+        "both"
+      ],
+      "default": "automation"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "planning",
+        "in_progress",
+        "commissioning",
+        "completed",
+        "closed",
+        "on_hold"
+      ],
+      "default": "planning"
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ],
+      "default": "medium"
+    },
+    "project_manager": {
+      "type": "string"
+    },
+    "contract_value": {
+      "type": "number"
+    },
+    "currency": {
+      "type": "string",
+      "default": "SAR"
+    },
+    "progress": {
+      "type": "number",
+      "default": 0
+    },
+    "start_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "target_completion_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "description": {
+      "type": "string"
+    },
+    "scope": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "code",
+    "name"
+  ]
+}

@@ -1,0 +1,109 @@
+{
+  "name": "BOMItem",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string"
+    },
+    "item_code": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "plc",
+        "hmi",
+        "drive",
+        "sensor",
+        "meter",
+        "panel",
+        "cable",
+        "network",
+        "software",
+        "service",
+        "other"
+      ],
+      "default": "other"
+    },
+    "manufacturer": {
+      "type": "string"
+    },
+    "manufacturer_part_number": {
+      "type": "string"
+    },
+    "quantity": {
+      "type": "number",
+      "default": 1
+    },
+    "unit": {
+      "type": "string",
+      "default": "pcs"
+    },
+    "cost_price": {
+      "type": "number",
+      "default": 0
+    },
+    "selling_price": {
+      "type": "number",
+      "default": 0
+    },
+    "currency": {
+      "type": "string",
+      "default": "SAR"
+    },
+    "stock_status": {
+      "type": "string",
+      "enum": [
+        "stock",
+        "non_stock"
+      ],
+      "default": "non_stock"
+    },
+    "ordered": {
+      "type": "boolean",
+      "default": false
+    },
+    "po_number": {
+      "type": "string"
+    },
+    "po_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "supplier": {
+      "type": "string"
+    },
+    "supplier_contact": {
+      "type": "string"
+    },
+    "delivery_status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "ordered",
+        "partially_received",
+        "received",
+        "cancelled"
+      ],
+      "default": "pending"
+    },
+    "expected_delivery_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "actual_delivery_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "project_id",
+    "description"
+  ]
+}

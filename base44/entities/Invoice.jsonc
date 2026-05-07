@@ -1,0 +1,60 @@
+{
+  "name": "Invoice",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string"
+    },
+    "milestone_id": {
+      "type": "string",
+      "description": "Optional link to Milestone"
+    },
+    "description": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "planned",
+        "invoiced",
+        "paid",
+        "partial",
+        "overdue",
+        "cancelled"
+      ],
+      "default": "planned"
+    },
+    "planned_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "planned_amount": {
+      "type": "number",
+      "default": 0
+    },
+    "invoice_number": {
+      "type": "string"
+    },
+    "actual_invoice_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "actual_amount": {
+      "type": "number"
+    },
+    "paid_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "paid_amount": {
+      "type": "number"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "project_id",
+    "description"
+  ]
+}
