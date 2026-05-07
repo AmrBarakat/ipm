@@ -5,7 +5,7 @@ import { CURRENCIES } from '@/lib/constants';
 import { Save, X } from 'lucide-react';
 
 const STATUSES = ['planning', 'in_progress', 'commissioning', 'completed', 'closed', 'on_hold'];
-const TYPES = ['automation', 'energy', 'both'];
+const TYPES = { plc: 'PLC', plc_scada: 'PLC & SCADA', pme: 'PME', service: 'Service', other: 'Other' };
 const PRIORITIES = ['low', 'medium', 'high', 'critical'];
 
 export default function ProjectForm({ project, onSaved }) {
@@ -17,7 +17,7 @@ export default function ProjectForm({ project, onSaved }) {
     name: '',
     client: '',
     location: '',
-    project_type: 'automation',
+    project_type: 'plc',
     status: 'planning',
     priority: 'medium',
     project_manager: '',
@@ -93,7 +93,7 @@ export default function ProjectForm({ project, onSaved }) {
           </Field>
           <Field label="Project Type">
             <select value={form.project_type} onChange={e => set('project_type', e.target.value)} className={input}>
-              {TYPES.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+              {Object.entries(TYPES).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           </Field>
         </div>

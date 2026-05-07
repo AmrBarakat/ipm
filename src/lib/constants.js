@@ -8,9 +8,11 @@ export const STATUS_LABELS = {
 };
 
 export const TYPE_LABELS = {
-  automation: 'Automation',
-  energy: 'Energy',
-  both: 'Both',
+  plc: 'PLC',
+  plc_scada: 'PLC & SCADA',
+  pme: 'PME',
+  service: 'Service',
+  other: 'Other',
 };
 
 export const PRIORITY_LABELS = {

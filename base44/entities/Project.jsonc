@@ -19,11 +19,13 @@
     "project_type": {
       "type": "string",
       "enum": [
-        "automation",
-        "energy",
-        "both"
+        "plc",
+        "plc_scada",
+        "pme",
+        "service",
+        "other"
       ],
-      "default": "automation"
+      "default": "plc"
     },
     "status": {
       "type": "string",
