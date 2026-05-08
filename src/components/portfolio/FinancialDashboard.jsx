@@ -177,12 +177,13 @@ export default function FinancialDashboard({ projects }) {
   // Chart 1 — Booking & Invoicing
   const bookingInvoicingData = useMemo(() =>
     allKeys.map(k => ({
-      period:           periodLabel(k, period),
-      Booking:          Math.round(bookingByPeriod[k] || 0),
+      period:            periodLabel(k, period),
+      Booking:           Math.round(bookingByPeriod[k] || 0),
       'Invoiced (Plan)': Math.round(invoicedPlannedByPeriod[k] || 0),
-      'Invoiced (Act)': Math.round(invoicedActualByPeriod[k] || 0),
+      'Invoiced (Act)':  Math.round(invoicedActualByPeriod[k] || 0),
+      'Cash In':         Math.round(cashInByPeriod[k] || 0),
     })),
-    [allKeys, period, bookingByPeriod, invoicedPlannedByPeriod, invoicedActualByPeriod]
+    [allKeys, period, bookingByPeriod, invoicedPlannedByPeriod, invoicedActualByPeriod, cashInByPeriod]
   );
 
   // Chart 2 — Cash In vs Out
@@ -279,13 +280,17 @@ export default function FinancialDashboard({ projects }) {
       </div>
 
       {/* ── KPI Cards ──────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KpiCard label="Total Booking"        value={formatCurrency(totalBooking,          currency)} icon={<TrendingUp className="w-5 h-5" />}     color="border-blue-500"    sub={`${projects.filter(p=>filteredProjectIds.has(p.id)).length} projects`} />
         <KpiCard label="Planned Invoiced"     value={formatCurrency(totalPlannedInvoiced,  currency)} icon={<ReceiptText className="w-5 h-5" />}     color="border-purple-400"  sub={totalBooking > 0 ? `${Math.round((totalPlannedInvoiced/totalBooking)*100)}% of booking` : null} />
         <KpiCard label="Actual Invoiced"      value={formatCurrency(totalActualInvoiced,   currency)} icon={<ReceiptText className="w-5 h-5" />}     color="border-purple-600"  sub={totalPlannedInvoiced > 0 ? `${Math.round((totalActualInvoiced/totalPlannedInvoiced)*100)}% of planned` : null} />
-        <KpiCard label="Cash In"              value={formatCurrency(totalCashIn,           currency)} icon={<ArrowUpCircle className="w-5 h-5" />}   color="border-emerald-500" sub={totalActualInvoiced > 0 ? `${Math.round((totalCashIn/totalActualInvoiced)*100)}% collected` : null} />
+        <KpiCard label="Cash In (Collected)"  value={formatCurrency(totalCashIn,           currency)} icon={<ArrowUpCircle className="w-5 h-5" />}   color="border-emerald-500" sub={totalActualInvoiced > 0 ? `${Math.round((totalCashIn/totalActualInvoiced)*100)}% collected` : null} />
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KpiCard label="Planned Expenses"     value={formatCurrency(totalPlannedCashOut,   currency)} icon={<ArrowDownCircle className="w-5 h-5" />} color="border-red-400"     sub="Non-cancelled" />
         <KpiCard label="Actual Expenses"      value={formatCurrency(totalCashOut,          currency)} icon={<ArrowDownCircle className="w-5 h-5" />} color="border-red-600"     sub="Committed / paid" />
+        <KpiCard label="Net Cash"             value={formatCurrency(netCash,               currency)} icon={<Wallet className="w-5 h-5" />}          color={netCash >= 0 ? 'border-emerald-500' : 'border-red-500'} highlight={netCash < 0 ? 'red' : 'green'} sub="Cash In – Actual Expenses" />
+        <KpiCard label="Remaining Collection" value={formatCurrency(collectionBal,         currency)} icon={<DollarSign className="w-5 h-5" />}      color="border-amber-500"   highlight={collectionBal > 0 ? 'amber' : 'green'} sub="Actual Invoiced – Collected" />
       </div>
 
       {/* ── Charts Grid ────────────────────────────────────────────────────── */}
@@ -297,19 +302,20 @@ export default function FinancialDashboard({ projects }) {
         </div>
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          {/* Chart 1 — Booking & Invoicing */}
-          <ChartCard title="Booking & Invoicing" subtitle="Contract booking vs invoiced (plan & actual) per period">
+          {/* Chart 1 — Booking & Invoicing (Plan vs Actual) */}
+          <ChartCard title="Booking & Invoicing" subtitle={`Contract booking vs invoiced — ${view === 'planned' ? 'planned only' : view === 'actual' ? 'actual only' : 'plan vs actual'}`}>
             <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={bookingInvoicingData} margin={{ top: 4, right: 16, left: 0, bottom: 40 }}>
+              <ComposedChart data={bookingInvoicingData} margin={{ top: 4, right: 16, left: 0, bottom: 40 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                 <XAxis dataKey="period" tick={{ fontSize: 10, fill: '#94a3b8' }} angle={-30} textAnchor="end" interval={0} />
                 <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={fmt} width={55} />
                 <Tooltip formatter={(v) => formatCurrency(v, currency)} contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e2e8f0' }} />
                 <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
-                <Bar dataKey="Booking" fill="#3b82f6" radius={[3,3,0,0]} maxBarSize={40} />
-                {(view === 'planned' || view === 'both') && <Bar dataKey="Invoiced (Plan)" fill="#c4b5fd" radius={[3,3,0,0]} maxBarSize={40} />}
-                {(view === 'actual'  || view === 'both') && <Bar dataKey="Invoiced (Act)"  fill="#8b5cf6" radius={[3,3,0,0]} maxBarSize={40} />}
-              </BarChart>
+                <Bar dataKey="Booking" fill="#3b82f6" radius={[3,3,0,0]} maxBarSize={36} />
+                {(view === 'planned' || view === 'both') && <Bar dataKey="Invoiced (Plan)" fill="#c4b5fd" radius={[3,3,0,0]} maxBarSize={36} />}
+                {(view === 'actual'  || view === 'both') && <Bar dataKey="Invoiced (Act)"  fill="#8b5cf6" radius={[3,3,0,0]} maxBarSize={36} />}
+                <Line dataKey="Cash In" type="monotone" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} />
+              </ComposedChart>
             </ResponsiveContainer>
           </ChartCard>
 
@@ -384,7 +390,7 @@ export default function FinancialDashboard({ projects }) {
 }
 
 function KpiCard({ label, value, sub, icon, color, highlight }) {
-  const textColor = highlight === 'red' ? 'text-red-600' : highlight === 'green' ? 'text-emerald-600' : 'text-slate-800';
+  const textColor = highlight === 'red' ? 'text-red-600' : highlight === 'green' ? 'text-emerald-600' : highlight === 'amber' ? 'text-amber-600' : 'text-slate-800';
   return (
     <div className={`bg-white rounded-lg shadow-sm p-4 border-l-4 ${color}`}>
       <div className="flex items-start justify-between">
