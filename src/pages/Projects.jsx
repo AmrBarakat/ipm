@@ -9,6 +9,8 @@ import {
 } from '@/lib/constants';
 import { Plus, Search, FolderOpen, Filter, Trash2, RefreshCw, CheckSquare, Square, ChevronDown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import ProjectSummaryWidget from '@/components/projects/ProjectSummaryWidget';
+import ProgressRing from '@/components/projects/ProgressRing';
 
 const ALL = 'all';
 
@@ -105,6 +107,9 @@ export default function Projects() {
           <Plus className="w-4 h-4" /> New Project
         </Link>
       </div>
+
+      {/* Summary Widget */}
+      <ProjectSummaryWidget projects={projects} />
 
       {/* Filters */}
       <div className="bg-white rounded-lg shadow-sm p-4 mb-4 flex flex-wrap gap-3 items-center">
@@ -261,15 +266,10 @@ export default function Projects() {
                         {STATUS_LABELS[p.status] || p.status}
                       </span>
                     </td>
-                    <td className="px-4 py-3 w-36">
+                    <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <div className="flex-1 bg-slate-200 rounded-full h-1.5 overflow-hidden">
-                          <div
-                            className="bg-amber-500 h-1.5 rounded-full"
-                            style={{ width: `${p.progress || 0}%` }}
-                          />
-                        </div>
-                        <span className="text-xs text-slate-500 w-8 text-right">{p.progress || 0}%</span>
+                        <ProgressRing progress={p.progress || 0} size={36} stroke={3.5} />
+                        <span className="text-xs text-slate-500 w-8">{p.progress || 0}%</span>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{formatDate(p.target_completion_date)}</td>
