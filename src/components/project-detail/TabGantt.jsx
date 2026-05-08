@@ -1,9 +1,7 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
-// Gantt shows WBS + Milestones only. Tasks are managed independently as a Kanban board.
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
 import { formatDate } from '@/lib/constants';
-
-import { ChevronLeft, ChevronRight, Flag, ZoomIn, ZoomOut, Calendar, AlertTriangle, Layers } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Flag, ZoomIn, ZoomOut, Calendar, AlertTriangle, Layers, GripHorizontal } from 'lucide-react';
 import PanelWrapper from '@/components/ui/PanelWrapper';
 
 const MILESTONE_STATUS_COLORS = {
@@ -34,6 +32,11 @@ function clamp(val, min, max) {
   return Math.max(min, Math.min(max, val));
 }
 
+function toISO(date) {
+  const d = new Date(date);
+  return d.toISOString().slice(0, 10);
+}
+
 export default function TabGantt({ projectId, project }) {
   const [milestones, setMilestones] = useState([]);
   const [wbsItems, setWbsItems] = useState([]);
@@ -42,6 +45,12 @@ export default function TabGantt({ projectId, project }) {
   const [viewStart, setViewStart] = useState(null);
   const [tooltip, setTooltip] = useState(null);
   const [showDeps, setShowDeps] = useState(true);
+  const [saving, setSaving] = useState({}); // id -> true while saving
+
+  // Drag state
+  const dragRef = useRef(null); // { id, type: 'move'|'resize-left'|'resize-right', startX, origStart, origEnd, rowEl }
+  const chartAreaRef = useRef(null);
+
   const zoom = ZOOM_LEVELS[zoomIdx];
   const visibleDays = zoom.days;
 
@@ -163,6 +172,98 @@ export default function TabGantt({ projectId, project }) {
     return date.toLocaleDateString('en', { month: 'short', year: '2-digit' });
   }
 
+  // ── Drag & drop logic ──────────────────────────────────────────────────────
+
+  // Convert pixel offset (relative to chart area) to days delta
+  function pxToDays(px) {
+    if (!chartAreaRef.current) return 0;
+    const w = chartAreaRef.current.getBoundingClientRect().width;
+    return (px / w) * visibleDays;
+  }
+
+  // Save updated dates to the entity and update local state
+  const saveWbsDates = useCallback(async (id, planned_start, planned_end) => {
+    setSaving(s => ({ ...s, [id]: true }));
+    setWbsItems(prev => prev.map(i => i.id === id ? { ...i, planned_start, planned_end } : i));
+    await base44.entities.WBSItem.update(id, { planned_start, planned_end });
+    setSaving(s => { const n = { ...s }; delete n[id]; return n; });
+  }, []);
+
+  const onBarMouseDown = useCallback((e, wbsItem, type) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setTooltip(null);
+    dragRef.current = {
+      id: wbsItem.id,
+      type,
+      startX: e.clientX,
+      origStart: wbsItem.planned_start,
+      origEnd: wbsItem.planned_end,
+    };
+    document.body.style.cursor = type === 'move' ? 'grabbing' : 'ew-resize';
+    document.body.style.userSelect = 'none';
+  }, []);
+
+  useEffect(() => {
+    function onMouseMove(e) {
+      const drag = dragRef.current;
+      if (!drag) return;
+      const deltaPx = e.clientX - drag.startX;
+      const deltaDays = Math.round(pxToDays(deltaPx));
+
+      let newStart = drag.origStart;
+      let newEnd = drag.origEnd;
+
+      if (drag.type === 'move') {
+        newStart = toISO(addDays(drag.origStart, deltaDays));
+        newEnd = toISO(addDays(drag.origEnd, deltaDays));
+      } else if (drag.type === 'resize-left') {
+        const candidate = toISO(addDays(drag.origStart, deltaDays));
+        // Don't allow start to exceed end - 1 day
+        if (candidate < drag.origEnd) newStart = candidate;
+        newEnd = drag.origEnd;
+      } else if (drag.type === 'resize-right') {
+        const candidate = toISO(addDays(drag.origEnd, deltaDays));
+        // Don't allow end to go before start + 1 day
+        if (candidate > drag.origStart) newEnd = candidate;
+        newStart = drag.origStart;
+      }
+
+      // Optimistic UI update during drag (no save yet)
+      setWbsItems(prev => prev.map(i => i.id === drag.id
+        ? { ...i, planned_start: newStart, planned_end: newEnd }
+        : i
+      ));
+    }
+
+    function onMouseUp(e) {
+      const drag = dragRef.current;
+      if (!drag) return;
+      dragRef.current = null;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+
+      // Find the current state for this item
+      setWbsItems(prev => {
+        const item = prev.find(i => i.id === drag.id);
+        if (item && (item.planned_start !== drag.origStart || item.planned_end !== drag.origEnd)) {
+          // Persist
+          saveWbsDates(drag.id, item.planned_start, item.planned_end);
+        }
+        return prev;
+      });
+    }
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, [visibleDays, saveWbsDates]);
+
+  // ─────────────────────────────────────────────────────────────────────────
+
   const milestoneRows = milestones.filter(m => m.planned_date);
   const wbsRows = wbsItems.filter(w => w.planned_start || w.planned_end);
   const todayStyle = getTodayStyle();
@@ -204,8 +305,6 @@ export default function TabGantt({ projectId, project }) {
 
   const ROW_H = 36;
   const SECTION_H = 28;
-  const msSection = milestoneRows.length > 0 ? SECTION_H + milestoneRows.length * ROW_H : 0;
-  const taskSectionStart = SECTION_H + msSection; // header row (36) + ms content
 
   return (
     <PanelWrapper
@@ -272,12 +371,11 @@ export default function TabGantt({ projectId, project }) {
 
       {/* Legend */}
       <div className="flex flex-wrap gap-4 text-xs text-slate-500">
-        <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-purple-400 inline-block" /> WBS Planned</div>
+        <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-purple-400 inline-block" /> WBS Planned <span className="text-slate-400 italic">(drag to move · handles to resize)</span></div>
         <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-emerald-500 inline-block" /> WBS Actual</div>
         <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-red-400 inline-block" /> Schedule Conflict</div>
         <div className="flex items-center gap-1.5"><span className="w-3 h-3 rotate-45 bg-amber-500 inline-block" /> Milestone</div>
         <div className="flex items-center gap-1.5"><span className="w-4 border-t-2 border-dashed border-slate-400 inline-block" /> Dependency</div>
-        <div className="flex items-center gap-1.5"><span className="w-4 border-t-2 border-dashed border-red-500 inline-block" /> Dep. Conflict</div>
         <div className="flex items-center gap-1.5"><span className="w-4 border-l-2 border-red-400 inline-block h-3" /> Today</div>
       </div>
 
@@ -341,7 +439,7 @@ export default function TabGantt({ projectId, project }) {
               <div className="w-52 shrink-0 px-4 py-1.5 text-xs font-bold text-purple-700 uppercase tracking-wide border-r border-slate-200 flex items-center gap-1">
                 <Layers className="w-3 h-3" /> WBS Items
               </div>
-              <div className="flex-1" />
+              <div className="flex-1" ref={chartAreaRef} />
             </div>
             {wbsRows.map(w => {
               const plannedBar = getBarStyle(w.planned_start, w.planned_end);
@@ -349,10 +447,12 @@ export default function TabGantt({ projectId, project }) {
               const linkedMs = milestones.find(m => m.id === w.milestone_id);
               const msStyle = linkedMs ? getMilestoneStyle(linkedMs.planned_date) : null;
               const dep = wbsImpact[w.id] || {};
+              const isSaving = saving[w.id];
               return (
                 <div key={w.id} className={`flex border-b border-slate-100 hover:bg-slate-50 ${dep.delayed ? 'bg-red-50' : ''}`} style={{ minHeight: ROW_H }}>
                   <div className="w-52 shrink-0 px-4 py-2 text-xs text-slate-700 font-medium truncate border-r border-slate-200 flex items-center gap-1">
                     {dep.delayed && <AlertTriangle className="w-3 h-3 text-red-500 shrink-0" />}
+                    {isSaving && <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" title="Saving…" />}
                     <span className="font-mono text-slate-400 shrink-0">{w.wbs_code}</span>
                     <span className="truncate">{w.name}</span>
                   </div>
@@ -362,35 +462,63 @@ export default function TabGantt({ projectId, project }) {
                         style={{ left: `${(daysBetween(viewStart, unit) / visibleDays) * 100}%` }} />
                     ))}
                     {todayStyle && <div className="absolute top-0 bottom-0 border-l-2 border-red-400 border-dashed z-10" style={todayStyle} />}
-                    {/* Planned bar (purple, top half) */}
+
+                    {/* Planned bar — draggable */}
                     {plannedBar && (
                       <div
-                        className={`absolute h-4 rounded ${dep.delayed ? 'bg-red-400' : 'bg-purple-400'} opacity-70 hover:opacity-100 cursor-pointer z-20 flex items-center px-1 overflow-hidden`}
-                        style={{ ...plannedBar, top: 4 }}
-                        onMouseEnter={e => setTooltip({
-                          x: e.clientX, y: e.clientY,
-                          content: `${w.wbs_code} ${w.name}`,
-                          sub: `Planned: ${formatDate(w.planned_start)} → ${formatDate(w.planned_end)}`,
-                          status: w.status?.replace(/_/g, ' '),
-                          assignee: w.assignee,
-                          progress: w.progress,
-                          milestone: linkedMs?.title,
-                          delayed: dep.delayed,
-                        })}
+                        className={`absolute h-5 rounded ${dep.delayed ? 'bg-red-400' : 'bg-purple-400'} ${isSaving ? 'opacity-50' : 'opacity-80 hover:opacity-100'} z-20 flex items-center overflow-visible select-none`}
+                        style={{ ...plannedBar, top: 6 }}
+                        onMouseEnter={e => {
+                          if (dragRef.current) return;
+                          setTooltip({
+                            x: e.clientX, y: e.clientY,
+                            content: `${w.wbs_code} ${w.name}`,
+                            sub: `Planned: ${formatDate(w.planned_start)} → ${formatDate(w.planned_end)}`,
+                            status: w.status?.replace(/_/g, ' '),
+                            assignee: w.assignee,
+                            progress: w.progress,
+                            milestone: linkedMs?.title,
+                            delayed: dep.delayed,
+                          });
+                        }}
                         onMouseLeave={() => setTooltip(null)}
                       >
-                        {w.progress > 0 && <div className="absolute left-0 top-0 h-full bg-black/20 rounded" style={{ width: `${w.progress}%` }} />}
-                        <span className="text-white text-xs font-medium truncate relative z-10 drop-shadow">{w.name}</span>
+                        {/* Left resize handle */}
+                        <div
+                          className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize z-30 flex items-center justify-center group"
+                          onMouseDown={e => onBarMouseDown(e, w, 'resize-left')}
+                        >
+                          <div className="w-1 h-3 bg-white/60 rounded-full group-hover:bg-white" />
+                        </div>
+
+                        {/* Middle — drag to move */}
+                        <div
+                          className="absolute inset-0 mx-2 cursor-grab active:cursor-grabbing z-20 flex items-center px-1 overflow-hidden"
+                          onMouseDown={e => onBarMouseDown(e, w, 'move')}
+                        >
+                          {w.progress > 0 && <div className="absolute left-0 top-0 h-full bg-black/20 rounded" style={{ width: `${w.progress}%` }} />}
+                          <span className="text-white text-xs font-medium truncate relative z-10 drop-shadow">{w.name}</span>
+                        </div>
+
+                        {/* Right resize handle */}
+                        <div
+                          className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize z-30 flex items-center justify-center group"
+                          onMouseDown={e => onBarMouseDown(e, w, 'resize-right')}
+                        >
+                          <div className="w-1 h-3 bg-white/60 rounded-full group-hover:bg-white" />
+                        </div>
                       </div>
                     )}
-                    {/* Actual bar (emerald, bottom half) */}
+
+                    {/* Actual bar (emerald) — read-only */}
                     {actualBar && (
                       <div
-                        className="absolute h-3 rounded bg-emerald-500 opacity-80 z-20"
-                        style={{ ...actualBar, top: 20 }}
+                        className="absolute h-2 rounded bg-emerald-500 opacity-80 z-20"
+                        style={{ ...actualBar, top: 24 }}
                         title={`Actual: ${formatDate(w.actual_start)} → ${formatDate(w.actual_end) || 'ongoing'}`}
                       />
                     )}
+
                     {/* Linked milestone diamond */}
                     {msStyle && (
                       <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-30 pointer-events-none" style={msStyle}>
@@ -401,45 +529,50 @@ export default function TabGantt({ projectId, project }) {
                 </div>
               );
             })}
-          </div>
-        )}
 
-        {/* WBS dependency arrows SVG overlay — drawn over the WBS rows */}
-        {showDeps && depArrows.length > 0 && wbsRows.length > 0 && (
-          <svg
-            className="absolute pointer-events-none z-30"
-            style={{ left: 208, width: 'calc(100% - 208px)', top: (milestoneRows.length > 0 ? (SECTION_H + milestoneRows.length * ROW_H) : 0) + SECTION_H, height: wbsRows.length * ROW_H }}
-            overflow="visible"
-          >
-            <defs>
-              <marker id="arrow-normal" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
-                <path d="M0,0 L0,6 L6,3 z" fill="#94a3b8" />
-              </marker>
-              <marker id="arrow-conflict" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
-                <path d="M0,0 L0,6 L6,3 z" fill="#ef4444" />
-              </marker>
-            </defs>
-            {depArrows.map((arrow, i) => {
-              const fromRowIdx = wbsRows.findIndex(w => w.id === arrow.predId);
-              const toRowIdx = wbsRows.findIndex(w => w.id === arrow.itemId);
-              if (fromRowIdx < 0 || toRowIdx < 0) return null;
-              const fromX = `${arrow.fromPct}%`;
-              const toX = `${arrow.toPct}%`;
-              const fromY = fromRowIdx * ROW_H + ROW_H / 2;
-              const toY = toRowIdx * ROW_H + ROW_H / 2;
-              const color = arrow.isConflict ? '#ef4444' : '#94a3b8';
-              const markerId = arrow.isConflict ? 'arrow-conflict' : 'arrow-normal';
-              return (
-                <g key={i}>
-                  <path
-                    d={`M ${fromX} ${fromY} C ${fromX} ${(fromY + toY) / 2}, ${toX} ${(fromY + toY) / 2}, ${toX} ${toY}`}
-                    fill="none" stroke={color} strokeWidth="1.5" strokeDasharray="4 3"
-                    markerEnd={`url(#${markerId})`} opacity="0.7"
-                  />
-                </g>
-              );
-            })}
-          </svg>
+            {/* WBS dependency arrows SVG overlay */}
+            {showDeps && depArrows.length > 0 && (
+              <svg
+                className="absolute pointer-events-none z-30"
+                style={{
+                  left: 208,
+                  width: 'calc(100% - 208px)',
+                  top: SECTION_H,
+                  height: wbsRows.length * ROW_H,
+                }}
+                overflow="visible"
+              >
+                <defs>
+                  <marker id="arrow-normal" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+                    <path d="M0,0 L0,6 L6,3 z" fill="#94a3b8" />
+                  </marker>
+                  <marker id="arrow-conflict" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+                    <path d="M0,0 L0,6 L6,3 z" fill="#ef4444" />
+                  </marker>
+                </defs>
+                {depArrows.map((arrow, i) => {
+                  const fromRowIdx = wbsRows.findIndex(w => w.id === arrow.predId);
+                  const toRowIdx = wbsRows.findIndex(w => w.id === arrow.itemId);
+                  if (fromRowIdx < 0 || toRowIdx < 0) return null;
+                  const fromX = `${arrow.fromPct}%`;
+                  const toX = `${arrow.toPct}%`;
+                  const fromY = fromRowIdx * ROW_H + ROW_H / 2;
+                  const toY = toRowIdx * ROW_H + ROW_H / 2;
+                  const color = arrow.isConflict ? '#ef4444' : '#94a3b8';
+                  const markerId = arrow.isConflict ? 'arrow-conflict' : 'arrow-normal';
+                  return (
+                    <g key={i}>
+                      <path
+                        d={`M ${fromX} ${fromY} C ${fromX} ${(fromY + toY) / 2}, ${toX} ${(fromY + toY) / 2}, ${toX} ${toY}`}
+                        fill="none" stroke={color} strokeWidth="1.5" strokeDasharray="4 3"
+                        markerEnd={`url(#${markerId})`} opacity="0.7"
+                      />
+                    </g>
+                  );
+                })}
+              </svg>
+            )}
+          </div>
         )}
       </div>
 
@@ -452,12 +585,8 @@ export default function TabGantt({ projectId, project }) {
           <div className="font-semibold text-sm mb-1">{tooltip.content}</div>
           {tooltip.sub && <div className="text-slate-300">{tooltip.sub}</div>}
           {tooltip.status && <div className="text-slate-400 capitalize mt-0.5">Status: {tooltip.status}</div>}
-          {tooltip.priority && <div className="text-slate-400 capitalize">Priority: {tooltip.priority}</div>}
           {tooltip.assignee && <div className="text-slate-400">Assignee: {tooltip.assignee}</div>}
           {tooltip.progress > 0 && <div className="text-slate-400">Progress: {tooltip.progress}%</div>}
-          {tooltip.predecessors?.length > 0 && (
-            <div className="text-slate-400 mt-1">After: {tooltip.predecessors.join(', ')}</div>
-          )}
           {tooltip.milestone && <div className="text-amber-400 mt-0.5">🏁 Milestone: {tooltip.milestone}</div>}
           {tooltip.delayed && <div className="text-red-400 font-semibold mt-1">⚠ Starts before predecessor finishes</div>}
         </div>
