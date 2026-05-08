@@ -1,0 +1,89 @@
+{
+  "name": "Risk",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to Project"
+    },
+    "title": {
+      "type": "string",
+      "description": "Short risk description"
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed risk description"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "technical",
+        "schedule",
+        "cost",
+        "resource",
+        "vendor",
+        "safety",
+        "scope",
+        "other"
+      ],
+      "default": "other"
+    },
+    "probability": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "default": "medium"
+    },
+    "impact": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ],
+      "default": "medium"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "open",
+        "mitigated",
+        "accepted",
+        "closed"
+      ],
+      "default": "open"
+    },
+    "owner": {
+      "type": "string",
+      "description": "Person responsible for managing this risk"
+    },
+    "mitigation_plan": {
+      "type": "string",
+      "description": "Planned mitigation steps"
+    },
+    "due_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "risk_score": {
+      "type": "number",
+      "default": 0,
+      "description": "Computed: probability \u00d7 impact (1\u20139 scale)"
+    },
+    "suggested_tasks": {
+      "type": "array",
+      "description": "AI-suggested mitigation task titles",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "project_id",
+    "title"
+  ]
+}

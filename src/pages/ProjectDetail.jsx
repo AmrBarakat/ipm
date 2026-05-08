@@ -13,6 +13,7 @@ import TabDocuments from '@/components/project-detail/TabDocuments';
 import TabGantt from '@/components/project-detail/TabGantt';
 import TabWBS from '@/components/project-detail/TabWBS';
 import TabNotes from '@/components/project-detail/TabNotes';
+import TabRisks from '@/components/project-detail/TabRisks';
 
 const TABS = [
   { id: 'overview',   label: 'Overview'    },
@@ -24,6 +25,7 @@ const TABS = [
   { id: 'financials', label: 'Financials'  },
   { id: 'documents',  label: 'Documents'   },
   { id: 'notes',      label: 'Notes'       },
+  { id: 'risks',      label: 'Risks'       },
 ];
 
 export default function ProjectDetail() {
@@ -154,6 +156,7 @@ export default function ProjectDetail() {
             {activeTab === 'financials' && <TabFinancials projectId={id} project={project} />}
             {activeTab === 'documents'  && <TabDocuments  projectId={id} />}
             {activeTab === 'notes'      && <TabNotes      projectId={id} />}
+            {activeTab === 'risks'      && <TabRisks      projectId={id} />}
           </div>
         </>
       )}
