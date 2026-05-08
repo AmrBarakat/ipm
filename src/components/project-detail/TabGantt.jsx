@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { base44 } from '@/api/base44Client';
 import { formatDate } from '@/lib/constants';
 import { computeDependencyImpact } from '@/lib/dependencies';
-import { ChevronLeft, ChevronRight, Flag, CheckSquare, ZoomIn, ZoomOut, Calendar, AlertTriangle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Flag, CheckSquare, ZoomIn, ZoomOut, Calendar, AlertTriangle, Layers } from 'lucide-react';
 import PanelWrapper from '@/components/ui/PanelWrapper';
 
 const TASK_STATUS_COLORS = {
@@ -44,6 +44,7 @@ function clamp(val, min, max) {
 export default function TabGantt({ projectId, project }) {
   const [tasks, setTasks] = useState([]);
   const [milestones, setMilestones] = useState([]);
+  const [wbsItems, setWbsItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [zoomIdx, setZoomIdx] = useState(1);
   const [viewStart, setViewStart] = useState(null);
@@ -57,12 +58,14 @@ export default function TabGantt({ projectId, project }) {
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const [t, m] = await Promise.all([
+      const [t, m, w] = await Promise.all([
         base44.entities.Task.filter({ project_id: projectId }, 'start_date', 300),
         base44.entities.Milestone.filter({ project_id: projectId }, 'planned_date', 100),
+        base44.entities.WBSItem.filter({ project_id: projectId }, 'wbs_code', 500),
       ]);
       setTasks(t);
       setMilestones(m);
+      setWbsItems(w);
       setLoading(false);
     }
     load();
@@ -78,6 +81,10 @@ export default function TabGantt({ projectId, project }) {
       if (t.start_date) dates.push(new Date(t.start_date));
       if (t.due_date) dates.push(new Date(t.due_date));
     });
+    wbsItems.forEach(w => {
+      if (w.planned_start) dates.push(new Date(w.planned_start));
+      if (w.planned_end) dates.push(new Date(w.planned_end));
+    });
     milestones.forEach(m => {
       if (m.planned_date) dates.push(new Date(m.planned_date));
     });
@@ -87,7 +94,7 @@ export default function TabGantt({ projectId, project }) {
     }
     const min = new Date(Math.min(...dates.map(d => d.getTime())));
     return { minDate: addDays(min, -7) };
-  }, [tasks, milestones, project]);
+  }, [tasks, milestones, wbsItems, project]);
 
   useEffect(() => {
     if (!viewStart) {
@@ -160,6 +167,7 @@ export default function TabGantt({ projectId, project }) {
 
   const taskRows = tasks.filter(t => t.start_date || t.due_date);
   const milestoneRows = milestones.filter(m => m.planned_date);
+  const wbsRows = wbsItems.filter(w => w.planned_start || w.planned_end);
   const todayStyle = getTodayStyle();
 
   // Build index of task row positions for drawing dependency arrows
@@ -196,7 +204,7 @@ export default function TabGantt({ projectId, project }) {
     </div>
   );
 
-  if (taskRows.length === 0 && milestoneRows.length === 0) return (
+  if (taskRows.length === 0 && milestoneRows.length === 0 && wbsRows.length === 0) return (
     <div className="text-center py-16 text-slate-400">
       <Calendar className="w-12 h-12 mx-auto mb-3 opacity-30" />
       <p className="text-sm">No tasks or milestones with dates to display.</p>
@@ -277,6 +285,7 @@ export default function TabGantt({ projectId, project }) {
         <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-amber-500 inline-block rotate-45" /> Milestone</div>
         <div className="flex items-center gap-1.5"><span className="w-4 border-t-2 border-dashed border-slate-500 inline-block" /> Dependency</div>
         <div className="flex items-center gap-1.5"><span className="w-4 border-t-2 border-dashed border-red-500 inline-block" /> Conflict</div>
+        <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-purple-400 inline-block" /> WBS</div>
       </div>
 
       {/* Chart */}
@@ -323,6 +332,65 @@ export default function TabGantt({ projectId, project }) {
                         onMouseEnter={e => setTooltip({ x: e.clientX, y: e.clientY, content: m.title, sub: formatDate(m.planned_date), status: m.status })}
                         onMouseLeave={() => setTooltip(null)}>
                         <div className={`w-4 h-4 rotate-45 ${MILESTONE_STATUS_COLORS[m.status] || 'bg-amber-500'} shadow-md border-2 border-white`} />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </>
+        )}
+
+        {/* WBS section */}
+        {wbsRows.length > 0 && (
+          <>
+            <div className="flex bg-purple-50 border-b border-slate-100">
+              <div className="w-52 shrink-0 px-4 py-1.5 text-xs font-bold text-purple-700 uppercase tracking-wide border-r border-slate-200 flex items-center gap-1">
+                <Layers className="w-3 h-3" /> WBS
+              </div>
+              <div className="flex-1" />
+            </div>
+            {wbsRows.map(w => {
+              const bs = getBarStyle(w.planned_start || w.planned_end, w.planned_end || w.planned_start);
+              const linkedMs = milestones.find(m => m.id === w.milestone_id);
+              const msStyle = linkedMs ? getMilestoneStyle(linkedMs.planned_date) : null;
+              return (
+                <div key={w.id} className="flex border-b border-slate-100 hover:bg-slate-50" style={{ minHeight: ROW_H }}>
+                  <div className="w-52 shrink-0 px-4 py-2 text-xs text-slate-700 font-medium truncate border-r border-slate-200 flex items-center gap-1">
+                    <span className="font-mono text-slate-400 shrink-0">{w.wbs_code}</span>
+                    <span className="truncate">{w.name}</span>
+                  </div>
+                  <div className="flex-1 relative flex items-center">
+                    {headerUnits.map((unit, i) => (
+                      <div key={i} className="absolute top-0 bottom-0 border-l border-slate-100"
+                        style={{ left: `${(daysBetween(viewStart, unit) / visibleDays) * 100}%` }} />
+                    ))}
+                    {todayStyle && <div className="absolute top-0 bottom-0 border-l-2 border-red-400 border-dashed z-10" style={todayStyle} />}
+                    {bs && (
+                      <div
+                        className="absolute h-4 rounded bg-purple-400 opacity-80 hover:opacity-100 cursor-pointer z-20 flex items-center px-1 overflow-hidden"
+                        style={bs}
+                        onMouseEnter={e => setTooltip({
+                          x: e.clientX, y: e.clientY,
+                          content: `${w.wbs_code} ${w.name}`,
+                          sub: `${formatDate(w.planned_start)} → ${formatDate(w.planned_end)}`,
+                          status: w.status?.replace(/_/g, ' '),
+                          assignee: w.assignee,
+                          progress: w.progress,
+                          milestone: linkedMs?.title,
+                        })}
+                        onMouseLeave={() => setTooltip(null)}
+                      >
+                        {w.progress > 0 && (
+                          <div className="absolute left-0 top-0 h-full bg-black/20 rounded" style={{ width: `${w.progress}%` }} />
+                        )}
+                        <span className="text-white text-xs font-medium truncate relative z-10 drop-shadow">{w.name}</span>
+                      </div>
+                    )}
+                    {/* Linked milestone diamond */}
+                    {msStyle && (
+                      <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-30 pointer-events-none" style={msStyle}>
+                        <div className={`w-3 h-3 rotate-45 ${MILESTONE_STATUS_COLORS[linkedMs.status] || 'bg-amber-500'} border border-white`} />
                       </div>
                     )}
                   </div>
@@ -457,6 +525,7 @@ export default function TabGantt({ projectId, project }) {
           {tooltip.predecessors?.length > 0 && (
             <div className="text-slate-400 mt-1">After: {tooltip.predecessors.join(', ')}</div>
           )}
+          {tooltip.milestone && <div className="text-amber-400 mt-0.5">🏁 Milestone: {tooltip.milestone}</div>}
           {tooltip.delayed && <div className="text-red-400 font-semibold mt-1">⚠ Starts before predecessor finishes</div>}
         </div>
       )}

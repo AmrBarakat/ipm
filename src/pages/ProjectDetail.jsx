@@ -11,15 +11,19 @@ import TabBOM from '@/components/project-detail/TabBOM';
 import TabFinancials from '@/components/project-detail/TabFinancials';
 import TabDocuments from '@/components/project-detail/TabDocuments';
 import TabGantt from '@/components/project-detail/TabGantt';
+import TabWBS from '@/components/project-detail/TabWBS';
+import TabNotes from '@/components/project-detail/TabNotes';
 
 const TABS = [
   { id: 'overview',   label: 'Overview'    },
   { id: 'gantt',      label: 'Gantt'       },
+  { id: 'wbs',        label: 'WBS'         },
   { id: 'tasks',      label: 'Tasks'       },
   { id: 'milestones', label: 'Milestones'  },
   { id: 'bom',        label: 'BOM'         },
   { id: 'financials', label: 'Financials'  },
   { id: 'documents',  label: 'Documents'   },
+  { id: 'notes',      label: 'Notes'       },
 ];
 
 export default function ProjectDetail() {
@@ -139,11 +143,13 @@ export default function ProjectDetail() {
           <div>
             {activeTab === 'overview'   && <TabOverview   project={project} onRefresh={loadProject} />}
             {activeTab === 'gantt'      && <TabGantt      projectId={id} project={project} />}
+            {activeTab === 'wbs'        && <TabWBS        projectId={id} />}
             {activeTab === 'tasks'      && <TabTasks      projectId={id} />}
             {activeTab === 'milestones' && <TabMilestones projectId={id} />}
             {activeTab === 'bom'        && <TabBOM        projectId={id} />}
             {activeTab === 'financials' && <TabFinancials projectId={id} project={project} />}
             {activeTab === 'documents'  && <TabDocuments  projectId={id} />}
+            {activeTab === 'notes'      && <TabNotes      projectId={id} />}
           </div>
         </>
       )}
