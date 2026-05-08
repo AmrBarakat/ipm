@@ -346,7 +346,7 @@ export default function FinancialDashboard({ projects }) {
           {/* Chart 1 — Booking & Invoicing (Plan vs Actual) */}
           <ChartCard title="Booking & Invoicing" subtitle={`Contract booking vs invoiced — ${view === 'planned' ? 'planned only' : view === 'actual' ? 'actual only' : 'plan vs actual'}`}>
             <ResponsiveContainer width="100%" height={280}>
-              <ComposedChart data={bookingInvoicingData} margin={{ top: 4, right: 16, left: 0, bottom: 40 }}>
+              <ComposedChart key={`booking-${period}`} data={bookingInvoicingData} margin={{ top: 4, right: 16, left: 0, bottom: 40 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                 <XAxis dataKey="period" tick={{ fontSize: 10, fill: '#94a3b8' }} angle={-30} textAnchor="end" interval={0} />
                 <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={fmt} width={55} />
@@ -361,9 +361,9 @@ export default function FinancialDashboard({ projects }) {
           </ChartCard>
 
           {/* Chart 2 — Cash In vs Out */}
-          <ChartCard title="Cash In vs Cash Out" subtitle="Monthly cash movements with net overlay">
+          <ChartCard title="Cash In vs Cash Out" subtitle={`${period.charAt(0).toUpperCase() + period.slice(1)} cash movements with net overlay`}>
             <ResponsiveContainer width="100%" height={280}>
-              <ComposedChart data={cashFlowData} margin={{ top: 4, right: 16, left: 0, bottom: 40 }}>
+              <ComposedChart key={`cashflow-${period}`} data={cashFlowData} margin={{ top: 4, right: 16, left: 0, bottom: 40 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                 <XAxis dataKey="period" tick={{ fontSize: 10, fill: '#94a3b8' }} angle={-30} textAnchor="end" interval={0} />
                 <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={fmt} width={55} />
@@ -379,7 +379,7 @@ export default function FinancialDashboard({ projects }) {
           {/* Chart 3 — Cumulative Cash Flow */}
           <ChartCard title="Cumulative Cash Flow" subtitle="Running totals over time">
             <ResponsiveContainer width="100%" height={280}>
-              <LineChart data={cumulativeData} margin={{ top: 4, right: 16, left: 0, bottom: 40 }}>
+              <LineChart key={`cumulative-${period}`} data={cumulativeData} margin={{ top: 4, right: 16, left: 0, bottom: 40 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                 <XAxis dataKey="period" tick={{ fontSize: 10, fill: '#94a3b8' }} angle={-30} textAnchor="end" interval={0} />
                 <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={fmt} width={55} />
