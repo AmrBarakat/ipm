@@ -140,15 +140,15 @@ export default function Portfolio() {
 }
 
 function KpiCard({ label, value, icon, color }) {
-  return (
-    <div className={`bg-white rounded-lg shadow-sm p-4 border-l-4 hidden ${color}`}>
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="text-xs text-slate-400 uppercase tracking-wide mb-1">{label}</div>
-          <div className="text-xl font-semibold text-slate-800">{value}</div>
-        </div>
-        <div className="text-slate-300 mt-0.5">{icon}</div>
-      </div>
-    </div>);
+  return null;
+
+
+
+
+
+
+
+
+
 
 }
