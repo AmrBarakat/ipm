@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { base44 } from '@/api/base44Client';
-import { formatDate, formatCurrency, BOM_CATEGORY_LABELS, EXPENSE_CATEGORY_LABELS } from '@/lib/constants';
+import { formatDate, formatCurrency, EXPENSE_CATEGORY_LABELS } from '@/lib/constants';
 import { FileText, CreditCard, CheckCircle, AlertCircle, ClipboardList, BarChart2, PieChart, Wallet, Package, Tag, Truck, ShoppingCart, TrendingUp } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, ReferenceLine } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 export default function TabOverview({ project, onRefresh }) {
   const [invoices, setInvoices] = useState([]);
@@ -52,38 +52,24 @@ export default function TabOverview({ project, onRefresh }) {
   const toOrderItems = bomItems.filter(i => !i.ordered && i.stock_status === 'non_stock');
   const toOrderValue = toOrderItems.reduce((s, i) => s + (i.cost_price || 0) * (i.quantity || 1), 0);
 
-  // Projected Profit
-  const totalBomActualCost = bomItems.reduce((s, i) => s + (Number(i.actual_cost_price) || Number(i.cost_price) || 0) * (Number(i.quantity) || 1), 0);
+  // Projected Profit: Collections (received) minus Expenses actual cost
   const totalExpenseActualCost = expenses.reduce((s, e) => s + (e.actual_amount || e.planned_amount || 0), 0);
-  const totalActualCostCombined = totalBomActualCost + totalExpenseActualCost;
-  const projectedProfit = contractValue - totalActualCostCombined;
-  const projectedProfitPct = contractValue > 0 ? Math.round((projectedProfit / contractValue) * 100) : 0;
+  const projectedProfit = totalReceived - totalExpenseActualCost;
+  const projectedProfitPct = totalReceived > 0 ? Math.round((projectedProfit / totalReceived) * 100) : 0;
 
-  // Chart data: cost breakdown by BOM category + expense categories
+  // Chart data: expense cost breakdown by category
   const profitChartData = useMemo(() => {
-    const rows = [];
-    // BOM by category
-    const bomByCategory = {};
-    bomItems.forEach(i => {
-      const cat = i.category || 'other';
-      if (!bomByCategory[cat]) bomByCategory[cat] = 0;
-      bomByCategory[cat] += (Number(i.actual_cost_price) || Number(i.cost_price) || 0) * (Number(i.quantity) || 1);
-    });
-    Object.entries(bomByCategory).forEach(([cat, cost]) => {
-      if (cost > 0) rows.push({ name: (BOM_CATEGORY_LABELS[cat] || cat), cost: Math.round(cost), type: 'BOM' });
-    });
-    // Expenses by category
     const expByCategory = {};
     expenses.forEach(e => {
       const cat = e.category || 'other';
       if (!expByCategory[cat]) expByCategory[cat] = 0;
       expByCategory[cat] += (e.actual_amount || e.planned_amount || 0);
     });
-    Object.entries(expByCategory).forEach(([cat, cost]) => {
-      if (cost > 0) rows.push({ name: (EXPENSE_CATEGORY_LABELS[cat] || cat), cost: Math.round(cost), type: 'Expense' });
-    });
-    return rows.sort((a, b) => b.cost - a.cost);
-  }, [bomItems, expenses]);
+    return Object.entries(expByCategory)
+      .map(([cat, cost]) => ({ name: EXPENSE_CATEGORY_LABELS[cat] || cat, cost: Math.round(cost) }))
+      .filter(r => r.cost > 0)
+      .sort((a, b) => b.cost - a.cost);
+  }, [expenses]);
 
   return (
     <div className="space-y-6">
@@ -192,7 +178,7 @@ export default function TabOverview({ project, onRefresh }) {
       )}
 
       {/* Projected Profit Section */}
-      {!loading && contractValue > 0 && (
+      {!loading && totalReceived > 0 && (
         <div className="bg-white rounded-lg shadow-sm p-5 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-4 border-b pb-3">
             <h3 className="font-semibold text-slate-700 text-sm uppercase tracking-wide flex items-center gap-2">
@@ -200,13 +186,12 @@ export default function TabOverview({ project, onRefresh }) {
             </h3>
             <div className="flex flex-wrap gap-6 text-sm">
               <div className="text-center">
-                <div className="text-xs text-slate-400 uppercase tracking-wide">Contract Value</div>
-                <div className="font-bold text-slate-800">{formatCurrency(contractValue, cur)}</div>
+                <div className="text-xs text-slate-400 uppercase tracking-wide">Collected (Received)</div>
+                <div className="font-bold text-slate-800">{formatCurrency(totalReceived, cur)}</div>
               </div>
               <div className="text-center">
-                <div className="text-xs text-slate-400 uppercase tracking-wide">Total Actual Cost</div>
-                <div className="font-bold text-red-600">{formatCurrency(totalActualCostCombined, cur)}</div>
-                <div className="text-xs text-slate-400">BOM {formatCurrency(totalBomActualCost, cur)} + Exp {formatCurrency(totalExpenseActualCost, cur)}</div>
+                <div className="text-xs text-slate-400 uppercase tracking-wide">Total Expenses</div>
+                <div className="font-bold text-red-600">{formatCurrency(totalExpenseActualCost, cur)}</div>
               </div>
               <div className="text-center">
                 <div className="text-xs text-slate-400 uppercase tracking-wide">Projected Profit</div>
@@ -222,28 +207,16 @@ export default function TabOverview({ project, onRefresh }) {
 
           {profitChartData.length > 0 ? (
             <div>
-              <p className="text-xs text-slate-400 mb-3">Actual cost breakdown by category (BOM + Expenses)</p>
+              <p className="text-xs text-slate-400 mb-3">Expense cost breakdown by category</p>
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={profitChartData} margin={{ top: 4, right: 16, left: 16, bottom: 40 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                   <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} angle={-30} textAnchor="end" interval={0} />
                   <YAxis tick={{ fontSize: 11, fill: '#64748b' }} tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v} />
-                  <Tooltip
-                    formatter={(value) => [formatCurrency(value, cur), 'Actual Cost']}
-                    contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} formatter={(value, entry) => entry.payload.type} />
-                  <Bar dataKey="cost" radius={[4, 4, 0, 0]} maxBarSize={60}>
-                    {profitChartData.map((entry, i) => (
-                      <Cell key={i} fill={entry.type === 'BOM' ? '#3b82f6' : '#f59e0b'} />
-                    ))}
-                  </Bar>
+                  <Tooltip formatter={(value) => [formatCurrency(value, cur), 'Cost']} contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }} />
+                  <Bar dataKey="cost" radius={[4, 4, 0, 0]} maxBarSize={60} fill="#f59e0b" />
                 </BarChart>
               </ResponsiveContainer>
-              <div className="flex gap-4 justify-center text-xs text-slate-500 mt-1">
-                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-blue-500 inline-block" /> BOM Cost</span>
-                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-amber-500 inline-block" /> Expense Cost</span>
-              </div>
             </div>
           ) : (
             <p className="text-sm text-slate-400 text-center py-4">No cost data yet to display chart.</p>

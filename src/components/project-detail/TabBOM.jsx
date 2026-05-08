@@ -137,10 +137,11 @@ export default function TabBOM({ projectId }) {
     const map = {};
     items.forEach(i => {
       const cat = i.category || 'other';
-      if (!map[cat]) map[cat] = { count: 0, plannedCost: 0, actualCost: 0 };
+      if (!map[cat]) map[cat] = { count: 0, plannedCost: 0, actualCost: 0, sellValue: 0 };
       map[cat].count++;
       map[cat].plannedCost += (Number(i.planned_cost_price) || Number(i.cost_price) || 0) * (Number(i.quantity) || 1);
       map[cat].actualCost += (Number(i.actual_cost_price) || 0) * (Number(i.quantity) || 1);
+      map[cat].sellValue += (Number(i.selling_price) || 0) * (Number(i.quantity) || 1);
     });
     return Object.entries(map).sort((a, b) => b[1].plannedCost - a[1].plannedCost);
   }, [items]);
@@ -149,10 +150,11 @@ export default function TabBOM({ projectId }) {
     const map = {};
     items.forEach(i => {
       const sup = i.supplier || '(No Supplier)';
-      if (!map[sup]) map[sup] = { count: 0, plannedCost: 0, actualCost: 0 };
+      if (!map[sup]) map[sup] = { count: 0, plannedCost: 0, actualCost: 0, sellValue: 0 };
       map[sup].count++;
       map[sup].plannedCost += (Number(i.planned_cost_price) || Number(i.cost_price) || 0) * (Number(i.quantity) || 1);
       map[sup].actualCost += (Number(i.actual_cost_price) || 0) * (Number(i.quantity) || 1);
+      map[sup].sellValue += (Number(i.selling_price) || 0) * (Number(i.quantity) || 1);
     });
     return Object.entries(map).sort((a, b) => b[1].plannedCost - a[1].plannedCost);
   }, [items]);
@@ -292,6 +294,7 @@ export default function TabBOM({ projectId }) {
                   <th className="px-3 py-3 text-right">Order Qty</th>
                   <th className="px-3 py-3 text-right">Planned Cost</th>
                   <th className="px-3 py-3 text-right">Actual Cost</th>
+                  <th className="px-3 py-3 text-right">Sell Value</th>
                   <th className="px-3 py-3 text-left">Order Status</th>
                   <th className="px-3 py-3 text-left">Delivery</th>
                   <th className="px-3 py-3 text-left">Exp. Delivery</th>
@@ -416,6 +419,22 @@ export default function TabBOM({ projectId }) {
                           <span className="text-xs text-slate-400 mt-0.5">= {formatCurrency(actualUnit * (Number(item.quantity) || 1), item.currency || 'SAR')}</span>
                         </div>
                       </td>
+                      {/* Sell Value */}
+                      <td className="px-1 py-1 text-right">
+                        <div className="flex flex-col items-end">
+                          <input
+                            type="number"
+                            className={inp + ' text-right'}
+                            style={{ width: 90 }}
+                            value={item.selling_price ?? 0}
+                            onChange={e => updateField(item.id, 'selling_price', e.target.value)}
+                            onBlur={e => handleBlur(item, 'selling_price', e.target.value)}
+                            min="0"
+                            placeholder="0"
+                          />
+                          <span className="text-xs text-slate-400 mt-0.5">= {formatCurrency((Number(item.selling_price) || 0) * (Number(item.quantity) || 1), item.currency || 'SAR')}</span>
+                        </div>
+                      </td>
                       {/* Order Status */}
                       <td className="px-1 py-1">
                         <select
@@ -465,6 +484,7 @@ export default function TabBOM({ projectId }) {
                     <td className="px-3 py-2 text-slate-500" colSpan={6}>Totals ({filtered.length} items)</td>
                     <td className="px-3 py-2 text-right">{formatCurrency(filtered.reduce((s, i) => s + (Number(i.planned_cost_price) || Number(i.cost_price) || 0) * (Number(i.quantity) || 1), 0), 'SAR')}</td>
                     <td className="px-3 py-2 text-right">{formatCurrency(filtered.reduce((s, i) => s + (Number(i.actual_cost_price) || 0) * (Number(i.quantity) || 1), 0), 'SAR')}</td>
+                    <td className="px-3 py-2 text-right text-emerald-700">{formatCurrency(filtered.reduce((s, i) => s + (Number(i.selling_price) || 0) * (Number(i.quantity) || 1), 0), 'SAR')}</td>
                     <td colSpan={4}></td>
                   </tr>
                 </tfoot>
@@ -486,6 +506,7 @@ export default function TabBOM({ projectId }) {
                   <th className="text-right py-1">Items</th>
                   <th className="text-right py-1">Planned Cost</th>
                   <th className="text-right py-1">Actual Cost</th>
+                  <th className="text-right py-1">Sell Value</th>
                 </tr>
               </thead>
               <tbody>
@@ -495,6 +516,7 @@ export default function TabBOM({ projectId }) {
                     <td className="py-1.5 text-right text-slate-500">{data.count}</td>
                     <td className="py-1.5 text-right text-slate-700">{formatCurrency(data.plannedCost, 'SAR')}</td>
                     <td className="py-1.5 text-right text-slate-600">{data.actualCost > 0 ? formatCurrency(data.actualCost, 'SAR') : '—'}</td>
+                    <td className="py-1.5 text-right text-emerald-700">{data.sellValue > 0 ? formatCurrency(data.sellValue, 'SAR') : '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -509,6 +531,7 @@ export default function TabBOM({ projectId }) {
                   <th className="text-right py-1">Items</th>
                   <th className="text-right py-1">Planned Cost</th>
                   <th className="text-right py-1">Actual Cost</th>
+                  <th className="text-right py-1">Sell Value</th>
                 </tr>
               </thead>
               <tbody>
@@ -518,6 +541,7 @@ export default function TabBOM({ projectId }) {
                     <td className="py-1.5 text-right text-slate-500">{data.count}</td>
                     <td className="py-1.5 text-right text-slate-700">{formatCurrency(data.plannedCost, 'SAR')}</td>
                     <td className="py-1.5 text-right text-slate-600">{data.actualCost > 0 ? formatCurrency(data.actualCost, 'SAR') : '—'}</td>
+                    <td className="py-1.5 text-right text-emerald-700">{data.sellValue > 0 ? formatCurrency(data.sellValue, 'SAR') : '—'}</td>
                   </tr>
                 ))}
               </tbody>
