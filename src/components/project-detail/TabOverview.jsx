@@ -37,7 +37,7 @@ export default function TabOverview({ project, onRefresh }) {
   // Actual invoiced: invoiced/paid/partial/overdue → actual_amount fallback planned_amount
   const actualInvoiced = invoices.filter(i => ['invoiced','paid','partial','overdue'].includes(i.status)).reduce((s, i) => s + (i.actual_amount || i.planned_amount || 0), 0);
   const totalReceived = collections.reduce((s, c) => s + (c.amount || 0), 0);
-  const outstanding = plannedInvoiced - totalReceived;
+  const outstanding = actualInvoiced - totalReceived;
 
   // Cost KPIs — aligned with TabFinancials logic
   // Planned: all non-cancelled expenses → planned_amount

@@ -158,7 +158,7 @@ export default function TabFinancials({ projectId, project }) {
   const actualExpenses = expenses.filter(e => ['committed','paid'].includes(e.status)).reduce((s, e) => s + (e.actual_amount || e.planned_amount || 0), 0);
 
   const totalReceived = collections.reduce((s, c) => s + (c.amount || 0), 0);
-  const remainingToCollect = plannedInvoiced - totalReceived;
+  const remainingToCollect = actualInvoiced - totalReceived;
   const budget = project?.contract_value || 0;
   const exceedsInvoiced = actualExpenses > actualInvoiced && actualInvoiced > 0;
   const exceedsBudget = budget > 0 && plannedExpenses > budget;
@@ -205,7 +205,7 @@ export default function TabFinancials({ projectId, project }) {
             <div>
               <div className="text-xs text-slate-400 uppercase tracking-wide mb-1">Total Received</div>
               <div className="text-xl font-semibold text-slate-800">{formatCurrency(totalReceived, 'SAR')}</div>
-              <div className="text-xs text-slate-400 mt-0.5">{remainingToCollect > 0 ? `${formatCurrency(remainingToCollect, 'SAR')} outstanding` : 'Fully collected'}</div>
+              <div className="text-xs text-slate-400 mt-0.5">{remainingToCollect > 0 ? `${formatCurrency(remainingToCollect, 'SAR')} outstanding` : actualInvoiced > 0 ? 'Fully collected' : 'No invoices yet'}</div>
             </div>
             <Banknote className="w-5 h-5 text-slate-300" />
           </div>
