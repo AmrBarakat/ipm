@@ -1,0 +1,151 @@
+{
+  "name": "PurchaseOrder",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to Project"
+    },
+    "vendor_id": {
+      "type": "string",
+      "description": "Reference to Vendor"
+    },
+    "vendor_name": {
+      "type": "string",
+      "description": "Denormalized for display"
+    },
+    "po_number": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "equipment",
+        "subcontract",
+        "service",
+        "material",
+        "other"
+      ],
+      "default": "equipment"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "issued",
+        "acknowledged",
+        "in_transit",
+        "partially_delivered",
+        "delivered",
+        "cancelled"
+      ],
+      "default": "draft"
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ],
+      "default": "medium"
+    },
+    "amount": {
+      "type": "number",
+      "default": 0
+    },
+    "currency": {
+      "type": "string",
+      "default": "SAR"
+    },
+    "issue_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "expected_delivery_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "actual_delivery_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "delivery_location": {
+      "type": "string"
+    },
+    "tracking_number": {
+      "type": "string"
+    },
+    "delay_days": {
+      "type": "number",
+      "default": 0,
+      "description": "Computed days overdue (positive = late)"
+    },
+    "delay_alerted": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether a delay notification was sent"
+    },
+    "items": {
+      "type": "array",
+      "description": "Line items on this PO",
+      "items": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "unit": {
+            "type": "string"
+          },
+          "unit_price": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "delivery_notes": {
+      "type": "array",
+      "description": "Delivery note records",
+      "items": {
+        "type": "object",
+        "properties": {
+          "dn_number": {
+            "type": "string"
+          },
+          "received_date": {
+            "type": "string"
+          },
+          "received_by": {
+            "type": "string"
+          },
+          "condition": {
+            "type": "string",
+            "enum": [
+              "good",
+              "damaged",
+              "partial"
+            ]
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "project_id",
+    "description"
+  ]
+}
