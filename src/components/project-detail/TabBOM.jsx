@@ -226,8 +226,8 @@ export default function TabBOM({ projectId }) {
           <input type="number" value={form.quantity} onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))} placeholder="Qty" className={inp} min="0" />
           <input type="number" value={form.stock_qty} onChange={e => setForm(f => ({ ...f, stock_qty: e.target.value }))} placeholder="Stock Qty" className={inp} min="0" />
           <input value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value }))} placeholder="Unit" className={inp} />
-          <input type="number" value={form.planned_cost_price} onChange={e => setForm(f => ({ ...f, planned_cost_price: e.target.value }))} placeholder="Planned Cost" className={inp} min="0" />
-          <input type="number" value={form.actual_cost_price} onChange={e => setForm(f => ({ ...f, actual_cost_price: e.target.value }))} placeholder="Actual Cost" className={inp} min="0" />
+          <input type="number" value={form.planned_cost_price} onChange={e => setForm(f => ({ ...f, planned_cost_price: e.target.value }))} placeholder="Planned Cost/Unit" className={inp} min="0" />
+          <input type="number" value={form.actual_cost_price} onChange={e => setForm(f => ({ ...f, actual_cost_price: e.target.value }))} placeholder="Actual Cost/Unit" className={inp} min="0" />
           <input type="number" value={form.selling_price} onChange={e => setForm(f => ({ ...f, selling_price: e.target.value }))} placeholder="Selling Price" className={inp} min="0" />
           <select value={form.order_status} onChange={e => setForm(f => ({ ...f, order_status: e.target.value }))} className={inp}>
             <option value="not_ordered">Not Ordered</option>
