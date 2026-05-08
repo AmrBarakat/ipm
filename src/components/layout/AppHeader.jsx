@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
-import { Bell, Search, Plus, Factory, FolderOpen, BarChart2, LayoutDashboard } from 'lucide-react';
+import { Bell, Search, Plus, Factory, FolderOpen, BarChart2, LayoutDashboard, Users } from 'lucide-react';
 import { formatDate } from '@/lib/constants';
 
 export default function AppHeader() {
@@ -164,6 +164,9 @@ export default function AppHeader() {
           </Link>
           <Link to="/reports" className="px-3 py-2 rounded text-sm hover:bg-slate-700 transition hidden md:flex items-center gap-1">
             <BarChart2 className="w-4 h-4" /><span>Reports</span>
+          </Link>
+          <Link to="/resources" className="px-3 py-2 rounded text-sm hover:bg-slate-700 transition hidden md:flex items-center gap-1">
+            <Users className="w-4 h-4" /><span>Resources</span>
           </Link>
 
           {/* Notifications */}
