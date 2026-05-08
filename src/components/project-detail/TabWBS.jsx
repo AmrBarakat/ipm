@@ -40,6 +40,18 @@ function rollupProgress(id, tree, byId) {
   return Math.round(childProgresses.reduce((s, c) => s + c.p * c.w, 0) / (totalWeight || 1));
 }
 
+/** Compute overall project progress from root WBS items using weighted rollup */
+async function syncProjectProgress(projectId, items, tree, byId) {
+  const roots = tree['__root__'] || [];
+  if (roots.length === 0) return;
+  const rootProgresses = roots.map(r => ({ p: rollupProgress(r.id, tree, byId), w: r.weight || 1 }));
+  const totalWeight = rootProgresses.reduce((s, r) => s + r.w, 0);
+  const overallProgress = Math.round(
+    rootProgresses.reduce((s, r) => s + r.p * r.w, 0) / (totalWeight || 1)
+  );
+  await base44.entities.Project.update(projectId, { progress: overallProgress });
+}
+
 export default function TabWBS({ projectId }) {
   const [items, setItems] = useState([]);
   const [milestones, setMilestones] = useState([]);
@@ -161,7 +173,17 @@ export default function TabWBS({ projectId }) {
       await base44.entities.Milestone.update(data.milestone_id, { status: 'completed', completed_date: data.actual_end || new Date().toISOString().slice(0, 10) });
     }
     setEditingId(null);
-    load();
+    // Reload then sync project progress
+    const updated = await base44.entities.WBSItem.filter({ project_id: projectId }, 'wbs_code', 500);
+    setItems(updated);
+    const newById = Object.fromEntries(updated.map(i => [i.id, i]));
+    const newTree = {};
+    updated.forEach(i => {
+      const pid = i.parent_id || '__root__';
+      if (!newTree[pid]) newTree[pid] = [];
+      newTree[pid].push(i);
+    });
+    await syncProjectProgress(projectId, updated, newTree, newById);
   }
 
   async function updateStatus(item, status) {
@@ -170,7 +192,17 @@ export default function TabWBS({ projectId }) {
     if (status === 'completed' && item.milestone_id) {
       await base44.entities.Milestone.update(item.milestone_id, { status: 'completed', completed_date: item.actual_end || new Date().toISOString().slice(0, 10) });
     }
-    load();
+    // Reload then sync project progress
+    const updated = await base44.entities.WBSItem.filter({ project_id: projectId }, 'wbs_code', 500);
+    setItems(updated);
+    const newById = Object.fromEntries(updated.map(i => [i.id, i]));
+    const newTree = {};
+    updated.forEach(i => {
+      const pid = i.parent_id || '__root__';
+      if (!newTree[pid]) newTree[pid] = [];
+      newTree[pid].push(i);
+    });
+    await syncProjectProgress(projectId, updated, newTree, newById);
   }
 
   function getDescendants(id) {

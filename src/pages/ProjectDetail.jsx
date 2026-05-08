@@ -15,19 +15,21 @@ import TabWBS from '@/components/project-detail/TabWBS';
 import TabNotes from '@/components/project-detail/TabNotes';
 import TabRisks from '@/components/project-detail/TabRisks';
 import TabVendors from '@/components/project-detail/TabVendors';
+import TabDeliverables from '@/components/project-detail/TabDeliverables';
 
 const TABS = [
-  { id: 'overview',   label: 'Overview'    },
-  { id: 'gantt',      label: 'Gantt'       },
-  { id: 'wbs',        label: 'WBS'         },
-  { id: 'tasks',      label: 'Tasks'       },
-  { id: 'milestones', label: 'Milestones'  },
-  { id: 'bom',        label: 'BOM'         },
-  { id: 'financials', label: 'Financials'  },
-  { id: 'documents',  label: 'Documents'   },
-  { id: 'notes',      label: 'Notes'       },
-  { id: 'risks',      label: 'Risks'       },
-  { id: 'vendors',    label: 'Vendors & POs' },
+  { id: 'overview',      label: 'Overview'       },
+  { id: 'gantt',         label: 'Gantt'          },
+  { id: 'wbs',           label: 'WBS'            },
+  { id: 'tasks',         label: 'Tasks'          },
+  { id: 'milestones',    label: 'Milestones'     },
+  { id: 'deliverables',  label: 'Deliverables'   },
+  { id: 'bom',           label: 'BOM'            },
+  { id: 'financials',    label: 'Financials'     },
+  { id: 'documents',     label: 'Documents'      },
+  { id: 'notes',         label: 'Notes'          },
+  { id: 'risks',         label: 'Risks'          },
+  { id: 'vendors',       label: 'Vendors & POs'  },
 ];
 
 export default function ProjectDetail() {
@@ -159,6 +161,7 @@ export default function ProjectDetail() {
             {activeTab === 'documents'  && <TabDocuments  projectId={id} />}
             {activeTab === 'notes'      && <TabNotes      projectId={id} />}
             {activeTab === 'risks'      && <TabRisks      projectId={id} />}
+            {activeTab === 'deliverables' && <TabDeliverables projectId={id} />}
             {activeTab === 'vendors'    && <TabVendors    projectId={id} project={project} />}
           </div>
         </>
