@@ -31,14 +31,19 @@ export default function TabOverview({ project, onRefresh }) {
   const cur = project?.currency || 'SAR';
   const contractValue = project?.contract_value || 0;
 
-  // Financial KPIs
-  const totalInvoiced = invoices.reduce((s, i) => s + (i.planned_amount || 0), 0);
+  // Financial KPIs — aligned with TabFinancials logic
+  // Planned invoiced: all non-cancelled invoices → planned_amount
+  const plannedInvoiced = invoices.filter(i => i.status !== 'cancelled').reduce((s, i) => s + (i.planned_amount || 0), 0);
+  // Actual invoiced: invoiced/paid/partial/overdue → actual_amount fallback planned_amount
+  const actualInvoiced = invoices.filter(i => ['invoiced','paid','partial','overdue'].includes(i.status)).reduce((s, i) => s + (i.actual_amount || i.planned_amount || 0), 0);
   const totalReceived = collections.reduce((s, c) => s + (c.amount || 0), 0);
-  const outstanding = totalInvoiced - totalReceived;
+  const outstanding = plannedInvoiced - totalReceived;
 
-  // Cost KPIs
-  const plannedCost = expenses.reduce((s, e) => s + (e.planned_amount || 0), 0);
-  const actualCost = expenses.reduce((s, e) => s + (e.actual_amount || e.planned_amount || 0), 0);
+  // Cost KPIs — aligned with TabFinancials logic
+  // Planned: all non-cancelled expenses → planned_amount
+  const plannedCost = expenses.filter(e => e.status !== 'cancelled').reduce((s, e) => s + (e.planned_amount || 0), 0);
+  // Actual: committed/paid expenses → actual_amount fallback planned_amount
+  const actualCost = expenses.filter(e => ['committed','paid'].includes(e.status)).reduce((s, e) => s + (e.actual_amount || e.planned_amount || 0), 0);
   const plannedMargin = contractValue - plannedCost;
   const plannedMarginPct = contractValue > 0 ? Math.round((plannedMargin / contractValue) * 100) : 0;
   const cashOnHand = totalReceived - actualCost;
@@ -52,15 +57,15 @@ export default function TabOverview({ project, onRefresh }) {
   const toOrderItems = bomItems.filter(i => !i.ordered && i.stock_status === 'non_stock');
   const toOrderValue = toOrderItems.reduce((s, i) => s + (i.cost_price || 0) * (i.quantity || 1), 0);
 
-  // Projected Profit: Collections (received) minus Expenses actual cost
-  const totalExpenseActualCost = expenses.reduce((s, e) => s + (e.actual_amount || e.planned_amount || 0), 0);
+  // Projected Profit: Collections (received) minus committed/paid expenses actual cost
+  const totalExpenseActualCost = expenses.filter(e => ['committed','paid'].includes(e.status)).reduce((s, e) => s + (e.actual_amount || e.planned_amount || 0), 0);
   const projectedProfit = totalReceived - totalExpenseActualCost;
   const projectedProfitPct = totalReceived > 0 ? Math.round((projectedProfit / totalReceived) * 100) : 0;
 
-  // Chart data: expense cost breakdown by category
+  // Chart data: expense cost breakdown by category (committed/paid only)
   const profitChartData = useMemo(() => {
     const expByCategory = {};
-    expenses.forEach(e => {
+    expenses.filter(e => ['committed','paid'].includes(e.status)).forEach(e => {
       const cat = e.category || 'other';
       if (!expByCategory[cat]) expByCategory[cat] = 0;
       expByCategory[cat] += (e.actual_amount || e.planned_amount || 0);
@@ -85,9 +90,9 @@ export default function TabOverview({ project, onRefresh }) {
               accent="blue"
             />
             <KpiCard
-              label="Invoiced"
-              value={formatCurrency(totalInvoiced, cur)}
-              sub={contractValue > 0 ? `${Math.round((totalInvoiced / contractValue) * 100)}% of contract` : null}
+              label="Planned Invoiced"
+              value={formatCurrency(plannedInvoiced, cur)}
+              sub={contractValue > 0 ? `${Math.round((plannedInvoiced / contractValue) * 100)}% of contract` : null}
               icon={<CreditCard className="w-5 h-5" />}
               accent="green"
             />

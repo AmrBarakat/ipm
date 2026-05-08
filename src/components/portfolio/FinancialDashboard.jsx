@@ -115,11 +115,17 @@ export default function FinancialDashboard({ projects }) {
             .reduce((s, p) => s + (p.contract_value || 0), 0),
     [projects, filteredProjectIds]
   );
-  const totalInvoiced   = useMemo(() => fInvoices.reduce((s, i) => s + (i.planned_amount || 0), 0), [fInvoices]);
+  // Planned invoiced: all non-cancelled → planned_amount
+  const totalPlannedInvoiced = useMemo(() => fInvoices.filter(i => i.status !== 'cancelled').reduce((s, i) => s + (i.planned_amount || 0), 0), [fInvoices]);
+  // Actual invoiced: invoiced/paid/partial/overdue → actual_amount fallback planned_amount
+  const totalActualInvoiced  = useMemo(() => fInvoices.filter(i => ['invoiced','paid','partial','overdue'].includes(i.status)).reduce((s, i) => s + (i.actual_amount || i.planned_amount || 0), 0), [fInvoices]);
+  const totalInvoiced = totalPlannedInvoiced; // keep for backward-compat references
   const totalCashIn     = useMemo(() => fCollections.reduce((s, c) => s + (c.amount || 0), 0), [fCollections]);
-  const totalCashOut    = useMemo(() => fExpenses.reduce((s, e) => s + (e.actual_amount || e.planned_amount || 0), 0), [fExpenses]);
+  // Cash out: planned = all non-cancelled planned_amount; actual = committed/paid actual_amount fallback planned_amount
+  const totalPlannedCashOut = useMemo(() => fExpenses.filter(e => e.status !== 'cancelled').reduce((s, e) => s + (e.planned_amount || 0), 0), [fExpenses]);
+  const totalCashOut        = useMemo(() => fExpenses.filter(e => ['committed','paid'].includes(e.status)).reduce((s, e) => s + (e.actual_amount || e.planned_amount || 0), 0), [fExpenses]);
   const netCash         = totalCashIn - totalCashOut;
-  const collectionBal   = totalInvoiced - totalCashIn;
+  const collectionBal   = totalActualInvoiced - totalCashIn;
 
   // ── Period-bucketed data ────────────────────────────────────────────────
   function bucketByPeriod(items, dateField, amountField) {
@@ -147,7 +153,7 @@ export default function FinancialDashboard({ projects }) {
   const cashInByPeriod           = useMemo(() => bucketByPeriod(fCollections, 'received_date', 'amount'), [fCollections, period]);
   const cashOutByPeriod          = useMemo(() => {
     const map = {};
-    fExpenses.forEach(e => {
+    fExpenses.filter(e => ['committed','paid'].includes(e.status)).forEach(e => {
       const dateField = e.actual_date || e.planned_date;
       const key = periodKey(dateField, period);
       if (!key) return;
@@ -274,12 +280,12 @@ export default function FinancialDashboard({ projects }) {
 
       {/* ── KPI Cards ──────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        <KpiCard label="Total Booking"       value={formatCurrency(totalBooking,  currency)} icon={<TrendingUp className="w-5 h-5" />}      color="border-blue-500"   sub={`${projects.filter(p=>filteredProjectIds.has(p.id)).length} projects`} />
-        <KpiCard label="Invoiced"            value={formatCurrency(totalInvoiced, currency)} icon={<ReceiptText className="w-5 h-5" />}      color="border-purple-500" sub={totalBooking > 0 ? `${Math.round((totalInvoiced/totalBooking)*100)}% of booking` : null} />
-        <KpiCard label="Cash In"             value={formatCurrency(totalCashIn,   currency)} icon={<ArrowUpCircle className="w-5 h-5" />}    color="border-emerald-500" sub={totalInvoiced > 0 ? `${Math.round((totalCashIn/totalInvoiced)*100)}% collected` : null} />
-        <KpiCard label="Cash Out"            value={formatCurrency(totalCashOut,  currency)} icon={<ArrowDownCircle className="w-5 h-5" />}  color="border-red-500" />
-        <KpiCard label="Net Cash"            value={formatCurrency(netCash,       currency)} icon={<Wallet className="w-5 h-5" />}           color={netCash >= 0 ? 'border-emerald-500' : 'border-red-500'} highlight={netCash < 0 ? 'red' : 'green'} />
-        <KpiCard label="Collection Balance"  value={formatCurrency(collectionBal, currency)} icon={<DollarSign className="w-5 h-5" />}       color="border-amber-500"  sub="Invoiced – Collected" />
+        <KpiCard label="Total Booking"        value={formatCurrency(totalBooking,          currency)} icon={<TrendingUp className="w-5 h-5" />}     color="border-blue-500"    sub={`${projects.filter(p=>filteredProjectIds.has(p.id)).length} projects`} />
+        <KpiCard label="Planned Invoiced"     value={formatCurrency(totalPlannedInvoiced,  currency)} icon={<ReceiptText className="w-5 h-5" />}     color="border-purple-400"  sub={totalBooking > 0 ? `${Math.round((totalPlannedInvoiced/totalBooking)*100)}% of booking` : null} />
+        <KpiCard label="Actual Invoiced"      value={formatCurrency(totalActualInvoiced,   currency)} icon={<ReceiptText className="w-5 h-5" />}     color="border-purple-600"  sub={totalPlannedInvoiced > 0 ? `${Math.round((totalActualInvoiced/totalPlannedInvoiced)*100)}% of planned` : null} />
+        <KpiCard label="Cash In"              value={formatCurrency(totalCashIn,           currency)} icon={<ArrowUpCircle className="w-5 h-5" />}   color="border-emerald-500" sub={totalActualInvoiced > 0 ? `${Math.round((totalCashIn/totalActualInvoiced)*100)}% collected` : null} />
+        <KpiCard label="Planned Expenses"     value={formatCurrency(totalPlannedCashOut,   currency)} icon={<ArrowDownCircle className="w-5 h-5" />} color="border-red-400"     sub="Non-cancelled" />
+        <KpiCard label="Actual Expenses"      value={formatCurrency(totalCashOut,          currency)} icon={<ArrowDownCircle className="w-5 h-5" />} color="border-red-600"     sub="Committed / paid" />
       </div>
 
       {/* ── Charts Grid ────────────────────────────────────────────────────── */}
