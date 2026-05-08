@@ -37,6 +37,10 @@ export default function ProjectDetail() {
   useEffect(() => { loadProject(); }, [id]);
 
   async function loadProject() {
+    if (!id || id === ':id') {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     const results = await base44.entities.Project.filter({ id });
     setProject(results[0] || null);
