@@ -82,10 +82,22 @@ export default function TabFinancials({ projectId, project }) {
 
   function startEditInv(inv) {
     setEditingInv(inv.id);
-    setEditInvForm({ description: inv.description, planned_amount: inv.planned_amount, planned_date: inv.planned_date || '', status: inv.status });
+    setEditInvForm({
+      description: inv.description,
+      planned_amount: inv.planned_amount,
+      actual_amount: inv.actual_amount ?? '',
+      planned_date: inv.planned_date || '',
+      actual_invoice_date: inv.actual_invoice_date || '',
+      status: inv.status,
+    });
   }
   async function saveInv(id) {
-    await base44.entities.Invoice.update(id, { ...editInvForm, planned_amount: Number(editInvForm.planned_amount) || 0 });
+    const data = {
+      ...editInvForm,
+      planned_amount: Number(editInvForm.planned_amount) || 0,
+      actual_amount: editInvForm.actual_amount !== '' ? Number(editInvForm.actual_amount) : null,
+    };
+    await base44.entities.Invoice.update(id, data);
     setEditingInv(null); load();
   }
   async function deleteInv(id) {
@@ -95,10 +107,24 @@ export default function TabFinancials({ projectId, project }) {
 
   function startEditExp(exp) {
     setEditingExp(exp.id);
-    setEditExpForm({ description: exp.description, category: exp.category, vendor: exp.vendor || '', planned_amount: exp.planned_amount, planned_date: exp.planned_date || '', status: exp.status });
+    setEditExpForm({
+      description: exp.description,
+      category: exp.category,
+      vendor: exp.vendor || '',
+      planned_amount: exp.planned_amount,
+      actual_amount: exp.actual_amount ?? '',
+      planned_date: exp.planned_date || '',
+      actual_date: exp.actual_date || '',
+      status: exp.status,
+    });
   }
   async function saveExp(id) {
-    await base44.entities.Expense.update(id, { ...editExpForm, planned_amount: Number(editExpForm.planned_amount) || 0 });
+    const data = {
+      ...editExpForm,
+      planned_amount: Number(editExpForm.planned_amount) || 0,
+      actual_amount: editExpForm.actual_amount !== '' ? Number(editExpForm.actual_amount) : null,
+    };
+    await base44.entities.Expense.update(id, data);
     setEditingExp(null); load();
   }
   async function deleteExp(id) {
@@ -119,13 +145,23 @@ export default function TabFinancials({ projectId, project }) {
     await base44.entities.Collection.delete(id); load();
   }
 
-  const totalInvoiced = invoices.reduce((s, i) => s + (i.planned_amount || 0), 0);
+  // Invoice KPIs
+  // Planned: all non-cancelled invoices → planned_amount
+  const plannedInvoiced = invoices.filter(i => i.status !== 'cancelled').reduce((s, i) => s + (i.planned_amount || 0), 0);
+  // Actual: invoices with status invoiced/paid/partial/overdue → actual_amount fallback planned_amount
+  const actualInvoiced = invoices.filter(i => ['invoiced','paid','partial','overdue'].includes(i.status)).reduce((s, i) => s + (i.actual_amount || i.planned_amount || 0), 0);
+
+  // Expense KPIs
+  // Planned: all non-cancelled expenses → planned_amount
+  const plannedExpenses = expenses.filter(e => e.status !== 'cancelled').reduce((s, e) => s + (e.planned_amount || 0), 0);
+  // Actual: committed/paid expenses → actual_amount fallback planned_amount
+  const actualExpenses = expenses.filter(e => ['committed','paid'].includes(e.status)).reduce((s, e) => s + (e.actual_amount || e.planned_amount || 0), 0);
+
   const totalReceived = collections.reduce((s, c) => s + (c.amount || 0), 0);
-  const totalExpenses = expenses.reduce((s, e) => s + (e.actual_amount || e.planned_amount || 0), 0);
-  const remainingToCollect = totalInvoiced - totalReceived;
+  const remainingToCollect = plannedInvoiced - totalReceived;
   const budget = project?.contract_value || 0;
-  const exceedsInvoiced = totalExpenses > totalInvoiced && totalInvoiced > 0;
-  const exceedsBudget = budget > 0 && totalExpenses > budget;
+  const exceedsInvoiced = actualExpenses > actualInvoiced && actualInvoiced > 0;
+  const exceedsBudget = budget > 0 && plannedExpenses > budget;
   const hasWarning = exceedsInvoiced || exceedsBudget;
 
   if (loading) return <Spinner />;
@@ -136,21 +172,32 @@ export default function TabFinancials({ projectId, project }) {
         <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-300 rounded-lg text-red-800">
           <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
           <div className="text-sm space-y-1">
-            {exceedsBudget && <p><strong>Budget overrun:</strong> Total expenses ({formatCurrency(totalExpenses, 'SAR')}) exceed the project budget ({formatCurrency(budget, 'SAR')}) by {formatCurrency(totalExpenses - budget, 'SAR')}.</p>}
-            {exceedsInvoiced && !exceedsBudget && <p><strong>Expenses exceed invoiced amount:</strong> Total expenses ({formatCurrency(totalExpenses, 'SAR')}) exceed total invoiced ({formatCurrency(totalInvoiced, 'SAR')}) by {formatCurrency(totalExpenses - totalInvoiced, 'SAR')}.</p>}
+            {exceedsBudget && <p><strong>Budget overrun:</strong> Planned expenses ({formatCurrency(plannedExpenses, 'SAR')}) exceed the project budget ({formatCurrency(budget, 'SAR')}) by {formatCurrency(plannedExpenses - budget, 'SAR')}.</p>}
+            {exceedsInvoiced && !exceedsBudget && <p><strong>Actual expenses exceed actual invoiced:</strong> Actual expenses ({formatCurrency(actualExpenses, 'SAR')}) exceed actual invoiced ({formatCurrency(actualInvoiced, 'SAR')}) by {formatCurrency(actualExpenses - actualInvoiced, 'SAR')}.</p>}
           </div>
         </div>
       )}
 
       {/* Summary */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-blue-400">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-blue-300">
           <div className="flex items-start justify-between">
             <div>
-              <div className="text-xs text-slate-400 uppercase tracking-wide mb-1">Total Invoiced</div>
-              <div className="text-xl font-semibold text-slate-800">{formatCurrency(totalInvoiced, 'SAR')}</div>
+              <div className="text-xs text-slate-400 uppercase tracking-wide mb-1">Planned Invoiced</div>
+              <div className="text-xl font-semibold text-slate-800">{formatCurrency(plannedInvoiced, 'SAR')}</div>
+              <div className="text-xs text-slate-400 mt-0.5">All non-cancelled</div>
             </div>
             <TrendingUp className="w-5 h-5 text-slate-300" />
+          </div>
+        </div>
+        <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-blue-500">
+          <div className="flex items-start justify-between">
+            <div>
+              <div className="text-xs text-slate-400 uppercase tracking-wide mb-1">Actual Invoiced</div>
+              <div className="text-xl font-semibold text-slate-800">{formatCurrency(actualInvoiced, 'SAR')}</div>
+              <div className="text-xs text-slate-400 mt-0.5">Invoiced / paid / partial</div>
+            </div>
+            <TrendingUp className="w-5 h-5 text-blue-300" />
           </div>
         </div>
         <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-emerald-400">
@@ -158,19 +205,35 @@ export default function TabFinancials({ projectId, project }) {
             <div>
               <div className="text-xs text-slate-400 uppercase tracking-wide mb-1">Total Received</div>
               <div className="text-xl font-semibold text-slate-800">{formatCurrency(totalReceived, 'SAR')}</div>
+              <div className="text-xs text-slate-400 mt-0.5">{remainingToCollect > 0 ? `${formatCurrency(remainingToCollect, 'SAR')} outstanding` : 'Fully collected'}</div>
             </div>
             <Banknote className="w-5 h-5 text-slate-300" />
           </div>
         </div>
-        <div className={`rounded-lg shadow-sm p-4 border-l-4 ${hasWarning ? 'bg-red-50 border-red-400' : 'bg-white border-red-400'}`}>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-red-300">
           <div className="flex items-start justify-between">
             <div>
               <div className="text-xs text-slate-400 uppercase tracking-wide mb-1 flex items-center gap-1">
-                {hasWarning && <AlertTriangle className="w-3 h-3 text-red-400" />} Total Expenses
+                {exceedsBudget && <AlertTriangle className="w-3 h-3 text-red-400" />} Planned Expenses
               </div>
-              <div className={`text-xl font-semibold ${hasWarning ? 'text-red-600' : 'text-slate-800'}`}>{formatCurrency(totalExpenses, 'SAR')}</div>
+              <div className={`text-xl font-semibold ${exceedsBudget ? 'text-red-600' : 'text-slate-800'}`}>{formatCurrency(plannedExpenses, 'SAR')}</div>
+              <div className="text-xs text-slate-400 mt-0.5">All non-cancelled</div>
             </div>
             <TrendingDown className="w-5 h-5 text-slate-300" />
+          </div>
+        </div>
+        <div className={`rounded-lg shadow-sm p-4 border-l-4 ${exceedsInvoiced ? 'bg-red-50 border-red-500' : 'bg-white border-red-500'}`}>
+          <div className="flex items-start justify-between">
+            <div>
+              <div className="text-xs text-slate-400 uppercase tracking-wide mb-1 flex items-center gap-1">
+                {exceedsInvoiced && <AlertTriangle className="w-3 h-3 text-red-400" />} Actual Expenses
+              </div>
+              <div className={`text-xl font-semibold ${exceedsInvoiced ? 'text-red-600' : 'text-slate-800'}`}>{formatCurrency(actualExpenses, 'SAR')}</div>
+              <div className="text-xs text-slate-400 mt-0.5">Committed / paid</div>
+            </div>
+            <TrendingDown className="w-5 h-5 text-red-300" />
           </div>
         </div>
         <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-amber-400">
@@ -197,7 +260,9 @@ export default function TabFinancials({ projectId, project }) {
           <form onSubmit={createInvoice} className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 mb-3 grid grid-cols-1 md:grid-cols-3 gap-3">
             <input value={invForm.description} onChange={e => setInvForm(f => ({ ...f, description: e.target.value }))} placeholder="Description *" className={inp} required />
             <input type="number" value={invForm.planned_amount} onChange={e => setInvForm(f => ({ ...f, planned_amount: e.target.value }))} placeholder="Planned Amount" className={inp} min="0" />
-            <input type="date" value={invForm.planned_date} onChange={e => setInvForm(f => ({ ...f, planned_date: e.target.value }))} className={inp} />
+            <input type="number" value={invForm.actual_amount || ''} onChange={e => setInvForm(f => ({ ...f, actual_amount: e.target.value }))} placeholder="Actual Amount" className={inp} min="0" />
+            <input type="date" value={invForm.planned_date} onChange={e => setInvForm(f => ({ ...f, planned_date: e.target.value }))} placeholder="Planned Date" className={inp} />
+            <input type="date" value={invForm.actual_invoice_date || ''} onChange={e => setInvForm(f => ({ ...f, actual_invoice_date: e.target.value }))} placeholder="Actual Date" className={inp} />
             <div className="flex gap-2">
               <button type="submit" className="px-4 py-2 bg-emerald-500 text-white font-semibold text-sm rounded hover:bg-emerald-400">Save</button>
               <button type="button" onClick={() => setAddingInv(false)} className="px-4 py-2 border border-slate-300 text-slate-600 text-sm rounded hover:bg-slate-100">Cancel</button>
@@ -208,16 +273,20 @@ export default function TabFinancials({ projectId, project }) {
           <div className="bg-white rounded-lg shadow-sm py-8 text-center text-slate-400 text-sm">No invoices yet.</div>
         ) : (
           <PanelWrapper title="Invoices" exportData={invoices} exportCols={[
-            { key: 'description', label: 'Description' }, { key: 'planned_amount', label: 'Planned Amount' },
-            { key: 'planned_date', label: 'Planned Date' }, { key: 'status', label: 'Status' },
+            { key: 'description', label: 'Description' },
+            { key: 'planned_amount', label: 'Planned Amount' }, { key: 'actual_amount', label: 'Actual Amount' },
+            { key: 'planned_date', label: 'Planned Date' }, { key: 'actual_invoice_date', label: 'Actual Date' },
+            { key: 'status', label: 'Status' },
           ]}>
-            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-              <table className="w-full text-sm">
+            <div className="bg-white rounded-lg shadow-sm overflow-x-auto">
+              <table className="w-full text-sm min-w-[700px]">
                 <thead className="bg-slate-50 text-slate-500 text-xs uppercase border-b">
                   <tr>
                     <th className="px-4 py-3 text-left">Description</th>
-                    <th className="px-4 py-3 text-right">Planned</th>
-                    <th className="px-4 py-3 text-left">Date</th>
+                    <th className="px-4 py-3 text-right">Planned Amount</th>
+                    <th className="px-4 py-3 text-right">Actual Amount</th>
+                    <th className="px-4 py-3 text-left">Planned Date</th>
+                    <th className="px-4 py-3 text-left">Actual Date</th>
                     <th className="px-4 py-3 text-left">Status</th>
                     <th className="px-4 py-3"></th>
                   </tr>
@@ -228,8 +297,10 @@ export default function TabFinancials({ projectId, project }) {
                     return (
                       <tr key={inv.id} className="border-t border-slate-100 hover:bg-slate-50">
                         <td className="px-4 py-3">{isEditing ? <input value={editInvForm.description} onChange={e => setEditInvForm(f => ({ ...f, description: e.target.value }))} className={inp} /> : <span className="font-medium text-slate-800">{inv.description}</span>}</td>
-                        <td className="px-4 py-3 text-right">{isEditing ? <input type="number" value={editInvForm.planned_amount} onChange={e => setEditInvForm(f => ({ ...f, planned_amount: e.target.value }))} className={inp} min="0" /> : formatCurrency(inv.planned_amount, 'SAR')}</td>
-                        <td className="px-4 py-3">{isEditing ? <input type="date" value={editInvForm.planned_date} onChange={e => setEditInvForm(f => ({ ...f, planned_date: e.target.value }))} className={inp} /> : formatDate(inv.planned_date)}</td>
+                        <td className="px-4 py-3 text-right">{isEditing ? <input type="number" value={editInvForm.planned_amount} onChange={e => setEditInvForm(f => ({ ...f, planned_amount: e.target.value }))} className={inp} min="0" /> : <span className="text-slate-600">{formatCurrency(inv.planned_amount, 'SAR')}</span>}</td>
+                        <td className="px-4 py-3 text-right">{isEditing ? <input type="number" value={editInvForm.actual_amount ?? ''} onChange={e => setEditInvForm(f => ({ ...f, actual_amount: e.target.value }))} placeholder="Actual" className={inp} min="0" /> : <span className="font-semibold text-slate-800">{inv.actual_amount != null ? formatCurrency(inv.actual_amount, 'SAR') : '—'}</span>}</td>
+                        <td className="px-4 py-3">{isEditing ? <input type="date" value={editInvForm.planned_date} onChange={e => setEditInvForm(f => ({ ...f, planned_date: e.target.value }))} className={inp} /> : <span className="text-slate-500">{formatDate(inv.planned_date)}</span>}</td>
+                        <td className="px-4 py-3">{isEditing ? <input type="date" value={editInvForm.actual_invoice_date ?? ''} onChange={e => setEditInvForm(f => ({ ...f, actual_invoice_date: e.target.value }))} className={inp} /> : <span className="text-slate-700">{inv.actual_invoice_date ? formatDate(inv.actual_invoice_date) : '—'}</span>}</td>
                         <td className="px-4 py-3">
                           {isEditing ? (
                             <select value={editInvForm.status} onChange={e => setEditInvForm(f => ({ ...f, status: e.target.value }))} className={inp}>
@@ -342,7 +413,9 @@ export default function TabFinancials({ projectId, project }) {
             </select>
             <input value={expForm.vendor} onChange={e => setExpForm(f => ({ ...f, vendor: e.target.value }))} placeholder="Vendor" className={inp} />
             <input type="number" value={expForm.planned_amount} onChange={e => setExpForm(f => ({ ...f, planned_amount: e.target.value }))} placeholder="Planned Amount" className={inp} min="0" />
-            <input type="date" value={expForm.planned_date} onChange={e => setExpForm(f => ({ ...f, planned_date: e.target.value }))} className={inp} />
+            <input type="number" value={expForm.actual_amount || ''} onChange={e => setExpForm(f => ({ ...f, actual_amount: e.target.value }))} placeholder="Actual Amount" className={inp} min="0" />
+            <input type="date" value={expForm.planned_date} onChange={e => setExpForm(f => ({ ...f, planned_date: e.target.value }))} placeholder="Planned Date" className={inp} />
+            <input type="date" value={expForm.actual_date || ''} onChange={e => setExpForm(f => ({ ...f, actual_date: e.target.value }))} placeholder="Actual Date" className={inp} />
             <div className="flex gap-2">
               <button type="submit" className="px-4 py-2 bg-red-500 text-white font-semibold text-sm rounded hover:bg-red-400">Save</button>
               <button type="button" onClick={() => setAddingExp(false)} className="px-4 py-2 border border-slate-300 text-slate-600 text-sm rounded hover:bg-slate-100">Cancel</button>
@@ -354,18 +427,22 @@ export default function TabFinancials({ projectId, project }) {
         ) : (
           <PanelWrapper title="Expenses" exportData={expenses} exportCols={[
             { key: 'description', label: 'Description' }, { key: 'category', label: 'Category' },
-            { key: 'vendor', label: 'Vendor' }, { key: 'planned_amount', label: 'Planned Amount' },
-            { key: 'planned_date', label: 'Date' }, { key: 'status', label: 'Status' },
+            { key: 'vendor', label: 'Vendor' },
+            { key: 'planned_amount', label: 'Planned Amount' }, { key: 'actual_amount', label: 'Actual Amount' },
+            { key: 'planned_date', label: 'Planned Date' }, { key: 'actual_date', label: 'Actual Date' },
+            { key: 'status', label: 'Status' },
           ]}>
-            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-              <table className="w-full text-sm">
+            <div className="bg-white rounded-lg shadow-sm overflow-x-auto">
+              <table className="w-full text-sm min-w-[800px]">
                 <thead className="bg-slate-50 text-slate-500 text-xs uppercase border-b">
                   <tr>
                     <th className="px-4 py-3 text-left">Description</th>
                     <th className="px-4 py-3 text-left">Category</th>
                     <th className="px-4 py-3 text-left">Vendor</th>
-                    <th className="px-4 py-3 text-right">Planned</th>
-                    <th className="px-4 py-3 text-left">Date</th>
+                    <th className="px-4 py-3 text-right">Planned Amount</th>
+                    <th className="px-4 py-3 text-right">Actual Amount</th>
+                    <th className="px-4 py-3 text-left">Planned Date</th>
+                    <th className="px-4 py-3 text-left">Actual Date</th>
                     <th className="px-4 py-3 text-left">Status</th>
                     <th className="px-4 py-3"></th>
                   </tr>
@@ -380,8 +457,10 @@ export default function TabFinancials({ projectId, project }) {
                           {isEditing ? (<select value={editExpForm.category} onChange={e => setEditExpForm(f => ({ ...f, category: e.target.value }))} className={inp}>{Object.entries(EXPENSE_CATEGORY_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>) : <span className="text-slate-600">{EXPENSE_CATEGORY_LABELS[exp.category] || exp.category}</span>}
                         </td>
                         <td className="px-4 py-3">{isEditing ? <input value={editExpForm.vendor} onChange={e => setEditExpForm(f => ({ ...f, vendor: e.target.value }))} placeholder="Vendor" className={inp} /> : <span className="text-slate-600">{exp.vendor || '—'}</span>}</td>
-                        <td className="px-4 py-3 text-right">{isEditing ? <input type="number" value={editExpForm.planned_amount} onChange={e => setEditExpForm(f => ({ ...f, planned_amount: e.target.value }))} className={inp} min="0" /> : formatCurrency(exp.planned_amount, 'SAR')}</td>
-                        <td className="px-4 py-3">{isEditing ? <input type="date" value={editExpForm.planned_date} onChange={e => setEditExpForm(f => ({ ...f, planned_date: e.target.value }))} className={inp} /> : <span className="text-slate-600">{formatDate(exp.planned_date)}</span>}</td>
+                        <td className="px-4 py-3 text-right">{isEditing ? <input type="number" value={editExpForm.planned_amount} onChange={e => setEditExpForm(f => ({ ...f, planned_amount: e.target.value }))} className={inp} min="0" /> : <span className="text-slate-600">{formatCurrency(exp.planned_amount, 'SAR')}</span>}</td>
+                        <td className="px-4 py-3 text-right">{isEditing ? <input type="number" value={editExpForm.actual_amount ?? ''} onChange={e => setEditExpForm(f => ({ ...f, actual_amount: e.target.value }))} placeholder="Actual" className={inp} min="0" /> : <span className="font-semibold text-slate-800">{exp.actual_amount != null ? formatCurrency(exp.actual_amount, 'SAR') : '—'}</span>}</td>
+                        <td className="px-4 py-3">{isEditing ? <input type="date" value={editExpForm.planned_date} onChange={e => setEditExpForm(f => ({ ...f, planned_date: e.target.value }))} className={inp} /> : <span className="text-slate-500">{formatDate(exp.planned_date)}</span>}</td>
+                        <td className="px-4 py-3">{isEditing ? <input type="date" value={editExpForm.actual_date ?? ''} onChange={e => setEditExpForm(f => ({ ...f, actual_date: e.target.value }))} className={inp} /> : <span className="text-slate-700">{exp.actual_date ? formatDate(exp.actual_date) : '—'}</span>}</td>
                         <td className="px-4 py-3">
                           {isEditing ? (<select value={editExpForm.status} onChange={e => setEditExpForm(f => ({ ...f, status: e.target.value }))} className={inp}>{Object.entries(EXPENSE_STATUS_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>) : <span className="text-xs px-2 py-0.5 rounded font-semibold bg-slate-100 text-slate-600">{EXPENSE_STATUS_LABELS[exp.status] || exp.status}</span>}
                         </td>
