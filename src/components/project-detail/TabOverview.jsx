@@ -9,16 +9,20 @@ export default function TabOverview({ project, onRefresh }) {
   const [bomItems, setBomItems] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const [collections, setCollections] = useState([]);
+
   useEffect(() => {
     if (!project?.id) return;
     Promise.all([
       base44.entities.Invoice.filter({ project_id: project.id }, 'planned_date', 500),
       base44.entities.Expense.filter({ project_id: project.id }, 'planned_date', 500),
       base44.entities.BOMItem.filter({ project_id: project.id }, '-created_date', 500),
-    ]).then(([inv, exp, bom]) => {
+      base44.entities.Collection.filter({ project_id: project.id }, '-received_date', 500),
+    ]).then(([inv, exp, bom, col]) => {
       setInvoices(inv);
       setExpenses(exp);
       setBomItems(bom);
+      setCollections(col);
       setLoading(false);
     });
   }, [project?.id]);
@@ -28,15 +32,15 @@ export default function TabOverview({ project, onRefresh }) {
 
   // Financial KPIs
   const totalInvoiced = invoices.reduce((s, i) => s + (i.planned_amount || 0), 0);
-  const totalPaid = invoices.filter(i => i.status === 'paid').reduce((s, i) => s + (i.paid_amount || i.actual_amount || i.planned_amount || 0), 0);
-  const outstanding = totalInvoiced - totalPaid;
+  const totalReceived = collections.reduce((s, c) => s + (c.amount || 0), 0);
+  const outstanding = totalInvoiced - totalReceived;
 
   // Cost KPIs
   const plannedCost = expenses.reduce((s, e) => s + (e.planned_amount || 0), 0);
   const actualCost = expenses.reduce((s, e) => s + (e.actual_amount || e.planned_amount || 0), 0);
   const plannedMargin = contractValue - plannedCost;
   const plannedMarginPct = contractValue > 0 ? Math.round((plannedMargin / contractValue) * 100) : 0;
-  const cashOnHand = totalPaid - actualCost;
+  const cashOnHand = totalReceived - actualCost;
 
   // BOM KPIs
   const bomCost = bomItems.reduce((s, i) => s + (i.cost_price || 0) * (i.quantity || 1), 0);
@@ -68,9 +72,9 @@ export default function TabOverview({ project, onRefresh }) {
               accent="green"
             />
             <KpiCard
-              label="Paid"
-              value={formatCurrency(totalPaid, cur)}
-              sub={contractValue > 0 ? `${Math.round((totalPaid / contractValue) * 100)}% of contract` : null}
+              label="Received"
+              value={formatCurrency(totalReceived, cur)}
+              sub={contractValue > 0 ? `${Math.round((totalReceived / contractValue) * 100)}% of contract` : null}
               icon={<CheckCircle className="w-5 h-5 text-slate-300" />}
               accent="purple"
             />
