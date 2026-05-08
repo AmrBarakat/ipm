@@ -84,11 +84,17 @@ export default function FinancialDashboard({ projects }) {
     [projects]
   );
 
-  // Filtered project ids for type filter
+  // Filtered project ids for type + date filter
   const filteredProjectIds = useMemo(() => {
-    if (!projectType) return new Set(projects.map(p => p.id));
-    return new Set(projects.filter(p => p.project_type === projectType).map(p => p.id));
-  }, [projects, projectType]);
+    return new Set(
+      projects.filter(p => {
+        const matchType = !projectType || p.project_type === projectType;
+        const matchFrom = !dateFrom || (p.start_date && p.start_date >= dateFrom);
+        const matchTo   = !dateTo   || (p.start_date && p.start_date <= dateTo);
+        return matchType && matchFrom && matchTo;
+      }).map(p => p.id)
+    );
+  }, [projects, projectType, dateFrom, dateTo]);
 
   // Apply all filters to raw data
   const fInvoices = useMemo(() =>
