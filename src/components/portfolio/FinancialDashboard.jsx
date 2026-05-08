@@ -84,36 +84,41 @@ export default function FinancialDashboard({ projects }) {
     [projects]
   );
 
-  // Filtered project ids for type + date filter
-  const filteredProjectIds = useMemo(() => {
-    return new Set(
-      projects.filter(p => {
-        const matchType = !projectType || p.project_type === projectType;
-        const matchFrom = !dateFrom || (p.start_date && p.start_date >= dateFrom);
-        const matchTo   = !dateTo   || (p.start_date && p.start_date <= dateTo);
-        return matchType && matchFrom && matchTo;
-      }).map(p => p.id)
-    );
-  }, [projects, projectType, dateFrom, dateTo]);
+  // Project ids filtered by type (base set)
+  const typeFilteredIds = useMemo(() => {
+    if (!projectType) return new Set(projects.map(p => p.id));
+    return new Set(projects.filter(p => p.project_type === projectType).map(p => p.id));
+  }, [projects, projectType]);
 
-  // Apply all filters to raw data
+  // Apply all filters to raw financial data (type + date)
   const fInvoices = useMemo(() =>
     invoices.filter(i =>
-      filteredProjectIds.has(i.project_id) &&
+      typeFilteredIds.has(i.project_id) &&
       inRange(i.planned_date || i.actual_invoice_date, dateFrom, dateTo)
-    ), [invoices, filteredProjectIds, dateFrom, dateTo]);
+    ), [invoices, typeFilteredIds, dateFrom, dateTo]);
 
   const fCollections = useMemo(() =>
     collections.filter(c =>
-      filteredProjectIds.has(c.project_id) &&
+      typeFilteredIds.has(c.project_id) &&
       inRange(c.received_date, dateFrom, dateTo)
-    ), [collections, filteredProjectIds, dateFrom, dateTo]);
+    ), [collections, typeFilteredIds, dateFrom, dateTo]);
 
   const fExpenses = useMemo(() =>
     expenses.filter(e =>
-      filteredProjectIds.has(e.project_id) &&
+      typeFilteredIds.has(e.project_id) &&
       inRange(e.planned_date || e.actual_date, dateFrom, dateTo)
-    ), [expenses, filteredProjectIds, dateFrom, dateTo]);
+    ), [expenses, typeFilteredIds, dateFrom, dateTo]);
+
+  // filteredProjectIds: when date filter active, only projects with financial activity in range
+  const filteredProjectIds = useMemo(() => {
+    if (!dateFrom && !dateTo) return typeFilteredIds;
+    const activeIds = new Set([
+      ...fInvoices.map(i => i.project_id),
+      ...fCollections.map(c => c.project_id),
+      ...fExpenses.map(e => e.project_id),
+    ]);
+    return activeIds;
+  }, [typeFilteredIds, fInvoices, fCollections, fExpenses, dateFrom, dateTo]);
 
   // ── KPI Totals ──────────────────────────────────────────────────────────
   const totalBooking    = useMemo(() =>
