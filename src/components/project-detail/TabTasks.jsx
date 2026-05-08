@@ -1,6 +1,22 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { Plus, CheckSquare, Pencil, Save, X, Trash2 } from 'lucide-react';
+import { Plus, Pencil, X, Trash2, RefreshCw, Layers } from 'lucide-react';
+
+// Map WBS status -> Task status
+const WBS_TO_TASK_STATUS = {
+  not_started: 'todo',
+  in_progress: 'in_progress',
+  completed:   'done',
+  blocked:     'blocked',
+};
+// Map Task status -> WBS status
+const TASK_TO_WBS_STATUS = {
+  todo:        'not_started',
+  in_progress: 'in_progress',
+  review:      'in_progress',
+  done:        'completed',
+  blocked:     'blocked',
+};
 
 const COLUMNS = [
   { id: 'todo',        label: 'To Do',       color: 'border-slate-300 bg-slate-50' },
@@ -22,6 +38,7 @@ const inp = 'border border-slate-200 rounded px-2 py-1.5 text-xs focus:outline-n
 export default function TabTasks({ projectId }) {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [addingCol, setAddingCol] = useState(null);
   const [newTitle, setNewTitle] = useState('');
   const [newPriority, setNewPriority] = useState('medium');
@@ -52,11 +69,6 @@ export default function TabTasks({ projectId }) {
     load();
   }
 
-  async function moveTask(task, status) {
-    await base44.entities.Task.update(task.id, { status });
-    load();
-  }
-
   function startEdit(task) {
     setEditingId(task.id);
     setEditForm({ title: task.title, priority: task.priority, assignee: task.assignee || '', description: task.description || '' });
@@ -72,6 +84,63 @@ export default function TabTasks({ projectId }) {
     await base44.entities.Task.delete(id); load();
   }
 
+  async function syncFromWBS() {
+    setSyncing(true);
+    const wbsItems = await base44.entities.WBSItem.filter({ project_id: projectId }, 'wbs_code', 500);
+    const existingTasks = await base44.entities.Task.filter({ project_id: projectId }, '-created_date', 500);
+
+    // Index existing tasks by their linked wbs_code (stored in tags field as "wbs:<code>")
+    const existingByWbsCode = {};
+    existingTasks.forEach(t => {
+      const tag = (t.tags || '').split(',').find(x => x.trim().startsWith('wbs:'));
+      if (tag) existingByWbsCode[tag.trim().replace('wbs:', '')] = t;
+    });
+
+    const ops = [];
+    for (const item of wbsItems) {
+      const taskStatus = WBS_TO_TASK_STATUS[item.status] || 'todo';
+      const existing = existingByWbsCode[item.wbs_code];
+      if (existing) {
+        // Update status if WBS changed
+        if (TASK_TO_WBS_STATUS[existing.status] !== item.status) {
+          ops.push(base44.entities.Task.update(existing.id, { status: taskStatus }));
+        }
+      } else {
+        // Create new task from WBS item
+        ops.push(base44.entities.Task.create({
+          project_id: projectId,
+          title: `[${item.wbs_code}] ${item.name}`,
+          description: item.description || '',
+          assignee: item.assignee || '',
+          status: taskStatus,
+          priority: 'medium',
+          start_date: item.planned_start || '',
+          due_date: item.planned_end || '',
+          milestone_id: item.milestone_id || '',
+          tags: `wbs:${item.wbs_code}`,
+        }));
+      }
+    }
+    await Promise.all(ops);
+    setSyncing(false);
+    load();
+  }
+
+  async function moveTask(task, status) {
+    await base44.entities.Task.update(task.id, { status });
+    // Sync back to WBS if this task is linked
+    const tag = (task.tags || '').split(',').find(x => x.trim().startsWith('wbs:'));
+    if (tag) {
+      const wbsCode = tag.trim().replace('wbs:', '');
+      const wbsItems = await base44.entities.WBSItem.filter({ project_id: projectId, wbs_code: wbsCode }, 'wbs_code', 1);
+      if (wbsItems[0]) {
+        const newWbsStatus = TASK_TO_WBS_STATUS[status] || 'in_progress';
+        await base44.entities.WBSItem.update(wbsItems[0].id, { status: newWbsStatus });
+      }
+    }
+    load();
+  }
+
   const byCol = {};
   COLUMNS.forEach(c => { byCol[c.id] = tasks.filter(t => t.status === c.id); });
 
@@ -79,9 +148,19 @@ export default function TabTasks({ projectId }) {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <p className="text-sm text-slate-500">{tasks.length} task{tasks.length !== 1 ? 's' : ''}</p>
-        <p className="text-xs text-slate-400 italic">Drag tasks via status buttons on each card</p>
+        <div className="flex items-center gap-2">
+          <p className="text-xs text-slate-400 italic hidden sm:block">Move tasks via status buttons on each card</p>
+          <button
+            onClick={syncFromWBS}
+            disabled={syncing}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-semibold text-xs rounded"
+          >
+            {syncing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Layers className="w-3.5 h-3.5" />}
+            Sync from WBS
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-start">
@@ -124,6 +203,11 @@ export default function TabTasks({ projectId }) {
                         <div className="flex flex-wrap gap-1 items-center">
                           <span className={`text-xs px-1.5 py-0.5 rounded font-semibold ${PRIORITY_COLORS[task.priority] || PRIORITY_COLORS.medium}`}>{task.priority}</span>
                           {task.assignee && <span className="text-slate-400">👤 {task.assignee}</span>}
+                          {(task.tags || '').includes('wbs:') && (
+                            <span className="text-xs px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 font-semibold flex items-center gap-0.5">
+                              <Layers className="w-2.5 h-2.5" /> WBS
+                            </span>
+                          )}
                         </div>
                         {/* Move buttons */}
                         <div className="flex gap-1 mt-2 flex-wrap">
