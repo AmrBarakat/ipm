@@ -92,22 +92,25 @@ export default function FinancialDashboard({ projects }) {
 
   // Apply all filters to raw financial data (type + date)
   const fInvoices = useMemo(() =>
-    invoices.filter(i =>
-      typeFilteredIds.has(i.project_id) &&
-      inRange(i.planned_date || i.actual_invoice_date, dateFrom, dateTo)
-    ), [invoices, typeFilteredIds, dateFrom, dateTo]);
+    invoices.filter(i => {
+      if (!typeFilteredIds.has(i.project_id)) return false;
+      if (!dateFrom && !dateTo) return true;
+      return inRange(i.planned_date || i.actual_invoice_date, dateFrom, dateTo);
+    }), [invoices, typeFilteredIds, dateFrom, dateTo]);
 
   const fCollections = useMemo(() =>
-    collections.filter(c =>
-      typeFilteredIds.has(c.project_id) &&
-      inRange(c.received_date, dateFrom, dateTo)
-    ), [collections, typeFilteredIds, dateFrom, dateTo]);
+    collections.filter(c => {
+      if (!typeFilteredIds.has(c.project_id)) return false;
+      if (!dateFrom && !dateTo) return true;
+      return inRange(c.received_date, dateFrom, dateTo);
+    }), [collections, typeFilteredIds, dateFrom, dateTo]);
 
   const fExpenses = useMemo(() =>
-    expenses.filter(e =>
-      typeFilteredIds.has(e.project_id) &&
-      inRange(e.planned_date || e.actual_date, dateFrom, dateTo)
-    ), [expenses, typeFilteredIds, dateFrom, dateTo]);
+    expenses.filter(e => {
+      if (!typeFilteredIds.has(e.project_id)) return false;
+      if (!dateFrom && !dateTo) return true;
+      return inRange(e.planned_date || e.actual_date, dateFrom, dateTo);
+    }), [expenses, typeFilteredIds, dateFrom, dateTo]);
 
   // filteredProjectIds: when date filter active, only projects with financial activity in range
   const filteredProjectIds = useMemo(() => {
