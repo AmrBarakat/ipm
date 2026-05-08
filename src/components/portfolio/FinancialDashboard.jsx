@@ -4,12 +4,12 @@ import { formatCurrency, TYPE_LABELS } from '@/lib/constants';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   LineChart, Line, ComposedChart, ResponsiveContainer,
-  PieChart, Pie, Cell,
-} from 'recharts';
+  PieChart, Pie, Cell } from
+'recharts';
 import {
   TrendingUp, TrendingDown, DollarSign, Wallet,
-  ReceiptText, ArrowUpCircle, ArrowDownCircle, Activity
-} from 'lucide-react';
+  ReceiptText, ArrowUpCircle, ArrowDownCircle, Activity } from
+'lucide-react';
 
 const PIE_COLORS = ['#f59e0b', '#3b82f6', '#10b981', '#8b5cf6', '#ef4444', '#06b6d4'];
 
@@ -20,7 +20,7 @@ function periodKey(dateStr, mode) {
   if (isNaN(d)) return null;
   const y = d.getFullYear();
   const m = d.getMonth(); // 0-indexed
-  if (mode === 'monthly')   return `${y}-${String(m + 1).padStart(2, '0')}`;
+  if (mode === 'monthly') return `${y}-${String(m + 1).padStart(2, '0')}`;
   if (mode === 'quarterly') return `${y}-Q${Math.floor(m / 3) + 1}`;
   return `${y}`;
 }
@@ -40,7 +40,7 @@ function inRange(dateStr, from, to) {
   if (!dateStr) return false;
   const d = dateStr.slice(0, 10);
   if (from && d < from) return false;
-  if (to   && d > to)   return false;
+  if (to && d > to) return false;
   return true;
 }
 
@@ -48,103 +48,103 @@ const selCls = 'border border-slate-200 rounded px-2 py-1.5 text-xs focus:outlin
 
 // ── Main Component ─────────────────────────────────────────────────────────
 export default function FinancialDashboard({ projects }) {
-  const [invoices,    setInvoices]    = useState([]);
+  const [invoices, setInvoices] = useState([]);
   const [collections, setCollections] = useState([]);
-  const [expenses,    setExpenses]    = useState([]);
-  const [loading,     setLoading]     = useState(true);
+  const [expenses, setExpenses] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   // Filters
-  const [period,      setPeriod]      = useState('monthly');
+  const [period, setPeriod] = useState('monthly');
   const [projectType, setProjectType] = useState('');
-  const [dateFrom,    setDateFrom]    = useState('');
-  const [dateTo,      setDateTo]      = useState('');
-  const [view,        setView]        = useState('actual'); // actual | planned | both
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [view, setView] = useState('actual'); // actual | planned | both
 
   useEffect(() => {
-    if (!projects.length) { setLoading(false); return; }
-    const ids = projects.map(p => p.id);
+    if (!projects.length) {setLoading(false);return;}
+    const ids = projects.map((p) => p.id);
 
     // Fetch all financial data across all projects in parallel
     Promise.all([
-      base44.entities.Invoice.list('-planned_date', 2000),
-      base44.entities.Collection.list('-received_date', 2000),
-      base44.entities.Expense.list('-planned_date', 2000),
-    ]).then(([inv, col, exp]) => {
+    base44.entities.Invoice.list('-planned_date', 2000),
+    base44.entities.Collection.list('-received_date', 2000),
+    base44.entities.Expense.list('-planned_date', 2000)]
+    ).then(([inv, col, exp]) => {
       const idSet = new Set(ids);
-      setInvoices(inv.filter(i => idSet.has(i.project_id)));
-      setCollections(col.filter(c => idSet.has(c.project_id)));
-      setExpenses(exp.filter(e => idSet.has(e.project_id)));
+      setInvoices(inv.filter((i) => idSet.has(i.project_id)));
+      setCollections(col.filter((c) => idSet.has(c.project_id)));
+      setExpenses(exp.filter((e) => idSet.has(e.project_id)));
       setLoading(false);
     });
   }, [projects]);
 
   // Project id → type lookup
   const projectTypeMap = useMemo(() =>
-    Object.fromEntries(projects.map(p => [p.id, p.project_type])),
-    [projects]
+  Object.fromEntries(projects.map((p) => [p.id, p.project_type])),
+  [projects]
   );
 
   // Project ids filtered by type (base set)
   const typeFilteredIds = useMemo(() => {
-    if (!projectType) return new Set(projects.map(p => p.id));
-    return new Set(projects.filter(p => p.project_type === projectType).map(p => p.id));
+    if (!projectType) return new Set(projects.map((p) => p.id));
+    return new Set(projects.filter((p) => p.project_type === projectType).map((p) => p.id));
   }, [projects, projectType]);
 
   // Apply all filters to raw financial data (type + date)
   const fInvoices = useMemo(() =>
-    invoices.filter(i => {
-      if (!typeFilteredIds.has(i.project_id)) return false;
-      if (!dateFrom && !dateTo) return true;
-      return inRange(i.planned_date || i.actual_invoice_date, dateFrom, dateTo);
-    }), [invoices, typeFilteredIds, dateFrom, dateTo]);
+  invoices.filter((i) => {
+    if (!typeFilteredIds.has(i.project_id)) return false;
+    if (!dateFrom && !dateTo) return true;
+    return inRange(i.planned_date || i.actual_invoice_date, dateFrom, dateTo);
+  }), [invoices, typeFilteredIds, dateFrom, dateTo]);
 
   const fCollections = useMemo(() =>
-    collections.filter(c => {
-      if (!typeFilteredIds.has(c.project_id)) return false;
-      if (!dateFrom && !dateTo) return true;
-      return inRange(c.received_date, dateFrom, dateTo);
-    }), [collections, typeFilteredIds, dateFrom, dateTo]);
+  collections.filter((c) => {
+    if (!typeFilteredIds.has(c.project_id)) return false;
+    if (!dateFrom && !dateTo) return true;
+    return inRange(c.received_date, dateFrom, dateTo);
+  }), [collections, typeFilteredIds, dateFrom, dateTo]);
 
   const fExpenses = useMemo(() =>
-    expenses.filter(e => {
-      if (!typeFilteredIds.has(e.project_id)) return false;
-      if (!dateFrom && !dateTo) return true;
-      return inRange(e.planned_date || e.actual_date, dateFrom, dateTo);
-    }), [expenses, typeFilteredIds, dateFrom, dateTo]);
+  expenses.filter((e) => {
+    if (!typeFilteredIds.has(e.project_id)) return false;
+    if (!dateFrom && !dateTo) return true;
+    return inRange(e.planned_date || e.actual_date, dateFrom, dateTo);
+  }), [expenses, typeFilteredIds, dateFrom, dateTo]);
 
   // filteredProjectIds: when date filter active, only projects with financial activity in range
   const filteredProjectIds = useMemo(() => {
     if (!dateFrom && !dateTo) return typeFilteredIds;
     const activeIds = new Set([
-      ...fInvoices.map(i => i.project_id),
-      ...fCollections.map(c => c.project_id),
-      ...fExpenses.map(e => e.project_id),
-    ]);
+    ...fInvoices.map((i) => i.project_id),
+    ...fCollections.map((c) => c.project_id),
+    ...fExpenses.map((e) => e.project_id)]
+    );
     return activeIds;
   }, [typeFilteredIds, fInvoices, fCollections, fExpenses, dateFrom, dateTo]);
 
   // ── KPI Totals ──────────────────────────────────────────────────────────
-  const totalBooking    = useMemo(() =>
-    projects.filter(p => filteredProjectIds.has(p.id))
-            .reduce((s, p) => s + (p.contract_value || 0), 0),
-    [projects, filteredProjectIds]
+  const totalBooking = useMemo(() =>
+  projects.filter((p) => filteredProjectIds.has(p.id)).
+  reduce((s, p) => s + (p.contract_value || 0), 0),
+  [projects, filteredProjectIds]
   );
   // Planned invoiced: all non-cancelled → planned_amount
-  const totalPlannedInvoiced = useMemo(() => fInvoices.filter(i => i.status !== 'cancelled').reduce((s, i) => s + (i.planned_amount || 0), 0), [fInvoices]);
+  const totalPlannedInvoiced = useMemo(() => fInvoices.filter((i) => i.status !== 'cancelled').reduce((s, i) => s + (i.planned_amount || 0), 0), [fInvoices]);
   // Actual invoiced: invoiced/paid/partial/overdue → actual_amount fallback planned_amount
-  const totalActualInvoiced  = useMemo(() => fInvoices.filter(i => ['invoiced','paid','partial','overdue'].includes(i.status)).reduce((s, i) => s + (i.actual_amount || i.planned_amount || 0), 0), [fInvoices]);
+  const totalActualInvoiced = useMemo(() => fInvoices.filter((i) => ['invoiced', 'paid', 'partial', 'overdue'].includes(i.status)).reduce((s, i) => s + (i.actual_amount || i.planned_amount || 0), 0), [fInvoices]);
   const totalInvoiced = totalPlannedInvoiced; // keep for backward-compat references
-  const totalCashIn     = useMemo(() => fCollections.reduce((s, c) => s + (c.amount || 0), 0), [fCollections]);
+  const totalCashIn = useMemo(() => fCollections.reduce((s, c) => s + (c.amount || 0), 0), [fCollections]);
   // Cash out: planned = all non-cancelled planned_amount; actual = committed/paid actual_amount fallback planned_amount
-  const totalPlannedCashOut = useMemo(() => fExpenses.filter(e => e.status !== 'cancelled').reduce((s, e) => s + (e.planned_amount || 0), 0), [fExpenses]);
-  const totalCashOut        = useMemo(() => fExpenses.filter(e => ['committed','paid'].includes(e.status)).reduce((s, e) => s + (e.actual_amount || e.planned_amount || 0), 0), [fExpenses]);
-  const netCash         = totalCashIn - totalCashOut;
-  const collectionBal   = totalActualInvoiced - totalCashIn;
+  const totalPlannedCashOut = useMemo(() => fExpenses.filter((e) => e.status !== 'cancelled').reduce((s, e) => s + (e.planned_amount || 0), 0), [fExpenses]);
+  const totalCashOut = useMemo(() => fExpenses.filter((e) => ['committed', 'paid'].includes(e.status)).reduce((s, e) => s + (e.actual_amount || e.planned_amount || 0), 0), [fExpenses]);
+  const netCash = totalCashIn - totalCashOut;
+  const collectionBal = totalActualInvoiced - totalCashIn;
 
   // ── Period-bucketed data ────────────────────────────────────────────────
   const bookingByPeriod = useMemo(() => {
     const map = {};
-    projects.filter(p => filteredProjectIds.has(p.id)).forEach(p => {
+    projects.filter((p) => filteredProjectIds.has(p.id)).forEach((p) => {
       const key = periodKey(p.start_date, period);
       if (!key) return;
       map[key] = (map[key] || 0) + (p.contract_value || 0);
@@ -154,7 +154,7 @@ export default function FinancialDashboard({ projects }) {
 
   const invoicedPlannedByPeriod = useMemo(() => {
     const map = {};
-    fInvoices.filter(i => i.status !== 'cancelled').forEach(item => {
+    fInvoices.filter((i) => i.status !== 'cancelled').forEach((item) => {
       const key = periodKey(item.planned_date, period);
       if (!key) return;
       map[key] = (map[key] || 0) + (Number(item.planned_amount) || 0);
@@ -164,19 +164,19 @@ export default function FinancialDashboard({ projects }) {
 
   const invoicedActualByPeriod = useMemo(() => {
     const map = {};
-    fInvoices
-      .filter(i => ['invoiced', 'paid', 'partial', 'overdue'].includes(i.status))
-      .forEach(i => {
-        const key = periodKey(i.actual_invoice_date || i.planned_date, period);
-        if (!key) return;
-        map[key] = (map[key] || 0) + (i.actual_amount || i.planned_amount || 0);
-      });
+    fInvoices.
+    filter((i) => ['invoiced', 'paid', 'partial', 'overdue'].includes(i.status)).
+    forEach((i) => {
+      const key = periodKey(i.actual_invoice_date || i.planned_date, period);
+      if (!key) return;
+      map[key] = (map[key] || 0) + (i.actual_amount || i.planned_amount || 0);
+    });
     return map;
   }, [fInvoices, period]);
 
   const cashInByPeriod = useMemo(() => {
     const map = {};
-    fCollections.forEach(item => {
+    fCollections.forEach((item) => {
       const key = periodKey(item.received_date, period);
       if (!key) return;
       map[key] = (map[key] || 0) + (Number(item.amount) || 0);
@@ -186,7 +186,7 @@ export default function FinancialDashboard({ projects }) {
 
   const cashOutByPeriod = useMemo(() => {
     const map = {};
-    fExpenses.filter(e => ['committed','paid'].includes(e.status)).forEach(e => {
+    fExpenses.filter((e) => ['committed', 'paid'].includes(e.status)).forEach((e) => {
       const key = periodKey(e.actual_date || e.planned_date, period);
       if (!key) return;
       map[key] = (map[key] || 0) + (e.actual_amount || e.planned_amount || 0);
@@ -197,44 +197,44 @@ export default function FinancialDashboard({ projects }) {
   // Build sorted period keys union
   const allKeys = useMemo(() => {
     const s = new Set([
-      ...Object.keys(bookingByPeriod),
-      ...Object.keys(invoicedPlannedByPeriod),
-      ...Object.keys(invoicedActualByPeriod),
-      ...Object.keys(cashInByPeriod),
-      ...Object.keys(cashOutByPeriod),
-    ]);
+    ...Object.keys(bookingByPeriod),
+    ...Object.keys(invoicedPlannedByPeriod),
+    ...Object.keys(invoicedActualByPeriod),
+    ...Object.keys(cashInByPeriod),
+    ...Object.keys(cashOutByPeriod)]
+    );
     return [...s].sort();
   }, [bookingByPeriod, invoicedPlannedByPeriod, invoicedActualByPeriod, cashInByPeriod, cashOutByPeriod]);
 
   // Chart 1 — Booking & Invoicing
   const bookingInvoicingData = useMemo(() =>
-    allKeys.map(k => ({
-      period:            periodLabel(k, period),
-      Booking:           Math.round(bookingByPeriod[k] || 0),
-      'Invoiced (Plan)': Math.round(invoicedPlannedByPeriod[k] || 0),
-      'Invoiced (Act)':  Math.round(invoicedActualByPeriod[k] || 0),
-      'Cash In':         Math.round(cashInByPeriod[k] || 0),
-    })),
-    [allKeys, period, bookingByPeriod, invoicedPlannedByPeriod, invoicedActualByPeriod, cashInByPeriod]
+  allKeys.map((k) => ({
+    period: periodLabel(k, period),
+    Booking: Math.round(bookingByPeriod[k] || 0),
+    'Invoiced (Plan)': Math.round(invoicedPlannedByPeriod[k] || 0),
+    'Invoiced (Act)': Math.round(invoicedActualByPeriod[k] || 0),
+    'Cash In': Math.round(cashInByPeriod[k] || 0)
+  })),
+  [allKeys, period, bookingByPeriod, invoicedPlannedByPeriod, invoicedActualByPeriod, cashInByPeriod]
   );
 
   // Chart 2 — Cash In vs Out
   const cashFlowData = useMemo(() =>
-    allKeys.map(k => {
-      const ci = Math.round(cashInByPeriod[k] || 0);
-      const co = Math.round(cashOutByPeriod[k] || 0);
-      return { period: periodLabel(k, period), 'Cash In': ci, 'Cash Out': -co, Net: ci - co };
-    }),
-    [allKeys, period, cashInByPeriod, cashOutByPeriod]
+  allKeys.map((k) => {
+    const ci = Math.round(cashInByPeriod[k] || 0);
+    const co = Math.round(cashOutByPeriod[k] || 0);
+    return { period: periodLabel(k, period), 'Cash In': ci, 'Cash Out': -co, Net: ci - co };
+  }),
+  [allKeys, period, cashInByPeriod, cashOutByPeriod]
   );
 
   // Chart 3 — Cumulative Cash Flow
   const cumulativeData = useMemo(() => {
-    let cumIn = 0, cumOut = 0, cumNet = 0;
-    return allKeys.map(k => {
-      cumIn  += cashInByPeriod[k]  || 0;
+    let cumIn = 0,cumOut = 0,cumNet = 0;
+    return allKeys.map((k) => {
+      cumIn += cashInByPeriod[k] || 0;
       cumOut += cashOutByPeriod[k] || 0;
-      cumNet  = cumIn - cumOut;
+      cumNet = cumIn - cumOut;
       return { period: periodLabel(k, period), 'Cum Cash In': Math.round(cumIn), 'Cum Cash Out': Math.round(cumOut), 'Cum Net': Math.round(cumNet) };
     });
   }, [allKeys, period, cashInByPeriod, cashOutByPeriod]);
@@ -242,28 +242,28 @@ export default function FinancialDashboard({ projects }) {
   // Chart 4 — Booking by Project Type
   const bookingByType = useMemo(() => {
     const map = {};
-    projects.filter(p => filteredProjectIds.has(p.id)).forEach(p => {
+    projects.filter((p) => filteredProjectIds.has(p.id)).forEach((p) => {
       const t = p.project_type || 'other';
       map[t] = (map[t] || 0) + (p.contract_value || 0);
     });
-    return Object.entries(map)
-      .map(([type, value]) => ({ name: TYPE_LABELS[type] || type, value: Math.round(value) }))
-      .filter(d => d.value > 0)
-      .sort((a, b) => b.value - a.value);
+    return Object.entries(map).
+    map(([type, value]) => ({ name: TYPE_LABELS[type] || type, value: Math.round(value) })).
+    filter((d) => d.value > 0).
+    sort((a, b) => b.value - a.value);
   }, [projects, filteredProjectIds]);
 
   const currency = 'SAR';
-  const fmt = v => {
+  const fmt = (v) => {
     if (v >= 1_000_000) return (v / 1_000_000).toFixed(1) + 'M';
-    if (v >= 1_000)     return (v / 1_000).toFixed(0) + 'k';
+    if (v >= 1_000) return (v / 1_000).toFixed(0) + 'k';
     return String(v);
   };
 
   if (loading) return (
     <div className="flex justify-center py-16">
       <div className="w-8 h-8 border-4 border-slate-200 border-t-amber-500 rounded-full animate-spin" />
-    </div>
-  );
+    </div>);
+
 
   return (
     <div className="space-y-6">
@@ -271,16 +271,16 @@ export default function FinancialDashboard({ projects }) {
       <div className="bg-white rounded-lg shadow-sm p-4 flex flex-wrap gap-3 items-center">
         {/* Period toggle */}
         <div className="flex items-center border border-slate-200 rounded overflow-hidden text-xs">
-          {['monthly','quarterly','yearly'].map(p => (
-            <button key={p} onClick={() => setPeriod(p)}
-              className={`px-3 py-1.5 font-medium capitalize transition border-r border-slate-200 last:border-0 ${period === p ? 'bg-amber-500 text-slate-900' : 'hover:bg-slate-100 text-slate-600'}`}>
+          {['monthly', 'quarterly', 'yearly'].map((p) =>
+          <button key={p} onClick={() => setPeriod(p)}
+          className={`px-3 py-1.5 font-medium capitalize transition border-r border-slate-200 last:border-0 ${period === p ? 'bg-amber-500 text-slate-900' : 'hover:bg-slate-100 text-slate-600'}`}>
               {p}
             </button>
-          ))}
+          )}
         </div>
 
         {/* Project Type */}
-        <select value={projectType} onChange={e => setProjectType(e.target.value)} className={selCls}>
+        <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className={selCls}>
           <option value="">All Types</option>
           {Object.entries(TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
@@ -288,66 +288,66 @@ export default function FinancialDashboard({ projects }) {
         {/* Date Range */}
         <div className="flex items-center gap-1.5 text-xs text-slate-500">
           From
-          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-            className="border border-slate-200 rounded px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-amber-400" />
+          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
+          className="border border-slate-200 rounded px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-amber-400" />
           To
-          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-            className="border border-slate-200 rounded px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-amber-400" />
+          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
+          className="border border-slate-200 rounded px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-amber-400" />
         </div>
 
         {/* View toggle */}
         <div className="flex items-center border border-slate-200 rounded overflow-hidden text-xs ml-auto">
-          {[['actual','Actual'],['planned','Planned'],['both','Plan vs Actual']].map(([v, l]) => (
-            <button key={v} onClick={() => setView(v)}
-              className={`px-3 py-1.5 font-medium transition border-r border-slate-200 last:border-0 ${view === v ? 'bg-amber-500 text-slate-900' : 'hover:bg-slate-100 text-slate-600'}`}>
+          {[['actual', 'Actual'], ['planned', 'Planned'], ['both', 'Plan vs Actual']].map(([v, l]) =>
+          <button key={v} onClick={() => setView(v)}
+          className={`px-3 py-1.5 font-medium transition border-r border-slate-200 last:border-0 ${view === v ? 'bg-amber-500 text-slate-900' : 'hover:bg-slate-100 text-slate-600'}`}>
               {l}
             </button>
-          ))}
+          )}
         </div>
 
-        {(projectType || dateFrom || dateTo) && (
-          <button onClick={() => { setProjectType(''); setDateFrom(''); setDateTo(''); }}
-            className="text-xs text-slate-400 hover:text-red-500 underline">Clear</button>
-        )}
+        {(projectType || dateFrom || dateTo) &&
+        <button onClick={() => {setProjectType('');setDateFrom('');setDateTo('');}}
+        className="text-xs text-slate-400 hover:text-red-500 underline">Clear</button>
+        }
       </div>
 
       {/* ── KPI Cards ──────────────────────────────────────────────────────── */}
       {/* Row 0 — Portfolio overview (filter-aware) */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard label="Total Projects"   value={projects.filter(p => filteredProjectIds.has(p.id)).length}                                                           icon={<TrendingUp className="w-5 h-5" />}     color="border-blue-400"    sub={projectType ? TYPE_LABELS[projectType] : 'All types'} />
-        <KpiCard label="In Progress"      value={projects.filter(p => filteredProjectIds.has(p.id) && p.status === 'in_progress').length}                             icon={<Activity className="w-5 h-5" />}       color="border-amber-400"   sub="Active projects" />
-        <KpiCard label="Completed"        value={projects.filter(p => filteredProjectIds.has(p.id) && p.status === 'completed').length}                               icon={<ArrowUpCircle className="w-5 h-5" />}  color="border-emerald-400" sub="Finished projects" />
-        <KpiCard label="Total Booking"    value={formatCurrency(totalBooking, currency)}                                                                               icon={<TrendingUp className="w-5 h-5" />}     color="border-blue-500"    sub={`${projects.filter(p=>filteredProjectIds.has(p.id)).length} projects`} />
+        <KpiCard label="Total Projects" value={projects.filter((p) => filteredProjectIds.has(p.id)).length} icon={<TrendingUp className="w-5 h-5" />} color="border-blue-400" sub={projectType ? TYPE_LABELS[projectType] : 'All types'} />
+        <KpiCard label="In Progress" value={projects.filter((p) => filteredProjectIds.has(p.id) && p.status === 'in_progress').length} icon={<Activity className="w-5 h-5" />} color="border-amber-400" sub="Active projects" />
+        <KpiCard label="Completed" value={projects.filter((p) => filteredProjectIds.has(p.id) && p.status === 'completed').length} icon={<ArrowUpCircle className="w-5 h-5" />} color="border-emerald-400" sub="Finished projects" />
+        <KpiCard label="Total Booking" value={formatCurrency(totalBooking, currency)} icon={<TrendingUp className="w-5 h-5" />} color="border-blue-500" sub={`${projects.filter((p) => filteredProjectIds.has(p.id)).length} projects`} />
       </div>
       {/* Row 1 — Invoicing & collections */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard label="Planned Invoiced"     value={formatCurrency(totalPlannedInvoiced,  currency)} icon={<ReceiptText className="w-5 h-5" />}     color="border-purple-400"  sub={totalBooking > 0 ? `${Math.round((totalPlannedInvoiced/totalBooking)*100)}% of booking` : null} />
-        <KpiCard label="Actual Invoiced"      value={formatCurrency(totalActualInvoiced,   currency)} icon={<ReceiptText className="w-5 h-5" />}     color="border-purple-600"  sub={totalPlannedInvoiced > 0 ? `${Math.round((totalActualInvoiced/totalPlannedInvoiced)*100)}% of planned` : null} />
-        <KpiCard label="Cash In (Collected)"  value={formatCurrency(totalCashIn,           currency)} icon={<ArrowUpCircle className="w-5 h-5" />}   color="border-emerald-500" sub={totalActualInvoiced > 0 ? `${Math.round((totalCashIn/totalActualInvoiced)*100)}% collected` : null} />
-        <KpiCard label="Remaining Collection" value={formatCurrency(collectionBal,         currency)} icon={<DollarSign className="w-5 h-5" />}      color="border-amber-500"   highlight={collectionBal > 0 ? 'amber' : 'green'} sub="Actual Invoiced – Collected" />
+        <KpiCard label="Planned Invoiced" value={formatCurrency(totalPlannedInvoiced, currency)} icon={<ReceiptText className="w-5 h-5" />} color="border-purple-400" sub={totalBooking > 0 ? `${Math.round(totalPlannedInvoiced / totalBooking * 100)}% of booking` : null} />
+        <KpiCard label="Actual Invoiced" value={formatCurrency(totalActualInvoiced, currency)} icon={<ReceiptText className="w-5 h-5" />} color="border-purple-600" sub={totalPlannedInvoiced > 0 ? `${Math.round(totalActualInvoiced / totalPlannedInvoiced * 100)}% of planned` : null} />
+        <KpiCard label="Cash In (Collected)" value={formatCurrency(totalCashIn, currency)} icon={<ArrowUpCircle className="w-5 h-5" />} color="border-emerald-500" sub={totalActualInvoiced > 0 ? `${Math.round(totalCashIn / totalActualInvoiced * 100)}% collected` : null} />
+        <KpiCard label="Remaining Collection" value={formatCurrency(collectionBal, currency)} icon={<DollarSign className="w-5 h-5" />} color="border-amber-500" highlight={collectionBal > 0 ? 'amber' : 'green'} sub="Actual Invoiced – Collected" />
       </div>
       {/* Row 2 — Expenses & net */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard label="Planned Expenses"     value={formatCurrency(totalPlannedCashOut,   currency)} icon={<ArrowDownCircle className="w-5 h-5" />} color="border-red-400"     sub="Non-cancelled" />
-        <KpiCard label="Actual Expenses"      value={formatCurrency(totalCashOut,          currency)} icon={<ArrowDownCircle className="w-5 h-5" />} color="border-red-600"     sub="Committed / paid" />
-        <KpiCard label="Net Cash"             value={formatCurrency(netCash,               currency)} icon={<Wallet className="w-5 h-5" />}          color={netCash >= 0 ? 'border-emerald-500' : 'border-red-500'} highlight={netCash < 0 ? 'red' : 'green'} sub="Cash In – Actual Expenses" />
-        <KpiCard label="On Hold / Closed"     value={projects.filter(p => filteredProjectIds.has(p.id) && ['on_hold','closed'].includes(p.status)).length}            icon={<ArrowDownCircle className="w-5 h-5" />} color="border-slate-400"   sub="Inactive projects" />
+        <KpiCard label="Planned Expenses" value={formatCurrency(totalPlannedCashOut, currency)} icon={<ArrowDownCircle className="w-5 h-5" />} color="border-red-400" sub="Non-cancelled" />
+        <KpiCard label="Actual Expenses" value={formatCurrency(totalCashOut, currency)} icon={<ArrowDownCircle className="w-5 h-5" />} color="border-red-600" sub="Committed / paid" />
+        <KpiCard label="Net Cash" value={formatCurrency(netCash, currency)} icon={<Wallet className="w-5 h-5" />} color={netCash >= 0 ? 'border-emerald-500' : 'border-red-500'} highlight={netCash < 0 ? 'red' : 'green'} sub="Cash In – Actual Expenses" />
+        <KpiCard label="On Hold / Closed" value={projects.filter((p) => filteredProjectIds.has(p.id) && ['on_hold', 'closed'].includes(p.status)).length} icon={<ArrowDownCircle className="w-5 h-5" />} color="border-slate-400" sub="Inactive projects" />
       </div>
 
       {/* ── Charts Grid ────────────────────────────────────────────────────── */}
       {/* Period indicator */}
-      <div className="text-xs text-slate-400 -mt-2">
+      <div className="text-xs text-slate-400 -mt-2 hidden">
         Showing <span className="font-semibold text-amber-600 capitalize">{period}</span> view · {allKeys.length} period{allKeys.length !== 1 ? 's' : ''} · {allKeys.join(', ') || 'no data'}
       </div>
 
-      {allKeys.length === 0 ? (
-        <div className="bg-white rounded-lg shadow-sm p-12 text-center text-slate-400">
+      {allKeys.length === 0 ?
+      <div className="bg-white rounded-lg shadow-sm p-12 text-center text-slate-400">
           <Activity className="w-10 h-10 mx-auto mb-2 opacity-30" />
           <p className="text-sm">No financial data available for the selected filters.</p>
           <p className="text-xs mt-1">Add invoices, collections, and expenses to projects to populate these charts.</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        </div> :
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           {/* Chart 1 — Booking & Invoicing (Plan vs Actual) */}
           <ChartCard title="Booking & Invoicing" subtitle={`Contract booking vs invoiced — ${view === 'planned' ? 'planned only' : view === 'actual' ? 'actual only' : 'plan vs actual'}`}>
             <ResponsiveContainer key={`booking-${period}-${view}`} width="100%" height={280}>
@@ -357,9 +357,9 @@ export default function FinancialDashboard({ projects }) {
                 <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={fmt} width={55} />
                 <Tooltip formatter={(v) => formatCurrency(v, currency)} contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e2e8f0' }} />
                 <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
-                <Bar dataKey="Booking" fill="#3b82f6" radius={[3,3,0,0]} maxBarSize={36} />
-                {(view === 'planned' || view === 'both') && <Bar dataKey="Invoiced (Plan)" fill="#c4b5fd" radius={[3,3,0,0]} maxBarSize={36} />}
-                {(view === 'actual'  || view === 'both') && <Bar dataKey="Invoiced (Act)"  fill="#8b5cf6" radius={[3,3,0,0]} maxBarSize={36} />}
+                <Bar dataKey="Booking" fill="#3b82f6" radius={[3, 3, 0, 0]} maxBarSize={36} />
+                {(view === 'planned' || view === 'both') && <Bar dataKey="Invoiced (Plan)" fill="#c4b5fd" radius={[3, 3, 0, 0]} maxBarSize={36} />}
+                {(view === 'actual' || view === 'both') && <Bar dataKey="Invoiced (Act)" fill="#8b5cf6" radius={[3, 3, 0, 0]} maxBarSize={36} />}
                 <Line dataKey="Cash In" type="monotone" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} />
               </ComposedChart>
             </ResponsiveContainer>
@@ -374,8 +374,8 @@ export default function FinancialDashboard({ projects }) {
                 <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={fmt} width={55} />
                 <Tooltip formatter={(v, n) => [formatCurrency(Math.abs(v), currency), n]} contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e2e8f0' }} />
                 <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
-                <Bar dataKey="Cash In"  fill="#10b981" radius={[3,3,0,0]} maxBarSize={40} />
-                <Bar dataKey="Cash Out" fill="#ef4444" radius={[3,3,0,0]} maxBarSize={40} />
+                <Bar dataKey="Cash In" fill="#10b981" radius={[3, 3, 0, 0]} maxBarSize={40} />
+                <Bar dataKey="Cash Out" fill="#ef4444" radius={[3, 3, 0, 0]} maxBarSize={40} />
                 <Line dataKey="Net" type="monotone" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} />
               </ComposedChart>
             </ResponsiveContainer>
@@ -390,49 +390,49 @@ export default function FinancialDashboard({ projects }) {
                 <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={fmt} width={55} />
                 <Tooltip formatter={(v) => formatCurrency(v, currency)} contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e2e8f0' }} />
                 <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
-                <Line dataKey="Cum Cash In"  type="monotone" stroke="#10b981" strokeWidth={2} dot={{ r: 2 }} />
+                <Line dataKey="Cum Cash In" type="monotone" stroke="#10b981" strokeWidth={2} dot={{ r: 2 }} />
                 <Line dataKey="Cum Cash Out" type="monotone" stroke="#ef4444" strokeWidth={2} dot={{ r: 2 }} />
-                <Line dataKey="Cum Net"      type="monotone" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3 }} strokeDasharray="5 3" />
+                <Line dataKey="Cum Net" type="monotone" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3 }} strokeDasharray="5 3" />
               </LineChart>
             </ResponsiveContainer>
           </ChartCard>
 
           {/* Chart 4 — Booking by Project Type */}
           <ChartCard title="Booking by Project Type" subtitle="Portfolio contract value mix">
-            {bookingByType.length === 0 ? (
-              <div className="flex items-center justify-center h-[280px] text-slate-400 text-sm">No data</div>
-            ) : (
-              <div className="flex items-center gap-4 h-[280px]">
+            {bookingByType.length === 0 ?
+          <div className="flex items-center justify-center h-[280px] text-slate-400 text-sm">No data</div> :
+
+          <div className="flex items-center gap-4 h-[280px]">
                 <ResponsiveContainer width="60%" height="100%">
                   <PieChart>
                     <Pie data={bookingByType} cx="50%" cy="50%" innerRadius="45%" outerRadius="75%"
-                      dataKey="value" nameKey="name" paddingAngle={2}>
-                      {bookingByType.map((_, i) => (
-                        <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                      ))}
+                dataKey="value" nameKey="name" paddingAngle={2}>
+                      {bookingByType.map((_, i) =>
+                  <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                  )}
                     </Pie>
                     <Tooltip formatter={(v) => formatCurrency(v, currency)} contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e2e8f0' }} />
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="flex-1 space-y-2">
                   {bookingByType.map((d, i) => {
-                    const pct = totalBooking > 0 ? Math.round((d.value / totalBooking) * 100) : 0;
-                    return (
-                      <div key={d.name} className="flex items-center gap-2 text-xs">
+                const pct = totalBooking > 0 ? Math.round(d.value / totalBooking * 100) : 0;
+                return (
+                  <div key={d.name} className="flex items-center gap-2 text-xs">
                         <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
                         <span className="text-slate-700 font-medium truncate flex-1">{d.name}</span>
                         <span className="text-slate-500 shrink-0">{pct}%</span>
-                      </div>
-                    );
-                  })}
+                      </div>);
+
+              })}
                 </div>
               </div>
-            )}
+          }
           </ChartCard>
         </div>
-      )}
-    </div>
-  );
+      }
+    </div>);
+
 }
 
 function KpiCard({ label, value, sub, icon, color, highlight }) {
@@ -447,8 +447,8 @@ function KpiCard({ label, value, sub, icon, color, highlight }) {
         </div>
         <div className="text-slate-300 mt-0.5 shrink-0 ml-2">{icon}</div>
       </div>
-    </div>
-  );
+    </div>);
+
 }
 
 function ChartCard({ title, subtitle, children }) {
@@ -459,6 +459,6 @@ function ChartCard({ title, subtitle, children }) {
         {subtitle && <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>}
       </div>
       {children}
-    </div>
-  );
+    </div>);
+
 }
