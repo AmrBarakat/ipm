@@ -39,10 +39,10 @@ export default function Portfolio() {
 
       {/* KPI cards */}
       <section className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <KpiCard label="Total Projects" value={total} icon={<Folder className="w-6 h-6 text-blue-400" />} color="border-blue-500" />
-        <KpiCard label="In Progress" value={inProgress} icon={<Clock className="w-6 h-6 text-amber-400" />} color="border-amber-500" />
-        <KpiCard label="Completed" value={completed} icon={<CheckCircle className="w-6 h-6 text-emerald-400" />} color="border-emerald-500" />
-        <KpiCard label="Total Value (SAR)" value={formatCurrency(totalValue, 'SAR')} icon={<TrendingUp className="w-6 h-6 text-purple-400" />} color="border-purple-500" />
+        <KpiCard label="Total Projects" value={total} icon={<Folder className="w-5 h-5" />} color="border-blue-400" />
+        <KpiCard label="In Progress" value={inProgress} icon={<Clock className="w-5 h-5" />} color="border-amber-400" />
+        <KpiCard label="Completed" value={completed} icon={<CheckCircle className="w-5 h-5" />} color="border-emerald-400" />
+        <KpiCard label="Total Value (SAR)" value={formatCurrency(totalValue, 'SAR')} icon={<TrendingUp className="w-5 h-5" />} color="border-purple-400" />
       </section>
 
       {/* Projects table */}
@@ -120,10 +120,10 @@ function KpiCard({ label, value, icon, color }) {
     <div className={`bg-white rounded-lg shadow-sm p-4 border-l-4 ${color}`}>
       <div className="flex items-start justify-between">
         <div>
-          <div className="text-xs text-slate-500 uppercase tracking-wide">{label}</div>
-          <div className="text-2xl font-bold text-slate-800 mt-1">{value}</div>
+          <div className="text-xs text-slate-400 uppercase tracking-wide mb-1">{label}</div>
+          <div className="text-xl font-semibold text-slate-800">{value}</div>
         </div>
-        {icon}
+        <div className="text-slate-300 mt-0.5">{icon}</div>
       </div>
     </div>
   );

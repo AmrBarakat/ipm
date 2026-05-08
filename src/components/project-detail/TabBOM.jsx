@@ -166,16 +166,16 @@ export default function TabBOM({ projectId }) {
 
       {/* Dashboard KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard label="Total Items" value={totalItems} icon={<Package className="w-6 h-6 text-slate-300" />} color="border-slate-400" />
-        <KpiCard label="Planned Cost" value={formatCurrency(totalPlannedCost, 'SAR')} icon={<Tag className="w-6 h-6 text-blue-300" />} color="border-blue-500" />
-        <KpiCard label="Actual Cost" value={formatCurrency(totalActualCost, 'SAR')} icon={<Tag className="w-6 h-6 text-amber-300" />} color="border-amber-500" />
-        <KpiCard label="Sell Value" value={formatCurrency(totalSell, 'SAR')} icon={<TrendingUp className="w-6 h-6 text-emerald-300" />} color="border-emerald-500" />
+        <KpiCard label="Total Items" value={totalItems} icon={<Package className="w-5 h-5" />} color="border-slate-400" />
+        <KpiCard label="Planned Cost" value={formatCurrency(totalPlannedCost, 'SAR')} icon={<Tag className="w-5 h-5" />} color="border-blue-400" />
+        <KpiCard label="Actual Cost" value={formatCurrency(totalActualCost, 'SAR')} icon={<Tag className="w-5 h-5" />} color="border-amber-400" />
+        <KpiCard label="Sell Value" value={formatCurrency(totalSell, 'SAR')} icon={<TrendingUp className="w-5 h-5" />} color="border-emerald-400" />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard label="Ordered" value={orderedCount} icon={<Truck className="w-6 h-6 text-blue-300" />} color="border-blue-500" />
-        <KpiCard label="Not Ordered" value={totalItems - orderedCount} icon={<ShoppingCart className="w-6 h-6 text-slate-300" />} color="border-slate-400" />
-        <KpiCard label="Received" value={receivedCount} icon={<CheckCircle className="w-6 h-6 text-emerald-300" />} color="border-emerald-500" />
-        <KpiCard label="Pending Delivery" value={pendingDelivery} icon={<Clock className="w-6 h-6 text-amber-300" />} color="border-amber-500" />
+        <KpiCard label="Ordered" value={orderedCount} icon={<Truck className="w-5 h-5" />} color="border-blue-400" />
+        <KpiCard label="Not Ordered" value={totalItems - orderedCount} icon={<ShoppingCart className="w-5 h-5" />} color="border-slate-400" />
+        <KpiCard label="Received" value={receivedCount} icon={<CheckCircle className="w-5 h-5" />} color="border-emerald-400" />
+        <KpiCard label="Pending Delivery" value={pendingDelivery} icon={<Clock className="w-5 h-5" />} color="border-amber-400" />
       </div>
 
       {/* Toolbar */}
@@ -558,10 +558,10 @@ function KpiCard({ label, value, icon, color }) {
     <div className={`bg-white rounded-lg shadow-sm p-4 border-l-4 ${color}`}>
       <div className="flex items-start justify-between">
         <div>
-          <div className="text-xs text-slate-500 uppercase tracking-wide">{label}</div>
-          <div className="text-2xl font-bold text-slate-800 mt-1">{value}</div>
+          <div className="text-xs text-slate-400 uppercase tracking-wide mb-1">{label}</div>
+          <div className="text-xl font-semibold text-slate-800">{value}</div>
         </div>
-        {icon}
+        <div className="text-slate-300 mt-0.5">{icon}</div>
       </div>
     </div>
   );

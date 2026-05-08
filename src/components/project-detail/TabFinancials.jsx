@@ -144,43 +144,43 @@ export default function TabFinancials({ projectId, project }) {
 
       {/* Summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-blue-500">
+        <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-blue-400">
           <div className="flex items-start justify-between">
             <div>
-              <div className="text-xs text-slate-500 uppercase tracking-wide mb-1">Total Invoiced</div>
-              <div className="text-2xl font-bold text-slate-800">{formatCurrency(totalInvoiced, 'SAR')}</div>
+              <div className="text-xs text-slate-400 uppercase tracking-wide mb-1">Total Invoiced</div>
+              <div className="text-xl font-semibold text-slate-800">{formatCurrency(totalInvoiced, 'SAR')}</div>
             </div>
-            <TrendingUp className="w-6 h-6 text-blue-300" />
+            <TrendingUp className="w-5 h-5 text-slate-300" />
           </div>
         </div>
-        <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-emerald-500">
+        <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-emerald-400">
           <div className="flex items-start justify-between">
             <div>
-              <div className="text-xs text-slate-500 uppercase tracking-wide mb-1">Total Received</div>
-              <div className="text-2xl font-bold text-emerald-700">{formatCurrency(totalReceived, 'SAR')}</div>
+              <div className="text-xs text-slate-400 uppercase tracking-wide mb-1">Total Received</div>
+              <div className="text-xl font-semibold text-slate-800">{formatCurrency(totalReceived, 'SAR')}</div>
             </div>
-            <Banknote className="w-6 h-6 text-emerald-300" />
+            <Banknote className="w-5 h-5 text-slate-300" />
           </div>
         </div>
-        <div className={`rounded-lg shadow-sm p-4 border-l-4 ${hasWarning ? 'bg-red-50 border-red-500' : 'bg-white border-red-400'}`}>
+        <div className={`rounded-lg shadow-sm p-4 border-l-4 ${hasWarning ? 'bg-red-50 border-red-400' : 'bg-white border-red-400'}`}>
           <div className="flex items-start justify-between">
             <div>
-              <div className="text-xs text-slate-500 uppercase tracking-wide mb-1 flex items-center gap-1">
-                {hasWarning && <AlertTriangle className="w-3 h-3 text-red-500" />} Total Expenses
+              <div className="text-xs text-slate-400 uppercase tracking-wide mb-1 flex items-center gap-1">
+                {hasWarning && <AlertTriangle className="w-3 h-3 text-red-400" />} Total Expenses
               </div>
-              <div className={`text-2xl font-bold ${hasWarning ? 'text-red-600' : 'text-red-700'}`}>{formatCurrency(totalExpenses, 'SAR')}</div>
+              <div className={`text-xl font-semibold ${hasWarning ? 'text-red-600' : 'text-slate-800'}`}>{formatCurrency(totalExpenses, 'SAR')}</div>
             </div>
-            <TrendingDown className="w-6 h-6 text-red-300" />
+            <TrendingDown className="w-5 h-5 text-slate-300" />
           </div>
         </div>
-        <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-amber-500">
+        <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-amber-400">
           <div className="flex items-start justify-between">
             <div>
-              <div className="text-xs text-slate-500 uppercase tracking-wide mb-1">Remaining to Collect</div>
-              <div className={`text-2xl font-bold ${remainingToCollect > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>{formatCurrency(remainingToCollect, 'SAR')}</div>
+              <div className="text-xs text-slate-400 uppercase tracking-wide mb-1">Remaining to Collect</div>
+              <div className={`text-xl font-semibold ${remainingToCollect > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>{formatCurrency(remainingToCollect, 'SAR')}</div>
               <div className="text-xs text-slate-400 mt-0.5">{remainingToCollect > 0 ? 'Still outstanding' : 'Fully collected'}</div>
             </div>
-            <AlertCircle className="w-6 h-6 text-amber-300" />
+            <AlertCircle className="w-5 h-5 text-slate-300" />
           </div>
         </div>
       </div>

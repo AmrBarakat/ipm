@@ -81,27 +81,27 @@ export default function TabOverview({ project, onRefresh }) {
             <KpiCard
               label="Contract Value"
               value={formatCurrency(contractValue, cur)}
-              icon={<FileText className="w-6 h-6 text-blue-300" />}
+              icon={<FileText className="w-5 h-5" />}
               accent="blue"
             />
             <KpiCard
               label="Invoiced"
               value={formatCurrency(totalInvoiced, cur)}
               sub={contractValue > 0 ? `${Math.round((totalInvoiced / contractValue) * 100)}% of contract` : null}
-              icon={<CreditCard className="w-6 h-6 text-green-300" />}
+              icon={<CreditCard className="w-5 h-5" />}
               accent="green"
             />
             <KpiCard
               label="Received"
               value={formatCurrency(totalReceived, cur)}
               sub={contractValue > 0 ? `${Math.round((totalReceived / contractValue) * 100)}% of contract` : null}
-              icon={<CheckCircle className="w-6 h-6 text-purple-300" />}
+              icon={<CheckCircle className="w-5 h-5" />}
               accent="purple"
             />
             <KpiCard
               label="Outstanding"
               value={formatCurrency(outstanding, cur)}
-              icon={<AlertCircle className="w-6 h-6 text-amber-300" />}
+              icon={<AlertCircle className="w-5 h-5" />}
               accent="amber"
             />
           </div>
@@ -111,26 +111,26 @@ export default function TabOverview({ project, onRefresh }) {
             <KpiCard
               label="Planned Cost"
               value={formatCurrency(plannedCost, cur)}
-              icon={<ClipboardList className="w-6 h-6 text-blue-300" />}
+              icon={<ClipboardList className="w-5 h-5" />}
               accent="blue"
             />
             <KpiCard
               label="Actual Cost"
               value={formatCurrency(actualCost, cur)}
-              icon={<BarChart2 className="w-6 h-6 text-red-300" />}
+              icon={<BarChart2 className="w-5 h-5" />}
               accent="red"
             />
             <KpiCard
               label="Planned Margin"
               value={formatCurrency(plannedMargin, cur)}
               sub={`${plannedMarginPct}% margin`}
-              icon={<PieChart className="w-6 h-6 text-green-300" />}
+              icon={<PieChart className="w-5 h-5" />}
               accent="green"
             />
             <KpiCard
               label="Cash on Hand (so far)"
               value={formatCurrency(cashOnHand, cur)}
-              icon={<Wallet className="w-6 h-6 text-amber-300" />}
+              icon={<Wallet className="w-5 h-5" />}
               accent={cashOnHand >= 0 ? 'amber' : 'red'}
             />
           </div>
@@ -141,28 +141,28 @@ export default function TabOverview({ project, onRefresh }) {
               label="BOM Cost (Parts)"
               value={formatCurrency(bomCost, cur)}
               sub={`${bomItems.length} line item${bomItems.length !== 1 ? 's' : ''}`}
-              icon={<Package className="w-6 h-6 text-blue-300" />}
+              icon={<Package className="w-5 h-5" />}
               accent="blue"
             />
             <KpiCard
               label="BOM Sell"
               value={formatCurrency(bomSell, cur)}
               sub={`Margin ${bomMarginPct}%`}
-              icon={<Tag className="w-6 h-6 text-green-300" />}
+              icon={<Tag className="w-5 h-5" />}
               accent="green"
             />
             <KpiCard
               label="Already Ordered"
               value={formatCurrency(alreadyOrdered, cur)}
               sub={`${orderedCount} PO${orderedCount !== 1 ? 's' : ''} issued`}
-              icon={<Truck className="w-6 h-6 text-purple-300" />}
+              icon={<Truck className="w-5 h-5" />}
               accent="purple"
             />
             <KpiCard
               label="To Order"
               value={formatCurrency(toOrderValue, cur)}
               sub={`${toOrderItems.length} non-stock item${toOrderItems.length !== 1 ? 's' : ''} pending`}
-              icon={<ShoppingCart className="w-6 h-6 text-amber-300" />}
+              icon={<ShoppingCart className="w-5 h-5" />}
               accent="amber"
             />
           </div>
@@ -274,11 +274,11 @@ function KpiCard({ label, value, sub, icon, accent = 'blue' }) {
     <div className={`bg-white rounded-lg shadow-sm p-4 border-l-4 ${ACCENT_COLORS[accent]}`}>
       <div className="flex items-start justify-between">
         <div>
-          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">{label}</div>
-          <div className="text-2xl font-bold text-slate-800 leading-tight">{value}</div>
+          <div className="text-xs text-slate-400 uppercase tracking-wide mb-1">{label}</div>
+          <div className="text-xl font-semibold text-slate-800 leading-tight">{value}</div>
           {sub && <div className="text-xs text-slate-400 mt-0.5">{sub}</div>}
         </div>
-        <div className="shrink-0 mt-1">{icon}</div>
+        <div className="text-slate-300 shrink-0 mt-0.5">{icon}</div>
       </div>
     </div>
   );
