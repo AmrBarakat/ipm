@@ -34,13 +34,31 @@
     "manufacturer_part_number": {
       "type": "string"
     },
+    "supplier": {
+      "type": "string"
+    },
+    "supplier_contact": {
+      "type": "string"
+    },
     "quantity": {
       "type": "number",
       "default": 1
     },
+    "stock_qty": {
+      "type": "number",
+      "default": 0
+    },
     "unit": {
       "type": "string",
       "default": "pcs"
+    },
+    "planned_cost_price": {
+      "type": "number",
+      "default": 0
+    },
+    "actual_cost_price": {
+      "type": "number",
+      "default": 0
     },
     "cost_price": {
       "type": "number",
@@ -62,6 +80,14 @@
       ],
       "default": "non_stock"
     },
+    "order_status": {
+      "type": "string",
+      "enum": [
+        "ordered",
+        "not_ordered"
+      ],
+      "default": "not_ordered"
+    },
     "ordered": {
       "type": "boolean",
       "default": false
@@ -73,20 +99,12 @@
       "type": "string",
       "format": "date"
     },
-    "supplier": {
-      "type": "string"
-    },
-    "supplier_contact": {
-      "type": "string"
-    },
     "delivery_status": {
       "type": "string",
       "enum": [
         "pending",
-        "ordered",
         "partially_received",
-        "received",
-        "cancelled"
+        "received"
       ],
       "default": "pending"
     },
