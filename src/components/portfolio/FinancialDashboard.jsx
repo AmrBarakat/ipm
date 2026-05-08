@@ -148,8 +148,22 @@ export default function FinancialDashboard({ projects }) {
     return map;
   }, [projects, filteredProjectIds, period]);
 
-  const invoicedPlannedByPeriod  = useMemo(() => bucketByPeriod(fInvoices, 'planned_date', 'planned_amount'), [fInvoices, period]);
-  const invoicedActualByPeriod   = useMemo(() => bucketByPeriod(fInvoices, 'actual_invoice_date', 'actual_amount'), [fInvoices, period]);
+  const invoicedPlannedByPeriod = useMemo(() =>
+    bucketByPeriod(fInvoices.filter(i => i.status !== 'cancelled'), 'planned_date', 'planned_amount'),
+    [fInvoices, period]
+  );
+  const invoicedActualByPeriod = useMemo(() => {
+    const map = {};
+    fInvoices
+      .filter(i => ['invoiced', 'paid', 'partial', 'overdue'].includes(i.status))
+      .forEach(i => {
+        const dateStr = i.actual_invoice_date || i.planned_date;
+        const key = periodKey(dateStr, period);
+        if (!key) return;
+        map[key] = (map[key] || 0) + (i.actual_amount || i.planned_amount || 0);
+      });
+    return map;
+  }, [fInvoices, period]);
   const cashInByPeriod           = useMemo(() => bucketByPeriod(fCollections, 'received_date', 'amount'), [fCollections, period]);
   const cashOutByPeriod          = useMemo(() => {
     const map = {};
