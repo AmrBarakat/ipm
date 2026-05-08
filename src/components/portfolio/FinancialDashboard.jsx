@@ -336,9 +336,9 @@ export default function FinancialDashboard({ projects }) {
 
       {/* ── Charts Grid ────────────────────────────────────────────────────── */}
       {/* Period indicator */}
-      <div className="text-xs text-slate-400 -mt-2 hidden">
-        Showing <span className="font-semibold text-amber-600 capitalize">{period}</span> view · {allKeys.length} period{allKeys.length !== 1 ? 's' : ''} · {allKeys.join(', ') || 'no data'}
-      </div>
+      
+
+      
 
       {allKeys.length === 0 ?
       <div className="bg-white rounded-lg shadow-sm p-12 text-center text-slate-400">
