@@ -229,6 +229,7 @@ export default function Projects() {
                   <th className="px-4 py-3 text-left">Priority</th>
                   <th className="px-4 py-3 text-left">Status</th>
                   <th className="px-4 py-3 text-left">Progress</th>
+                  <th className="px-4 py-3 text-left">Start Date</th>
                   <th className="px-4 py-3 text-left">Target Date</th>
                   <th className="px-4 py-3 text-left">Contract Value</th>
                 </tr>
@@ -272,6 +273,7 @@ export default function Projects() {
                         <span className="text-xs text-slate-500 w-8">{p.progress || 0}%</span>
                       </div>
                     </td>
+                    <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{formatDate(p.start_date)}</td>
                     <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{formatDate(p.target_completion_date)}</td>
                     <td className="px-4 py-3 font-semibold text-slate-700 whitespace-nowrap">
                       {formatCurrency(p.contract_value, p.currency)}

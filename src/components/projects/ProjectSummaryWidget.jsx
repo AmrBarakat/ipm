@@ -20,7 +20,7 @@ export default function ProjectSummaryWidget({ projects }) {
       return d >= thisMonthStart && d <= thisMonthEnd;
     }).length;
 
-    const activeCount = projects.filter(p => p.status === 'in_progress').length;
+    const activeCount = projects.filter(p => ['planning', 'in_progress', 'commissioning'].includes(p.status)).length;
 
     return { totalValue, avgProgress, dueThisMonth, activeCount };
   }, [projects]);
