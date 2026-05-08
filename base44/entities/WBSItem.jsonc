@@ -10,6 +10,13 @@
       "type": "string",
       "description": "Reference to parent WBSItem (for hierarchy)"
     },
+    "predecessor_ids": {
+      "type": "array",
+      "description": "IDs of WBS items that must finish before this one can start",
+      "items": {
+        "type": "string"
+      }
+    },
     "wbs_code": {
       "type": "string",
       "description": "e.g. 1.2.3"
@@ -68,6 +75,10 @@
     },
     "actual_cost": {
       "type": "number"
+    },
+    "milestone_id": {
+      "type": "string",
+      "description": "Linked milestone \u2014 auto-completes when this WBS item completes"
     }
   },
   "required": [
