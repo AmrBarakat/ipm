@@ -294,17 +294,26 @@ export default function FinancialDashboard({ projects }) {
       </div>
 
       {/* ── KPI Cards ──────────────────────────────────────────────────────── */}
+      {/* Row 0 — Portfolio overview (filter-aware) */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard label="Total Booking"        value={formatCurrency(totalBooking,          currency)} icon={<TrendingUp className="w-5 h-5" />}     color="border-blue-500"    sub={`${projects.filter(p=>filteredProjectIds.has(p.id)).length} projects`} />
+        <KpiCard label="Total Projects"   value={projects.filter(p => filteredProjectIds.has(p.id)).length}                                                           icon={<TrendingUp className="w-5 h-5" />}     color="border-blue-400"    sub={projectType ? TYPE_LABELS[projectType] : 'All types'} />
+        <KpiCard label="In Progress"      value={projects.filter(p => filteredProjectIds.has(p.id) && p.status === 'in_progress').length}                             icon={<Activity className="w-5 h-5" />}       color="border-amber-400"   sub="Active projects" />
+        <KpiCard label="Completed"        value={projects.filter(p => filteredProjectIds.has(p.id) && p.status === 'completed').length}                               icon={<ArrowUpCircle className="w-5 h-5" />}  color="border-emerald-400" sub="Finished projects" />
+        <KpiCard label="Total Booking"    value={formatCurrency(totalBooking, currency)}                                                                               icon={<TrendingUp className="w-5 h-5" />}     color="border-blue-500"    sub={`${projects.filter(p=>filteredProjectIds.has(p.id)).length} projects`} />
+      </div>
+      {/* Row 1 — Invoicing & collections */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KpiCard label="Planned Invoiced"     value={formatCurrency(totalPlannedInvoiced,  currency)} icon={<ReceiptText className="w-5 h-5" />}     color="border-purple-400"  sub={totalBooking > 0 ? `${Math.round((totalPlannedInvoiced/totalBooking)*100)}% of booking` : null} />
         <KpiCard label="Actual Invoiced"      value={formatCurrency(totalActualInvoiced,   currency)} icon={<ReceiptText className="w-5 h-5" />}     color="border-purple-600"  sub={totalPlannedInvoiced > 0 ? `${Math.round((totalActualInvoiced/totalPlannedInvoiced)*100)}% of planned` : null} />
         <KpiCard label="Cash In (Collected)"  value={formatCurrency(totalCashIn,           currency)} icon={<ArrowUpCircle className="w-5 h-5" />}   color="border-emerald-500" sub={totalActualInvoiced > 0 ? `${Math.round((totalCashIn/totalActualInvoiced)*100)}% collected` : null} />
+        <KpiCard label="Remaining Collection" value={formatCurrency(collectionBal,         currency)} icon={<DollarSign className="w-5 h-5" />}      color="border-amber-500"   highlight={collectionBal > 0 ? 'amber' : 'green'} sub="Actual Invoiced – Collected" />
       </div>
+      {/* Row 2 — Expenses & net */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KpiCard label="Planned Expenses"     value={formatCurrency(totalPlannedCashOut,   currency)} icon={<ArrowDownCircle className="w-5 h-5" />} color="border-red-400"     sub="Non-cancelled" />
         <KpiCard label="Actual Expenses"      value={formatCurrency(totalCashOut,          currency)} icon={<ArrowDownCircle className="w-5 h-5" />} color="border-red-600"     sub="Committed / paid" />
         <KpiCard label="Net Cash"             value={formatCurrency(netCash,               currency)} icon={<Wallet className="w-5 h-5" />}          color={netCash >= 0 ? 'border-emerald-500' : 'border-red-500'} highlight={netCash < 0 ? 'red' : 'green'} sub="Cash In – Actual Expenses" />
-        <KpiCard label="Remaining Collection" value={formatCurrency(collectionBal,         currency)} icon={<DollarSign className="w-5 h-5" />}      color="border-amber-500"   highlight={collectionBal > 0 ? 'amber' : 'green'} sub="Actual Invoiced – Collected" />
+        <KpiCard label="On Hold / Closed"     value={projects.filter(p => filteredProjectIds.has(p.id) && ['on_hold','closed'].includes(p.status)).length}            icon={<ArrowDownCircle className="w-5 h-5" />} color="border-slate-400"   sub="Inactive projects" />
       </div>
 
       {/* ── Charts Grid ────────────────────────────────────────────────────── */}

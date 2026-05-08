@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { formatCurrency, formatDate, TYPE_LABELS, STATUS_COLORS, STATUS_LABELS } from '@/lib/constants';
-import { TrendingUp, Folder, Clock, CheckCircle } from 'lucide-react';
+// formatCurrency used in projects table
+import { TrendingUp, Folder } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import FinancialDashboard from '@/components/portfolio/FinancialDashboard';
 
@@ -25,11 +26,6 @@ export default function Portfolio() {
     });
   }, []);
 
-  const total = projects.length;
-  const inProgress = projects.filter((p) => p.status === 'in_progress').length;
-  const completed = projects.filter((p) => p.status === 'completed').length;
-  const totalValue = projects.reduce((s, p) => s + (p.contract_value || 0), 0);
-
   if (loading) return (
     <div className="flex items-center justify-center py-20">
       <div className="w-8 h-8 border-4 border-slate-200 border-t-amber-500 rounded-full animate-spin" />
@@ -44,14 +40,6 @@ export default function Portfolio() {
           <TrendingUp className="text-amber-500 w-6 h-6" /> Portfolio Dashboard
         </h1>
         <p className="text-sm text-slate-500">All industrial automation & energy projects at a glance.</p>
-      </section>
-
-      {/* Top KPIs */}
-      <section className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
-        <KpiCard label="Total Projects" value={total} icon={<Folder className="w-5 h-5" />} color="border-blue-400" />
-        <KpiCard label="In Progress" value={inProgress} icon={<Clock className="w-5 h-5" />} color="border-amber-400" />
-        <KpiCard label="Completed" value={completed} icon={<CheckCircle className="w-5 h-5" />} color="border-emerald-400" />
-        <KpiCard label="Total Booking" value={formatCurrency(totalValue, 'SAR')} icon={<TrendingUp className="w-5 h-5" />} color="border-purple-400" />
       </section>
 
       {/* Tab Bar */}
@@ -139,15 +127,6 @@ export default function Portfolio() {
     </div>);
 
 }
-
-function KpiCard({ label, value, icon, color }) {
-  return null;
-
-
-
-
-
-
 
 
 
