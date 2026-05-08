@@ -5,10 +5,13 @@ import { formatCurrency, formatDate, TYPE_LABELS, STATUS_COLORS, STATUS_LABELS }
 import { TrendingUp, Folder, Clock, CheckCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import FinancialDashboard from '@/components/portfolio/FinancialDashboard';
+import ProfitMarginReport from '@/components/portfolio/ProfitMarginReport';
 
 const TABS = [
-{ id: 'dashboard', label: 'Financial Dashboard' },
-{ id: 'projects', label: 'Projects List' }];
+  { id: 'dashboard', label: 'Financial Dashboard' },
+  { id: 'profit',    label: 'Profit & Margin Report' },
+  { id: 'projects',  label: 'Projects List' },
+];
 
 
 export default function Portfolio() {
@@ -67,6 +70,7 @@ export default function Portfolio() {
 
       {/* Tab Content */}
       {tab === 'dashboard' && <FinancialDashboard projects={projects} />}
+      {tab === 'profit'    && <ProfitMarginReport projects={projects} />}
 
       {tab === 'projects' &&
       <section className="bg-white rounded-lg shadow-sm overflow-hidden">
