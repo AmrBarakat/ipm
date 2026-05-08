@@ -33,8 +33,6 @@ export default function Projects() {
     });
   }, []);
 
-  const completedCount = projects.filter(p => p.status === 'completed').length;
-
   const filtered = projects.filter(p => {
     const q = search.toLowerCase();
     const matchSearch = !q ||
@@ -108,18 +106,6 @@ export default function Projects() {
         >
           <Plus className="w-4 h-4" /> New Project
         </Link>
-      </div>
-
-      {/* Completed KPI */}
-      <div className="grid grid-cols-1 mb-4">
-        <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-emerald-400 flex items-center justify-between max-w-xs">
-          <div>
-            <div className="text-xs text-slate-400 uppercase tracking-wide mb-1">Completed Projects</div>
-            <div className="text-2xl font-semibold text-emerald-700">{completedCount}</div>
-            <div className="text-xs text-slate-400 mt-0.5">of {projects.length} total</div>
-          </div>
-          <CheckSquare className="w-7 h-7 text-emerald-300" />
-        </div>
       </div>
 
       {/* Summary Widget */}

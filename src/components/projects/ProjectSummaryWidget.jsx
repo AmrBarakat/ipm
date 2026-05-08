@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { formatCurrency } from '@/lib/constants';
-import { DollarSign, TrendingUp, CalendarClock, Layers } from 'lucide-react';
+import { DollarSign, TrendingUp, Layers, CheckSquare } from 'lucide-react';
 
 export default function ProjectSummaryWidget({ projects }) {
   const metrics = useMemo(() => {
@@ -10,19 +10,10 @@ export default function ProjectSummaryWidget({ projects }) {
     const avgProgress = Math.round(
       projects.reduce((s, p) => s + (p.progress || 0), 0) / projects.length
     );
-
-    const now = new Date();
-    const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const thisMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    const dueThisMonth = projects.filter(p => {
-      if (!p.target_completion_date) return false;
-      const d = new Date(p.target_completion_date);
-      return d >= thisMonthStart && d <= thisMonthEnd;
-    }).length;
-
     const activeCount = projects.filter(p => ['planning', 'in_progress', 'commissioning'].includes(p.status)).length;
+    const completedCount = projects.filter(p => p.status === 'completed').length;
 
-    return { totalValue, avgProgress, dueThisMonth, activeCount };
+    return { totalValue, avgProgress, activeCount, completedCount };
   }, [projects]);
 
   if (!metrics) return null;
@@ -68,22 +59,8 @@ export default function ProjectSummaryWidget({ projects }) {
         </div>
       </div>
 
-      {/* Due This Month */}
-      <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-purple-400">
-        <div className="flex items-start justify-between">
-          <div>
-            <div className="text-xs text-slate-400 uppercase tracking-wide mb-1">Due This Month</div>
-            <div className="text-xl font-semibold text-slate-800">{metrics.dueThisMonth}</div>
-            <div className="text-xs text-slate-400 mt-0.5">
-              {metrics.dueThisMonth === 0 ? 'None due soon' : `project${metrics.dueThisMonth !== 1 ? 's' : ''} finishing`}
-            </div>
-          </div>
-          <CalendarClock className="w-5 h-5 text-slate-300 shrink-0 mt-0.5" />
-        </div>
-      </div>
-
       {/* Active Projects */}
-      <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-emerald-400">
+      <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-purple-400">
         <div className="flex items-start justify-between">
           <div>
             <div className="text-xs text-slate-400 uppercase tracking-wide mb-1">Active Projects</div>
@@ -91,6 +68,18 @@ export default function ProjectSummaryWidget({ projects }) {
             <div className="text-xs text-slate-400 mt-0.5">currently in progress</div>
           </div>
           <Layers className="w-5 h-5 text-slate-300 shrink-0 mt-0.5" />
+        </div>
+      </div>
+
+      {/* Completed Projects */}
+      <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-emerald-400">
+        <div className="flex items-start justify-between">
+          <div>
+            <div className="text-xs text-slate-400 uppercase tracking-wide mb-1">Completed Projects</div>
+            <div className="text-xl font-semibold text-emerald-700">{metrics.completedCount}</div>
+            <div className="text-xs text-slate-400 mt-0.5">of {projects.length} total</div>
+          </div>
+          <CheckSquare className="w-5 h-5 text-slate-300 shrink-0 mt-0.5" />
         </div>
       </div>
     </div>
