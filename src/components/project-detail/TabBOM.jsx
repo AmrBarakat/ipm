@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
 import { formatCurrency, formatDate, BOM_CATEGORY_LABELS } from '@/lib/constants';
-import { Plus, Package, Trash2, Filter } from 'lucide-react';
+import { Plus, Package, Trash2, Filter, Tag, Truck, ShoppingCart, TrendingUp, CheckCircle, Clock } from 'lucide-react';
 import PanelWrapper from '@/components/ui/PanelWrapper';
 
 const DELIVERY_COLORS = {
@@ -165,17 +165,17 @@ export default function TabBOM({ projectId }) {
     <div className="space-y-5">
 
       {/* Dashboard KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <KpiCard label="Total Items" value={totalItems} color="border-slate-400" />
-        <KpiCard label="Planned Cost" value={formatCurrency(totalPlannedCost, 'SAR')} color="border-blue-400" />
-        <KpiCard label="Actual Cost" value={formatCurrency(totalActualCost, 'SAR')} color="border-amber-400" />
-        <KpiCard label="Sell Value" value={formatCurrency(totalSell, 'SAR')} color="border-emerald-400" />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <KpiCard label="Total Items" value={totalItems} icon={<Package className="w-6 h-6 text-slate-300" />} color="border-slate-400" />
+        <KpiCard label="Planned Cost" value={formatCurrency(totalPlannedCost, 'SAR')} icon={<Tag className="w-6 h-6 text-blue-300" />} color="border-blue-500" />
+        <KpiCard label="Actual Cost" value={formatCurrency(totalActualCost, 'SAR')} icon={<Tag className="w-6 h-6 text-amber-300" />} color="border-amber-500" />
+        <KpiCard label="Sell Value" value={formatCurrency(totalSell, 'SAR')} icon={<TrendingUp className="w-6 h-6 text-emerald-300" />} color="border-emerald-500" />
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <KpiCard label="Ordered" value={orderedCount} color="border-blue-500" badge />
-        <KpiCard label="Not Ordered" value={totalItems - orderedCount} color="border-slate-400" badge />
-        <KpiCard label="Received" value={receivedCount} color="border-emerald-500" badge />
-        <KpiCard label="Pending Delivery" value={pendingDelivery} color="border-amber-500" badge />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <KpiCard label="Ordered" value={orderedCount} icon={<Truck className="w-6 h-6 text-blue-300" />} color="border-blue-500" />
+        <KpiCard label="Not Ordered" value={totalItems - orderedCount} icon={<ShoppingCart className="w-6 h-6 text-slate-300" />} color="border-slate-400" />
+        <KpiCard label="Received" value={receivedCount} icon={<CheckCircle className="w-6 h-6 text-emerald-300" />} color="border-emerald-500" />
+        <KpiCard label="Pending Delivery" value={pendingDelivery} icon={<Clock className="w-6 h-6 text-amber-300" />} color="border-amber-500" />
       </div>
 
       {/* Toolbar */}
@@ -553,11 +553,16 @@ export default function TabBOM({ projectId }) {
   );
 }
 
-function KpiCard({ label, value, color, badge }) {
+function KpiCard({ label, value, icon, color }) {
   return (
-    <div className={`bg-white rounded-lg shadow-sm p-3 border-l-4 ${color}`}>
-      <div className="text-xs text-slate-400 uppercase tracking-wide">{label}</div>
-      <div className={`mt-1 font-bold ${badge ? 'text-2xl text-slate-700' : 'text-base text-slate-800'}`}>{value}</div>
+    <div className={`bg-white rounded-lg shadow-sm p-4 border-l-4 ${color}`}>
+      <div className="flex items-start justify-between">
+        <div>
+          <div className="text-xs text-slate-500 uppercase tracking-wide">{label}</div>
+          <div className="text-2xl font-bold text-slate-800 mt-1">{value}</div>
+        </div>
+        {icon}
+      </div>
     </div>
   );
 }
