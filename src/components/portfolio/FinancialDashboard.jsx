@@ -142,16 +142,6 @@ export default function FinancialDashboard({ projects }) {
   const collectionBal   = totalActualInvoiced - totalCashIn;
 
   // ── Period-bucketed data ────────────────────────────────────────────────
-  function bucketByPeriod(items, dateField, amountField) {
-    const map = {};
-    items.forEach(item => {
-      const key = periodKey(item[dateField], period);
-      if (!key) return;
-      map[key] = (map[key] || 0) + (Number(item[amountField]) || 0);
-    });
-    return map;
-  }
-
   const bookingByPeriod = useMemo(() => {
     const map = {};
     projects.filter(p => filteredProjectIds.has(p.id)).forEach(p => {
@@ -162,28 +152,42 @@ export default function FinancialDashboard({ projects }) {
     return map;
   }, [projects, filteredProjectIds, period]);
 
-  const invoicedPlannedByPeriod = useMemo(() =>
-    bucketByPeriod(fInvoices.filter(i => i.status !== 'cancelled'), 'planned_date', 'planned_amount'),
-    [fInvoices, period]
-  );
+  const invoicedPlannedByPeriod = useMemo(() => {
+    const map = {};
+    fInvoices.filter(i => i.status !== 'cancelled').forEach(item => {
+      const key = periodKey(item.planned_date, period);
+      if (!key) return;
+      map[key] = (map[key] || 0) + (Number(item.planned_amount) || 0);
+    });
+    return map;
+  }, [fInvoices, period]);
+
   const invoicedActualByPeriod = useMemo(() => {
     const map = {};
     fInvoices
       .filter(i => ['invoiced', 'paid', 'partial', 'overdue'].includes(i.status))
       .forEach(i => {
-        const dateStr = i.actual_invoice_date || i.planned_date;
-        const key = periodKey(dateStr, period);
+        const key = periodKey(i.actual_invoice_date || i.planned_date, period);
         if (!key) return;
         map[key] = (map[key] || 0) + (i.actual_amount || i.planned_amount || 0);
       });
     return map;
   }, [fInvoices, period]);
-  const cashInByPeriod           = useMemo(() => bucketByPeriod(fCollections, 'received_date', 'amount'), [fCollections, period]);
-  const cashOutByPeriod          = useMemo(() => {
+
+  const cashInByPeriod = useMemo(() => {
+    const map = {};
+    fCollections.forEach(item => {
+      const key = periodKey(item.received_date, period);
+      if (!key) return;
+      map[key] = (map[key] || 0) + (Number(item.amount) || 0);
+    });
+    return map;
+  }, [fCollections, period]);
+
+  const cashOutByPeriod = useMemo(() => {
     const map = {};
     fExpenses.filter(e => ['committed','paid'].includes(e.status)).forEach(e => {
-      const dateField = e.actual_date || e.planned_date;
-      const key = periodKey(dateField, period);
+      const key = periodKey(e.actual_date || e.planned_date, period);
       if (!key) return;
       map[key] = (map[key] || 0) + (e.actual_amount || e.planned_amount || 0);
     });
