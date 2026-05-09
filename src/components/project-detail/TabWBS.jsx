@@ -43,16 +43,17 @@ function rollupProgress(id, tree, byId) {
 /** Compute overall project progress from root WBS items using weighted rollup */
 async function syncProjectProgress(projectId, items, tree, byId) {
   const roots = tree['__root__'] || [];
-  if (roots.length === 0) return;
+  if (roots.length === 0) return 0;
   const rootProgresses = roots.map(r => ({ p: rollupProgress(r.id, tree, byId), w: r.weight || 1 }));
   const totalWeight = rootProgresses.reduce((s, r) => s + r.w, 0);
   const overallProgress = Math.round(
     rootProgresses.reduce((s, r) => s + r.p * r.w, 0) / (totalWeight || 1)
   );
   await base44.entities.Project.update(projectId, { progress: overallProgress });
+  return overallProgress;
 }
 
-export default function TabWBS({ projectId }) {
+export default function TabWBS({ projectId, onProgressChange }) {
   const [items, setItems] = useState([]);
   const [milestones, setMilestones] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -183,7 +184,8 @@ export default function TabWBS({ projectId }) {
       if (!newTree[pid]) newTree[pid] = [];
       newTree[pid].push(i);
     });
-    await syncProjectProgress(projectId, updated, newTree, newById);
+    const newProgress = await syncProjectProgress(projectId, updated, newTree, newById);
+    onProgressChange?.(newProgress);
   }
 
   async function updateStatus(item, status) {
@@ -202,7 +204,8 @@ export default function TabWBS({ projectId }) {
       if (!newTree[pid]) newTree[pid] = [];
       newTree[pid].push(i);
     });
-    await syncProjectProgress(projectId, updated, newTree, newById);
+    const newProgress = await syncProjectProgress(projectId, updated, newTree, newById);
+    onProgressChange?.(newProgress);
   }
 
   function getDescendants(id) {
@@ -213,7 +216,19 @@ export default function TabWBS({ projectId }) {
   async function deleteItem(id) {
     const descendants = getDescendants(id);
     await Promise.all([id, ...descendants].map(did => base44.entities.WBSItem.delete(did)));
-    load();
+    // Reload and sync progress after deletion
+    const updated = await base44.entities.WBSItem.filter({ project_id: projectId }, 'wbs_code', 500);
+    setItems(updated);
+    const newById = Object.fromEntries(updated.map(i => [i.id, i]));
+    const newTree = {};
+    updated.forEach(i => {
+      const pid = i.parent_id || '__root__';
+      if (!newTree[pid]) newTree[pid] = [];
+      newTree[pid].push(i);
+    });
+    const newProgress = await syncProjectProgress(projectId, updated, newTree, newById);
+    onProgressChange?.(newProgress);
+    setLoading(false);
   }
 
   function togglePred(form, setForm, predId) {

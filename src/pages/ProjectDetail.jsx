@@ -153,7 +153,7 @@ export default function ProjectDetail() {
           <div>
             {activeTab === 'overview'   && <TabOverview   project={project} onRefresh={loadProject} />}
             {activeTab === 'gantt'      && <TabGantt      projectId={id} project={project} />}
-            {activeTab === 'wbs'        && <TabWBS        projectId={id} />}
+            {activeTab === 'wbs'        && <TabWBS        projectId={id} onProgressChange={(p) => setProject(prev => ({ ...prev, progress: p }))} />}
             {activeTab === 'tasks'      && <TabTasks      projectId={id} />}
             {activeTab === 'milestones' && <TabMilestones projectId={id} />}
             {activeTab === 'bom'        && <TabBOM        projectId={id} />}
