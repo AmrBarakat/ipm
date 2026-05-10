@@ -48,6 +48,27 @@
     },
     "description": {
       "type": "string"
+    },
+    "bom_extraction_status": {
+      "type": "string",
+      "enum": [
+        "not_started",
+        "processing",
+        "completed",
+        "failed"
+      ],
+      "default": "not_started"
+    },
+    "bom_items_created": {
+      "type": "number",
+      "default": 0
+    },
+    "bom_extraction_error": {
+      "type": "string"
+    },
+    "bom_extracted_at": {
+      "type": "string",
+      "format": "date-time"
     }
   },
   "required": [
