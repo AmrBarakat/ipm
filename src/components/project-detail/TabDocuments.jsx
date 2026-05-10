@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { formatDate, formatBytes, CATEGORY_LABELS } from '@/lib/constants';
-import { FileText, Upload, ExternalLink, Pencil, Trash2, Save, X } from 'lucide-react';
+import { FileText, Upload, ExternalLink, Pencil, Trash2, Save, X, Cpu } from 'lucide-react';
+import BOMExtractionModal from './BOMExtractionModal';
 
 export default function TabDocuments({ projectId }) {
   const [docs, setDocs] = useState([]);
@@ -12,6 +13,7 @@ export default function TabDocuments({ projectId }) {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
+  const [extractingDoc, setExtractingDoc] = useState(null);
 
   useEffect(() => { load(); }, [projectId]);
 
@@ -124,10 +126,16 @@ export default function TabDocuments({ projectId }) {
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   {!isEditing && doc.file_url && (
-                    <a href={doc.file_url} target="_blank" rel="noopener noreferrer"
-                      className="flex items-center gap-1 px-3 py-1 text-xs border border-slate-300 rounded hover:bg-slate-100 text-slate-600">
-                      <ExternalLink className="w-3 h-3" /> Open
-                    </a>
+                    <>
+                      <a href={doc.file_url} target="_blank" rel="noopener noreferrer"
+                        className="flex items-center gap-1 px-3 py-1 text-xs border border-slate-300 rounded hover:bg-slate-100 text-slate-600">
+                        <ExternalLink className="w-3 h-3" /> Open
+                      </a>
+                      <button onClick={() => setExtractingDoc(doc)}
+                        className="flex items-center gap-1 px-3 py-1 text-xs border border-amber-300 rounded hover:bg-amber-50 text-amber-700 font-medium">
+                        <Cpu className="w-3 h-3" /> Extract BOM
+                      </button>
+                    </>
                   )}
                   {isEditing ? (
                     <>
@@ -145,6 +153,15 @@ export default function TabDocuments({ projectId }) {
             );
           })}
         </div>
+      )}
+
+      {extractingDoc && (
+        <BOMExtractionModal
+          document={extractingDoc}
+          projectId={projectId}
+          onClose={() => setExtractingDoc(null)}
+          onApplied={() => setExtractingDoc(null)}
+        />
       )}
     </div>
   );
