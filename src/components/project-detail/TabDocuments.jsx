@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { formatDate, formatBytes, CATEGORY_LABELS } from '@/lib/constants';
-import { FileText, Upload, ExternalLink, Pencil, Trash2, Save, X, Cpu } from 'lucide-react';
+import { FileText, Upload, ExternalLink, Pencil, Trash2, Save, X, Cpu, Wand2 } from 'lucide-react';
 import BOMExtractionModal from './BOMExtractionModal';
+import DocumentExtractionModal from './DocumentExtractionModal';
 
 export default function TabDocuments({ projectId }) {
   const [docs, setDocs] = useState([]);
@@ -14,6 +15,7 @@ export default function TabDocuments({ projectId }) {
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
   const [extractingDoc, setExtractingDoc] = useState(null);
+  const [smartExtractDoc, setSmartExtractDoc] = useState(null);
 
   useEffect(() => { load(); }, [projectId]);
 
@@ -77,7 +79,9 @@ export default function TabDocuments({ projectId }) {
           <input type="date" value={form.document_date} onChange={e => setForm(f => ({ ...f, document_date: e.target.value }))} className={inp} />
           <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Description" className={inp + ' md:col-span-2'} />
           <div className="md:col-span-2">
-            <input type="file" onChange={e => setFile(e.target.files[0])} className="text-sm text-slate-600" />
+            <label className="text-xs text-slate-500 block mb-1">File (PDF, Excel, Word, Image)</label>
+            <input type="file" accept=".pdf,.xlsx,.xls,.csv,.doc,.docx,.png,.jpg,.jpeg"
+              onChange={e => setFile(e.target.files[0])} className="text-sm text-slate-600" />
           </div>
           <div className="flex gap-2">
             <button type="submit" disabled={uploading} className="px-4 py-2 bg-amber-500 text-slate-900 font-semibold text-sm rounded hover:bg-amber-400 disabled:opacity-60">
@@ -131,6 +135,10 @@ export default function TabDocuments({ projectId }) {
                         className="flex items-center gap-1 px-3 py-1 text-xs border border-slate-300 rounded hover:bg-slate-100 text-slate-600">
                         <ExternalLink className="w-3 h-3" /> Open
                       </a>
+                      <button onClick={() => setSmartExtractDoc(doc)}
+                        className="flex items-center gap-1 px-3 py-1 text-xs border border-blue-300 rounded hover:bg-blue-50 text-blue-700 font-medium">
+                        <Wand2 className="w-3 h-3" /> Extract & Map
+                      </button>
                       <button onClick={() => setExtractingDoc(doc)}
                         className="flex items-center gap-1 px-3 py-1 text-xs border border-amber-300 rounded hover:bg-amber-50 text-amber-700 font-medium">
                         <Cpu className="w-3 h-3" /> Extract BOM
@@ -161,6 +169,15 @@ export default function TabDocuments({ projectId }) {
           projectId={projectId}
           onClose={() => setExtractingDoc(null)}
           onApplied={() => setExtractingDoc(null)}
+        />
+      )}
+
+      {smartExtractDoc && (
+        <DocumentExtractionModal
+          document={smartExtractDoc}
+          projectId={projectId}
+          onClose={() => setSmartExtractDoc(null)}
+          onApplied={() => setSmartExtractDoc(null)}
         />
       )}
     </div>
