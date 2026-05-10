@@ -9,6 +9,17 @@ Deno.serve(async (req) => {
     const { file_url, document_category } = await req.json();
     if (!file_url) return Response.json({ error: 'file_url is required' }, { status: 400 });
 
+    // Check supported file types
+    const urlLower = file_url.toLowerCase().split('?')[0];
+    const supported = ['.pdf', '.xlsx', '.xls', '.csv', '.html', '.png', '.jpg', '.jpeg', '.json'];
+    const unsupported = ['.xlsm', '.xlsb', '.doc', '.docx', '.ppt', '.pptx'];
+    const ext = urlLower.match(/\.[^.]+$/)?.[0] || '';
+    if (unsupported.includes(ext)) {
+      return Response.json({
+        error: `File type "${ext}" is not supported for extraction. Please use PDF, Excel (.xlsx/.xls), CSV, or image files.`
+      }, { status: 400 });
+    }
+
     // Step 1: Extract raw text content from the document
     const extracted = await base44.asServiceRole.integrations.Core.ExtractDataFromUploadedFile({
       file_url,

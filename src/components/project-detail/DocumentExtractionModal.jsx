@@ -25,10 +25,17 @@ export default function DocumentExtractionModal({ document, projectId, onClose, 
   async function startExtraction() {
     setStep('extracting');
     setError(null);
-    const res = await base44.functions.invoke('extractDocumentData', {
-      file_url: document.file_url,
-      document_category: document.category,
-    });
+    let res;
+    try {
+      res = await base44.functions.invoke('extractDocumentData', {
+        file_url: document.file_url,
+        document_category: document.category,
+      });
+    } catch (err) {
+      setError(err?.response?.data?.error || err?.message || 'Extraction failed. The file type may not be supported.');
+      setStep('idle');
+      return;
+    }
     if (res.data?.error) {
       setError(res.data.error);
       setStep('idle');
