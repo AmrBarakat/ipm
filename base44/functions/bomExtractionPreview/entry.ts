@@ -62,19 +62,9 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { file_url, project_id, document_id } = await req.json();
-    if (!file_url || !project_id) {
-      return Response.json({ error: 'file_url and project_id are required' }, { status: 400 });
-    }
-
-    // Check for unsupported file types
-    const urlLower = file_url.toLowerCase().split('?')[0];
-    const ext = urlLower.match(/\.[^.]+$/)?.[0] || '';
-    const unsupported = ['.doc', '.docx', '.ppt', '.pptx', '.xlsb'];
-    if (unsupported.includes(ext)) {
-      return Response.json({
-        error: `File type "${ext}" is not supported. Please use PDF, Excel (.xlsx/.xls/.xlsm), or CSV.`
-      }, { status: 400 });
+    const { plain_text, project_id, document_id, file_name } = await req.json();
+    if (!plain_text || !project_id) {
+      return Response.json({ error: 'plain_text and project_id are required' }, { status: 400 });
     }
 
     // Mark document as processing
@@ -85,35 +75,13 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Step 1: Extract raw content from the file
-    const extracted = await base44.asServiceRole.integrations.Core.ExtractDataFromUploadedFile({
-      file_url,
-      json_schema: {
-        type: 'object',
-        properties: {
-          raw_text: { type: 'string', description: 'Full raw text and tabular content of the document, preserving all rows, columns, and numeric values' }
-        }
-      }
-    });
-
-    const rawContent = extracted?.output?.raw_text
-      || (typeof extracted?.output === 'string' ? extracted.output : JSON.stringify(extracted?.output || ''));
-
-    if (!rawContent || rawContent.trim().length < 30) {
-      if (document_id) {
-        await base44.asServiceRole.entities.Document.update(document_id, {
-          bom_extraction_status: 'failed',
-          bom_extraction_error: 'Could not read content from this file.',
-        });
-      }
-      return Response.json({ items: [], summary: { total: 0, auto_selected: 0, review_required: 0 } });
-    }
-
-    // Step 2: Use LLM to extract structured BOM items following production-grade spec
+    // Use LLM with the plain text converted from Excel in the browser
     const llmResult = await base44.asServiceRole.integrations.Core.InvokeLLM({
       model: 'claude_sonnet_4_6',
-      prompt: `You are a production-grade BOM (Bill of Materials) extraction engine for industrial automation projects. 
-Your task is to extract ALL BOM line items from the document content below.
+      prompt: `You are a production-grade BOM (Bill of Materials) extraction engine for industrial automation projects.
+The content below is plain text converted from an Excel workbook (file: ${file_name || 'BOM document'}).
+Each sheet is separated by "=== SHEET: name ===" markers. Rows are comma-separated values.
+Your task is to read ALL sheets and extract EVERY BOM line item you can find.
 
 ## EXTRACTION RULES:
 
@@ -169,9 +137,6 @@ Your task is to extract ALL BOM line items from the document content below.
 - gross_profit = total_selling_sar - total_cost_sar
 - margin_pct = gross_profit / total_selling_sar (if total_selling_sar > 0)
 
-## DOCUMENT CONTENT:
-${rawContent.slice(0, 12000)}
-
 ## OUTPUT:
 Return a JSON object with:
 - items: array of all extracted BOM items (as many as exist in the document)
@@ -195,7 +160,10 @@ Each item must have these fields:
 - section: string (section header this item belongs to)
 - notes: string (any extra info)
 - expected_delivery_date: string YYYY-MM-DD or empty string
-- review_notes: string (reason this item needs review, empty if ok)`,
+- review_notes: string (reason this item needs review, empty if ok)
+
+## DOCUMENT CONTENT (CSV/plain text from Excel):
+${plain_text}`,
       response_json_schema: {
         type: 'object',
         properties: {
@@ -230,18 +198,15 @@ Each item must have these fields:
       }
     });
 
-    const rawItems = llmResult?.items || [];
+    // InvokeLLM with response_json_schema wraps the result in a "response" key
+    const parsed = llmResult?.response || llmResult;
+    const rawItems = parsed?.items || [];
 
     if (!rawItems.length) {
-      if (document_id) {
-        await base44.asServiceRole.entities.Document.update(document_id, {
-          bom_extraction_status: 'failed',
-          bom_extraction_error: 'No BOM items detected in this document.',
-        });
-      }
+      // Return debug info to understand what LLM returned
       return Response.json({
         items: [],
-        summary: { total: 0, auto_selected: 0, review_required: 0, sheet_name: llmResult?.sheet_name || '' }
+        summary: { total: 0, auto_selected: 0, review_required: 0, sheet_name: parsed?.sheet_name || '' }
       });
     }
 
@@ -272,8 +237,8 @@ Each item must have these fields:
           part_no: cleanText(row.part_no || ''),
           description,
           category: normalizeCategory(row.category, description),
-          manufacturer: cleanText(row.manufacturer || ''),
-          supplier: cleanText(row.supplier || ''),
+          manufacturer: cleanText(row.manufacturer || '').replace(/^<UNKNOWN>$/i, ''),
+          supplier: cleanText(row.supplier || '').replace(/^<UNKNOWN>$/i, ''),
           qty,
           unit: row.unit || 'pcs',
           unit_cost_sar: unitCost,
@@ -299,24 +264,12 @@ Each item must have these fields:
         total: previewItems.length,
         auto_selected: autoSelected,
         review_required: previewItems.length - autoSelected,
-        sheet_name: llmResult?.sheet_name || '',
-        rows_scanned: llmResult?.total_rows_scanned || 0,
+        sheet_name: parsed?.sheet_name || '',
+        rows_scanned: parsed?.total_rows_scanned || 0,
       }
     });
 
   } catch (error) {
-    if (req.body) {
-      try {
-        const { document_id } = await req.clone().json().catch(() => ({}));
-        if (document_id) {
-          const base44 = createClientFromRequest(req);
-          await base44.asServiceRole.entities.Document.update(document_id, {
-            bom_extraction_status: 'failed',
-            bom_extraction_error: error?.message || 'Extraction failed',
-          }).catch(() => {});
-        }
-      } catch (_) {}
-    }
     return Response.json({ error: error?.message || 'Preview extraction failed' }, { status: 500 });
   }
 });

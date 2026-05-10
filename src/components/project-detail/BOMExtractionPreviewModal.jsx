@@ -1,9 +1,36 @@
 import { useState, useMemo } from 'react';
 import { base44 } from '@/api/base44Client';
+import * as XLSX from 'xlsx';
 import {
   X, Loader2, CheckCircle2, FileSearch, AlertTriangle,
   ChevronDown, ChevronUp, Check
 } from 'lucide-react';
+
+// Convert an Excel/CSV file URL to plain text by downloading and parsing in browser
+async function convertFileToPlainText(fileUrl) {
+  const response = await fetch(fileUrl);
+  const arrayBuffer = await response.arrayBuffer();
+  const url = fileUrl.toLowerCase().split('?')[0];
+  const ext = url.match(/\.[^.]+$/)?.[0] || '';
+
+  // For CSV/text files, just read as text
+  if (ext === '.csv' || ext === '.txt') {
+    return new TextDecoder().decode(arrayBuffer);
+  }
+
+  // For Excel files (xlsx, xlsm, xls, xlsb), use XLSX library
+  const workbook = XLSX.read(arrayBuffer, { type: 'array', cellFormula: false, cellHTML: false });
+  const allText = [];
+  for (const sheetName of workbook.SheetNames) {
+    const sheet = workbook.Sheets[sheetName];
+    // Convert sheet to CSV preserving structure
+    const csv = XLSX.utils.sheet_to_csv(sheet, { blankrows: false });
+    if (csv.trim().length > 10) {
+      allText.push(`=== SHEET: ${sheetName} ===\n${csv}`);
+    }
+  }
+  return allText.join('\n\n');
+}
 
 const CATEGORY_COLORS = {
   plc: 'bg-blue-100 text-blue-700',
@@ -52,10 +79,16 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
     setStep('loading');
     setError('');
     try {
+      // Convert file to plain text in the browser first (works for all Excel types including xlsm)
+      const plainText = await convertFileToPlainText(document.file_url);
+      if (!plainText || plainText.trim().length < 20) {
+        throw new Error('Could not read content from this file.');
+      }
       const res = await base44.functions.invoke('bomExtractionPreview', {
-        file_url: document.file_url,
+        plain_text: plainText.slice(0, 40000), // limit to avoid token overflow
         project_id: projectId,
         document_id: document.id,
+        file_name: document.file_name || document.title,
       });
       const previewItems = res?.data?.items || [];
       setSummary(res?.data?.summary || null);
