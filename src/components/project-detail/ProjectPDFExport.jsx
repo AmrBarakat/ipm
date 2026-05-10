@@ -16,7 +16,31 @@ export default function ProjectPDFExport({ project }) {
       base44.entities.Invoice.filter({ project_id: project.id }, 'planned_date', 100),
       base44.entities.Expense.filter({ project_id: project.id }, 'planned_date', 100),
       base44.entities.Collection.filter({ project_id: project.id }, '-received_date', 100),
+      base44.entities.WBSItem.filter({ project_id: project.id }, 'wbs_code', 500),
     ]);
+
+    // WBS rollup helpers
+    const wbsById = Object.fromEntries(wbsItems.map(i => [i.id, i]));
+    const wbsTree = {};
+    wbsItems.forEach(i => {
+      const pid = i.parent_id || '__root__';
+      if (!wbsTree[pid]) wbsTree[pid] = [];
+      wbsTree[pid].push(i);
+    });
+    function rollupProgress(id) {
+      const children = wbsTree[id] || [];
+      if (children.length === 0) return wbsById[id]?.progress || 0;
+      const cp = children.map(c => ({ p: rollupProgress(c.id), w: c.weight || 1 }));
+      const tw = cp.reduce((s, c) => s + c.w, 0);
+      return Math.round(cp.reduce((s, c) => s + c.p * c.w, 0) / (tw || 1));
+    }
+    function getMilestoneProgress(milestoneId) {
+      const linked = wbsItems.filter(i => i.milestone_id === milestoneId);
+      if (linked.length === 0) return null;
+      const tw = linked.reduce((s, i) => s + (i.weight || 1), 0);
+      const weighted = linked.reduce((s, i) => s + rollupProgress(i.id) * (i.weight || 1), 0);
+      return Math.round(weighted / (tw || 1));
+    }
 
     const cur = project.currency || 'SAR';
 
@@ -150,7 +174,7 @@ export default function ProjectPDFExport({ project }) {
           formatDate(m.planned_date),
           m.completed_date ? formatDate(m.completed_date) : '—',
           m.status?.replace(/_/g, ' ') || '—',
-          `${m.progress || 0}%`,
+          `${getMilestoneProgress(m.id) ?? m.progress ?? 0}%`,
         ];
         renderTableRow(doc, margin, y, colW, cols, vals);
         y += 7;
