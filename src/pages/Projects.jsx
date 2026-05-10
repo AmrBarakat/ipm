@@ -198,10 +198,10 @@ export default function Projects() {
         </div>
       )}
 
-      {/* Table */}
-      <div className="bg-white rounded-lg shadow-sm overflow-hidden" onClick={() => setShowStatusMenu(false)}>
+      {/* Cards Grid */}
+      <div onClick={() => setShowStatusMenu(false)}>
         {filtered.length === 0 ? (
-          <div className="text-center py-16 text-slate-400">
+          <div className="text-center py-16 text-slate-400 bg-white rounded-lg shadow-sm">
             <FolderOpen className="w-12 h-12 mx-auto mb-3 opacity-30" />
             <p className="text-sm">No projects match your filters.</p>
             {projects.length === 0 && (
@@ -211,77 +211,69 @@ export default function Projects() {
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-slate-500 uppercase text-xs border-b border-slate-200">
-                <tr>
-                  <th className="pl-4 pr-2 py-3 w-8">
-                    <button onClick={toggleAll} className="text-slate-400 hover:text-amber-500">
-                      {allFilteredSelected
-                        ? <CheckSquare className="w-4 h-4 text-amber-500" />
-                        : <Square className="w-4 h-4" />}
-                    </button>
-                  </th>
-                  <th className="px-4 py-3 text-left">Code</th>
-                  <th className="px-4 py-3 text-left">Project</th>
-                  <th className="px-4 py-3 text-left">Client</th>
-                  <th className="px-4 py-3 text-left">Type</th>
-                  <th className="px-4 py-3 text-left">Priority</th>
-                  <th className="px-4 py-3 text-left">Status</th>
-                  <th className="px-4 py-3 text-left">Progress</th>
-                  <th className="px-4 py-3 text-left">Start Date</th>
-                  <th className="px-4 py-3 text-left">Target Date</th>
-                  <th className="px-4 py-3 text-left">Contract Value</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map(p => (
-                  <tr
-                    key={p.id}
-                    className={`border-t border-slate-100 hover:bg-slate-50 cursor-pointer ${selected.has(p.id) ? 'bg-amber-50' : ''}`}
-                    onClick={() => navigate(`/projects/${p.id}`)}
-                  >
-                    <td className="pl-4 pr-2 py-3 w-8" onClick={e => toggleOne(p.id, e)}>
-                      {selected.has(p.id)
-                        ? <CheckSquare className="w-4 h-4 text-amber-500" />
-                        : <Square className="w-4 h-4 text-slate-300 hover:text-slate-500" />}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs text-slate-500 whitespace-nowrap">{p.code}</td>
-                    <td className="px-4 py-3">
-                      <div className="font-semibold text-slate-800">{p.name}</div>
-                      {p.location && <div className="text-xs text-slate-400">{p.location}</div>}
-                    </td>
-                    <td className="px-4 py-3 text-slate-600">{p.client || '—'}</td>
-                    <td className="px-4 py-3">
-                      <span className="text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-600">
-                        {TYPE_LABELS[p.project_type] || p.project_type}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`text-xs px-2 py-0.5 rounded font-semibold ${PRIORITY_COLORS[p.priority] || 'bg-slate-100 text-slate-600'}`}>
-                        {PRIORITY_LABELS[p.priority] || p.priority}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`text-xs px-2 py-0.5 rounded font-semibold ${STATUS_COLORS[p.status] || 'bg-slate-100 text-slate-600'}`}>
-                        {STATUS_LABELS[p.status] || p.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <ProgressRing progress={p.progress || 0} size={36} stroke={3.5} />
-                        <span className="text-xs text-slate-500 w-8">{p.progress || 0}%</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{formatDate(p.start_date)}</td>
-                    <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{formatDate(p.target_completion_date)}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-700 whitespace-nowrap">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+            {filtered.map(p => (
+              <div
+                key={p.id}
+                onClick={() => navigate(`/projects/${p.id}`)}
+                className={`bg-white rounded-xl shadow-sm border hover:shadow-md hover:border-amber-300 transition cursor-pointer relative ${selected.has(p.id) ? 'border-amber-400 bg-amber-50' : 'border-slate-200'}`}
+              >
+                {/* Select checkbox */}
+                <div className="absolute top-3 right-3" onClick={e => toggleOne(p.id, e)}>
+                  {selected.has(p.id)
+                    ? <CheckSquare className="w-4 h-4 text-amber-500" />
+                    : <Square className="w-4 h-4 text-slate-300 hover:text-slate-500" />}
+                </div>
+
+                <div className="p-5">
+                  {/* Code + badges */}
+                  <div className="flex items-center gap-2 flex-wrap mb-2 pr-6">
+                    <span className="font-mono text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded">{p.code}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded font-semibold ${STATUS_COLORS[p.status] || 'bg-slate-100 text-slate-600'}`}>
+                      {STATUS_LABELS[p.status] || p.status}
+                    </span>
+                    <span className={`text-xs px-2 py-0.5 rounded font-semibold ${PRIORITY_COLORS[p.priority] || 'bg-slate-100 text-slate-600'}`}>
+                      {PRIORITY_LABELS[p.priority] || p.priority}
+                    </span>
+                  </div>
+
+                  {/* Name */}
+                  <h3 className="font-bold text-slate-800 text-base leading-snug mb-0.5">{p.name}</h3>
+                  {p.client && <p className="text-sm text-slate-500 mb-1">{p.client}{p.location ? ` · ${p.location}` : ''}</p>}
+
+                  {/* Type */}
+                  <span className="text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-500">
+                    {TYPE_LABELS[p.project_type] || p.project_type}
+                  </span>
+
+                  {/* Progress bar */}
+                  <div className="mt-4">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-xs text-slate-400">Progress</span>
+                      <span className="text-xs font-semibold text-slate-600">{p.progress || 0}%</span>
+                    </div>
+                    <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                      <div
+                        className="bg-amber-500 h-2 rounded-full transition-all"
+                        style={{ width: `${p.progress || 0}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Footer row */}
+                  <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                    <div>
+                      {p.target_completion_date && (
+                        <span>Due {formatDate(p.target_completion_date)}</span>
+                      )}
+                    </div>
+                    <div className="font-semibold text-slate-700 text-sm">
                       {formatCurrency(p.contract_value, p.currency)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
