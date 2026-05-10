@@ -11,10 +11,31 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'file_url and project_id are required' }, { status: 400 });
     }
 
-    const result = await base44.asServiceRole.integrations.Core.InvokeLLM({
-      prompt: `You are an expert industrial automation engineer. Analyze this project document (could be a project charter, technical specification, offer, or contract) and extract ALL equipment, materials, hardware, software, and services mentioned.
+    // Step 1: Extract raw text/content from the document
+    const extracted = await base44.asServiceRole.integrations.Core.ExtractDataFromUploadedFile({
+      file_url,
+      json_schema: {
+        type: 'object',
+        properties: {
+          raw_text: { type: 'string', description: 'Full text content of the document' }
+        }
+      }
+    });
 
-For each item, extract:
+    const docText = extracted?.output?.raw_text || (typeof extracted?.output === 'string' ? extracted.output : JSON.stringify(extracted?.output || ''));
+
+    if (!docText || docText.trim().length < 20) {
+      return Response.json({ items: [] });
+    }
+
+    // Step 2: Send extracted text to LLM for BOM parsing
+    const result = await base44.asServiceRole.integrations.Core.InvokeLLM({
+      prompt: `You are an expert industrial automation engineer. Analyze the following document text and extract ALL equipment, materials, hardware, software, and services mentioned.
+
+DOCUMENT TEXT:
+${docText}
+
+For each item found, extract:
 - description: full item description
 - item_code: part number or item code if mentioned (otherwise empty string)
 - category: one of: plc, hmi, drive, sensor, meter, panel, cable, network, software, service, other
@@ -28,30 +49,10 @@ For each item, extract:
 
 Rules:
 - Extract EVERY piece of equipment, material, or service you can identify
-- Be thorough — look for tables, lists, appendices, and inline mentions
+- Look for tables, lists, appendices, and inline mentions
 - If quantities are in a table, use the table values
-- If prices are mentioned, capture them
-- Group similar items if they are clearly the same product
-- Return ONLY a valid JSON object with a single key "items" containing an array
-
-Return format:
-{
-  "items": [
-    {
-      "description": "...",
-      "item_code": "...",
-      "category": "...",
-      "manufacturer": "...",
-      "manufacturer_part_number": "...",
-      "quantity": 1,
-      "unit": "pcs",
-      "cost_price": 0,
-      "selling_price": 0,
-      "notes": "..."
-    }
-  ]
-}`,
-      file_urls: [file_url],
+- Capture prices if mentioned
+- Return ONLY a valid JSON object`,
       model: 'claude_sonnet_4_6',
       response_json_schema: {
         type: 'object',

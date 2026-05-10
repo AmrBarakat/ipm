@@ -17,9 +17,14 @@ export default function BOMExtractionModal({ document, projectId, onClose, onApp
       file_url: document.file_url,
       project_id: projectId,
     });
+    if (res.data?.error) {
+      setError(`Extraction failed: ${res.data.error}`);
+      setStep('idle');
+      return;
+    }
     const extracted = res.data?.items || [];
     if (extracted.length === 0) {
-      setError('No BOM items could be extracted from this document. Make sure it contains equipment lists or materials.');
+      setError('No equipment or material items were found in this document. Make sure the document contains an equipment list, BOM table, or materials section.');
       setStep('idle');
       return;
     }
