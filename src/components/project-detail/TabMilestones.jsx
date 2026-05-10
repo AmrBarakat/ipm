@@ -1,18 +1,27 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { base44 } from '@/api/base44Client';
 import { formatDate } from '@/lib/constants';
-import { Plus, Flag, Pencil, Trash2, Save, X } from 'lucide-react';
+import { Plus, Flag, Pencil, Trash2, Save, X, Layers } from 'lucide-react';
 import PanelWrapper from '@/components/ui/PanelWrapper';
 
 const STATUS_COLORS = {
-  pending: 'bg-slate-100 text-slate-600',
+  pending:     'bg-slate-100 text-slate-600',
   in_progress: 'bg-blue-100 text-blue-700',
-  completed: 'bg-emerald-100 text-emerald-700',
-  overdue: 'bg-red-100 text-red-700',
+  completed:   'bg-emerald-100 text-emerald-700',
+  overdue:     'bg-red-100 text-red-700',
 };
+
+function computeMilestoneProgress(milestoneId, wbsItems) {
+  const linked = wbsItems.filter(i => i.milestone_id === milestoneId);
+  if (linked.length === 0) return null;
+  const totalWeight = linked.reduce((s, i) => s + (i.weight || 1), 0);
+  const weighted = linked.reduce((s, i) => s + (i.progress || 0) * (i.weight || 1), 0);
+  return Math.round(weighted / (totalWeight || 1));
+}
 
 export default function TabMilestones({ projectId }) {
   const [milestones, setMilestones] = useState([]);
+  const [wbsItems, setWbsItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ title: '', planned_date: '', weight: '' });
@@ -23,8 +32,12 @@ export default function TabMilestones({ projectId }) {
 
   async function load() {
     setLoading(true);
-    const m = await base44.entities.Milestone.filter({ project_id: projectId }, 'planned_date', 100);
+    const [m, w] = await Promise.all([
+      base44.entities.Milestone.filter({ project_id: projectId }, 'planned_date', 100),
+      base44.entities.WBSItem.filter({ project_id: projectId }, 'wbs_code', 500),
+    ]);
     setMilestones(m);
+    setWbsItems(w);
     setLoading(false);
   }
 
@@ -96,53 +109,76 @@ export default function TabMilestones({ projectId }) {
           <div className="space-y-2">
             {milestones.map(m => {
               const isEditing = editingId === m.id;
+              const wbsProgress = computeMilestoneProgress(m.id, wbsItems);
+              const displayProgress = wbsProgress !== null ? wbsProgress : (m.progress || 0);
+              const linkedCount = wbsItems.filter(i => i.milestone_id === m.id).length;
+
               return (
-                <div key={m.id} className="bg-white rounded-lg shadow-sm px-4 py-3 flex flex-wrap items-center gap-4">
-                  <Flag className="w-4 h-4 text-amber-500 shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    {isEditing ? (
-                      <div className="flex gap-2 flex-wrap">
-                        <input value={editForm.title} onChange={e => setEditForm(f => ({ ...f, title: e.target.value }))} className={inp} placeholder="Title" style={{ maxWidth: 200 }} />
-                        <input type="date" value={editForm.planned_date} onChange={e => setEditForm(f => ({ ...f, planned_date: e.target.value }))} className={inp} style={{ maxWidth: 160 }} />
-                        <input type="number" value={editForm.weight} onChange={e => setEditForm(f => ({ ...f, weight: e.target.value }))} placeholder="Weight %" className={inp} min="0" max="100" style={{ maxWidth: 100 }} />
-                      </div>
-                    ) : (
-                      <>
-                        <div className="font-semibold text-slate-800 text-sm">{m.title}</div>
-                        {m.planned_date && <div className="text-xs text-slate-500">Planned: {formatDate(m.planned_date)}</div>}
-                      </>
+                <div key={m.id} className="bg-white rounded-lg shadow-sm px-4 py-3 flex flex-col gap-2">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Flag className="w-4 h-4 text-amber-500 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      {isEditing ? (
+                        <div className="flex gap-2 flex-wrap">
+                          <input value={editForm.title} onChange={e => setEditForm(f => ({ ...f, title: e.target.value }))} className={inp} placeholder="Title" style={{ maxWidth: 200 }} />
+                          <input type="date" value={editForm.planned_date} onChange={e => setEditForm(f => ({ ...f, planned_date: e.target.value }))} className={inp} style={{ maxWidth: 160 }} />
+                          <input type="number" value={editForm.weight} onChange={e => setEditForm(f => ({ ...f, weight: e.target.value }))} placeholder="Weight %" className={inp} min="0" max="100" style={{ maxWidth: 100 }} />
+                        </div>
+                      ) : (
+                        <>
+                          <div className="font-semibold text-slate-800 text-sm">{m.title}</div>
+                          <div className="flex flex-wrap gap-2 mt-0.5 text-xs text-slate-500">
+                            {m.planned_date && <span>Planned: {formatDate(m.planned_date)}</span>}
+                            {m.completed_date && <span className="text-emerald-600">✓ Completed: {formatDate(m.completed_date)}</span>}
+                            {m.weight > 0 && <span>Weight: {m.weight}%</span>}
+                            {linkedCount > 0 && (
+                              <span className="flex items-center gap-0.5 text-blue-600">
+                                <Layers className="w-3 h-3" /> {linkedCount} WBS item{linkedCount !== 1 ? 's' : ''}
+                              </span>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    {!isEditing && (
+                      <select value={m.status} onChange={e => updateStatus(m, e.target.value)}
+                        className={`text-xs px-2 py-1 rounded font-semibold border-0 cursor-pointer shrink-0 ${STATUS_COLORS[m.status] || 'bg-slate-100 text-slate-600'}`}>
+                        {['pending', 'in_progress', 'completed', 'overdue'].map(s => (
+                          <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
+                        ))}
+                      </select>
                     )}
+                    <div className="flex gap-1 shrink-0">
+                      {isEditing ? (
+                        <>
+                          <button onClick={() => saveEdit(m.id)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Save className="w-4 h-4" /></button>
+                          <button onClick={() => setEditingId(null)} className="p-1 text-slate-400 hover:bg-slate-100 rounded"><X className="w-4 h-4" /></button>
+                        </>
+                      ) : (
+                        <>
+                          <button onClick={() => startEdit(m)} className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded"><Pencil className="w-4 h-4" /></button>
+                          <button onClick={() => deleteMilestone(m.id)} className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-4 h-4" /></button>
+                        </>
+                      )}
+                    </div>
                   </div>
-                  {!isEditing && m.weight > 0 && <span className="text-xs text-slate-500">{m.weight}%</span>}
-                  {!isEditing && (
-                    <select value={m.status} onChange={e => updateStatus(m, e.target.value)}
-                      className={`text-xs px-2 py-1 rounded font-semibold border-0 cursor-pointer ${STATUS_COLORS[m.status] || 'bg-slate-100 text-slate-600'}`}>
-                      {['pending', 'in_progress', 'completed', 'overdue'].map(s => (
-                        <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
-                      ))}
-                    </select>
-                  )}
-                  {!isEditing && m.progress > 0 && (
-                    <div className="flex items-center gap-1 w-24">
-                      <div className="flex-1 bg-slate-200 rounded-full h-1.5">
-                        <div className="bg-amber-500 h-1.5 rounded-full" style={{ width: `${m.progress}%` }} />
+
+                  {!isEditing && (displayProgress > 0 || linkedCount > 0) && (
+                    <div className="pl-7">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
+                          <div
+                            className={`h-2 rounded-full transition-all duration-500 ${displayProgress === 100 ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                            style={{ width: `${displayProgress}%` }}
+                          />
+                        </div>
+                        <span className="text-xs font-semibold text-slate-600 w-10 text-right">{displayProgress}%</span>
+                        {wbsProgress !== null && (
+                          <span className="text-xs text-blue-500 whitespace-nowrap">← from WBS</span>
+                        )}
                       </div>
-                      <span className="text-xs text-slate-500">{m.progress}%</span>
                     </div>
                   )}
-                  <div className="flex gap-1">
-                    {isEditing ? (
-                      <>
-                        <button onClick={() => saveEdit(m.id)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Save className="w-4 h-4" /></button>
-                        <button onClick={() => setEditingId(null)} className="p-1 text-slate-400 hover:bg-slate-100 rounded"><X className="w-4 h-4" /></button>
-                      </>
-                    ) : (
-                      <>
-                        <button onClick={() => startEdit(m)} className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded"><Pencil className="w-4 h-4" /></button>
-                        <button onClick={() => deleteMilestone(m.id)} className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-4 h-4" /></button>
-                      </>
-                    )}
-                  </div>
                 </div>
               );
             })}
