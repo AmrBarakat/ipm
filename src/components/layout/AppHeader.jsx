@@ -66,23 +66,19 @@ export default function AppHeader() {
   }
 
   async function doSearch(q) {
-    try {
-      const [projects, tasks] = await Promise.all([
-        base44.entities.Project.filter({ name: { $regex: q } }).catch(() => []),
-        base44.entities.Task.filter({ title: { $regex: q } }).catch(() => []),
-      ]);
-      // Also search by code/client for projects
-      const allProjects = await base44.entities.Project.list('-updated_date', 100).catch(() => []);
-      const filteredProjects = allProjects.filter(p =>
-        p.name?.toLowerCase().includes(q.toLowerCase()) ||
-        p.code?.toLowerCase().includes(q.toLowerCase()) ||
-        p.client?.toLowerCase().includes(q.toLowerCase())
-      );
-      const allTasks = await base44.entities.Task.list('-updated_date', 200).catch(() => []);
-      const filteredTasks = allTasks.filter(t => t.title?.toLowerCase().includes(q.toLowerCase()));
-      setSearchResults({ projects: filteredProjects.slice(0, 5), tasks: filteredTasks.slice(0, 5) });
-      setShowSearch(true);
-    } catch {}
+    const ql = q.toLowerCase();
+    const [allProjects, allTasks] = await Promise.all([
+      base44.entities.Project.list('-updated_date', 200),
+      base44.entities.Task.list('-updated_date', 300),
+    ]);
+    const filteredProjects = allProjects.filter(p =>
+      p.name?.toLowerCase().includes(ql) ||
+      p.code?.toLowerCase().includes(ql) ||
+      p.client?.toLowerCase().includes(ql)
+    );
+    const filteredTasks = allTasks.filter(t => t.title?.toLowerCase().includes(ql));
+    setSearchResults({ projects: filteredProjects.slice(0, 5), tasks: filteredTasks.slice(0, 5) });
+    setShowSearch(true);
   }
 
   const sevIcon = {
