@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
 import { formatCurrency, formatDate, BOM_CATEGORY_LABELS } from '@/lib/constants';
-import { Plus, Package, Trash2, Filter, Tag, Truck, ShoppingCart, TrendingUp, CheckCircle, Clock } from 'lucide-react';
+import { Plus, Package, Trash2, Filter, Tag, Truck, ShoppingCart, TrendingUp, CheckCircle, Clock, Edit2, X, Check } from 'lucide-react';
 import PanelWrapper from '@/components/ui/PanelWrapper';
 
 const DELIVERY_COLORS = {
@@ -33,11 +33,18 @@ export default function TabBOM({ projectId }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState({});
 
+  // Multi-select / bulk edit
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkEdit, setBulkEdit] = useState(null); // { field, value }
+
   // Filters
   const [filterCategory, setFilterCategory] = useState('');
   const [filterOrderStatus, setFilterOrderStatus] = useState('');
   const [filterDelivery, setFilterDelivery] = useState('');
   const [filterSupplier, setFilterSupplier] = useState('');
+
+  // Clear selection when filters change
+  useEffect(() => { setSelectedIds(new Set()); }, [filterCategory, filterOrderStatus, filterDelivery, filterSupplier]);
 
   useEffect(() => { load(); }, [projectId]);
 
@@ -76,6 +83,48 @@ export default function TabBOM({ projectId }) {
       : rawValue;
     const updated = { ...item, [field]: parsed };
     saveItem(updated);
+  }
+
+  // Selection helpers
+  function toggleSelect(id) {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.size === filtered.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filtered.map(i => i.id)));
+    }
+  }
+
+  async function applyBulkEdit() {
+    if (!bulkEdit || selectedIds.size === 0) return;
+    const { field, value } = bulkEdit;
+    const updates = [...selectedIds].map(id => {
+      const item = items.find(i => i.id === id);
+      if (!item) return null;
+      const updated = { ...item, [field]: value };
+      if (field === 'order_status') updated.ordered = value === 'ordered';
+      return base44.entities.BOMItem.update(id, updated);
+    }).filter(Boolean);
+    await Promise.all(updates);
+    setItems(prev => prev.map(i =>
+      selectedIds.has(i.id) ? { ...i, [field]: value, ...(field === 'order_status' ? { ordered: value === 'ordered' } : {}) } : i
+    ));
+    setBulkEdit(null);
+    setSelectedIds(new Set());
+  }
+
+  async function bulkDelete() {
+    if (!confirm(`Delete ${selectedIds.size} selected item(s)?`)) return;
+    await Promise.all([...selectedIds].map(id => base44.entities.BOMItem.delete(id)));
+    setItems(prev => prev.filter(i => !selectedIds.has(i.id)));
+    setSelectedIds(new Set());
   }
 
   function handleSelectChange(item, field, value) {
@@ -213,6 +262,81 @@ export default function TabBOM({ projectId }) {
         </button>
       </div>
 
+      {/* Bulk Edit Toolbar */}
+      {selectedIds.size > 0 && (
+        <div className="flex flex-wrap items-center gap-3 bg-slate-800 text-white rounded-lg px-4 py-2.5 text-sm">
+          <span className="font-semibold text-amber-400">{selectedIds.size} selected</span>
+          <span className="text-slate-400">·</span>
+          <span className="text-slate-300 text-xs">Bulk edit:</span>
+
+          {/* Order Status */}
+          <div className="flex items-center gap-1.5">
+            <select
+              className="text-xs bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white focus:outline-none focus:border-amber-400"
+              value={bulkEdit?.field === 'order_status' ? bulkEdit.value : ''}
+              onChange={e => setBulkEdit(e.target.value ? { field: 'order_status', value: e.target.value } : null)}
+            >
+              <option value="">Order Status…</option>
+              <option value="ordered">Ordered</option>
+              <option value="not_ordered">Not Ordered</option>
+            </select>
+          </div>
+
+          {/* Delivery Status */}
+          <div className="flex items-center gap-1.5">
+            <select
+              className="text-xs bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white focus:outline-none focus:border-amber-400"
+              value={bulkEdit?.field === 'delivery_status' ? bulkEdit.value : ''}
+              onChange={e => setBulkEdit(e.target.value ? { field: 'delivery_status', value: e.target.value } : null)}
+            >
+              <option value="">Delivery Status…</option>
+              <option value="pending">Pending</option>
+              <option value="partially_received">Partially Received</option>
+              <option value="received">Received</option>
+            </select>
+          </div>
+
+          {/* Category */}
+          <div className="flex items-center gap-1.5">
+            <select
+              className="text-xs bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white focus:outline-none focus:border-amber-400"
+              value={bulkEdit?.field === 'category' ? bulkEdit.value : ''}
+              onChange={e => setBulkEdit(e.target.value ? { field: 'category', value: e.target.value } : null)}
+            >
+              <option value="">Category…</option>
+              {Object.entries(BOM_CATEGORY_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </div>
+
+          {/* Supplier */}
+          <div className="flex items-center gap-1.5">
+            <input
+              className="text-xs bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white placeholder-slate-400 focus:outline-none focus:border-amber-400 w-28"
+              placeholder="Set supplier…"
+              value={bulkEdit?.field === 'supplier' ? bulkEdit.value : ''}
+              onChange={e => setBulkEdit(e.target.value ? { field: 'supplier', value: e.target.value } : null)}
+            />
+          </div>
+
+          {bulkEdit && (
+            <button onClick={applyBulkEdit}
+              className="flex items-center gap-1 px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold text-xs rounded">
+              <Check className="w-3.5 h-3.5" /> Apply
+            </button>
+          )}
+
+          <button onClick={bulkDelete}
+            className="flex items-center gap-1 px-3 py-1 bg-red-600 hover:bg-red-500 text-white font-semibold text-xs rounded ml-auto">
+            <Trash2 className="w-3.5 h-3.5" /> Delete {selectedIds.size}
+          </button>
+
+          <button onClick={() => { setSelectedIds(new Set()); setBulkEdit(null); }}
+            className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-white">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Add Form */}
       {adding && (
         <form onSubmit={create} className="bg-amber-50 border border-amber-200 rounded-lg p-4 grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -281,11 +405,18 @@ export default function TabBOM({ projectId }) {
             { key: 'expected_delivery', label: 'Expected Delivery' },
           ]}
         >
-          <div className="text-xs text-slate-500 mb-2">{filtered.length} of {items.length} items · <span className="italic">Click any cell to edit</span></div>
+          <div className="text-xs text-slate-500 mb-2">{filtered.length} of {items.length} items · <span className="italic">Click any cell to edit · Check rows for bulk edit</span></div>
           <div className="bg-white rounded-lg shadow-sm overflow-x-auto">
             <table className="w-full text-sm min-w-[1200px]">
               <thead className="bg-slate-50 text-slate-500 text-xs uppercase border-b border-slate-200">
                 <tr>
+                  <th className="px-3 py-3 w-8">
+                    <button onClick={toggleSelectAll} className="flex items-center justify-center">
+                      <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${selectedIds.size === filtered.length && filtered.length > 0 ? 'bg-amber-400 border-amber-400' : 'border-slate-300 hover:border-amber-400'}`}>
+                        {selectedIds.size === filtered.length && filtered.length > 0 && <Check className="w-2.5 h-2.5 text-slate-900" />}
+                      </div>
+                    </button>
+                  </th>
                   <th className="px-3 py-3 text-left">Description / Part No.</th>
                   <th className="px-3 py-3 text-left">Category</th>
                   <th className="px-3 py-3 text-left">Supplier</th>
@@ -309,8 +440,17 @@ export default function TabBOM({ projectId }) {
                   const itemOrderStatus = item.order_status || (item.ordered ? 'ordered' : 'not_ordered');
                   const isSaving = saving[item.id];
 
+                  const isSelected = selectedIds.has(item.id);
                   return (
-                    <tr key={item.id} className={`border-t border-slate-100 hover:bg-amber-50/30 ${isSaving ? 'opacity-70' : ''}`}>
+                    <tr key={item.id} className={`border-t border-slate-100 hover:bg-amber-50/30 ${isSaving ? 'opacity-70' : ''} ${isSelected ? 'bg-amber-50' : ''}`}>
+                      {/* Checkbox */}
+                      <td className="px-3 py-1">
+                        <button onClick={() => toggleSelect(item.id)} className="flex items-center justify-center">
+                          <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${isSelected ? 'bg-amber-400 border-amber-400' : 'border-slate-300 hover:border-amber-400'}`}>
+                            {isSelected && <Check className="w-2.5 h-2.5 text-slate-900" />}
+                          </div>
+                        </button>
+                      </td>
                       {/* Description / Part No */}
                       <td className="px-1 py-1">
                         <div className="space-y-0.5">
@@ -481,7 +621,7 @@ export default function TabBOM({ projectId }) {
               {filtered.length > 0 && (
                 <tfoot className="bg-slate-50 border-t-2 border-slate-300 text-xs font-semibold text-slate-700">
                   <tr>
-                    <td className="px-3 py-2 text-slate-500" colSpan={6}>Totals ({filtered.length} items)</td>
+                    <td className="px-3 py-2 text-slate-500" colSpan={7}>Totals ({filtered.length} items)</td>
                     <td className="px-3 py-2 text-right">{formatCurrency(filtered.reduce((s, i) => s + (Number(i.planned_cost_price) || Number(i.cost_price) || 0) * (Number(i.quantity) || 1), 0), 'SAR')}</td>
                     <td className="px-3 py-2 text-right">{formatCurrency(filtered.reduce((s, i) => s + (Number(i.actual_cost_price) || 0) * (Number(i.quantity) || 1), 0), 'SAR')}</td>
                     <td className="px-3 py-2 text-right text-emerald-700">{formatCurrency(filtered.reduce((s, i) => s + (Number(i.selling_price) || 0) * (Number(i.quantity) || 1), 0), 'SAR')}</td>
