@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import { base44 } from '@/api/base44Client';
 import { formatDate } from '@/lib/constants';
-import { Plus, ChevronRight, ChevronDown, Trash2, Pencil, Save, X, Layers, AlertTriangle, Link } from 'lucide-react';
+import { Plus, ChevronRight, ChevronDown, Trash2, Pencil, Save, X, Layers, AlertTriangle, Link, Wand2 } from 'lucide-react';
 import PanelWrapper from '@/components/ui/PanelWrapper';
+import ScheduleAssistantModal from './ScheduleAssistantModal';
 
 const STATUS_COLORS = {
   not_started: 'bg-slate-100 text-slate-600',
@@ -62,6 +63,7 @@ export default function TabWBS({ projectId, onProgressChange }) {
   const [form, setForm] = useState(emptyForm());
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
+  const [showScheduleAssistant, setShowScheduleAssistant] = useState(false);
 
   function emptyForm() {
     return { wbs_code: '', name: '', assignee: '', description: '',
@@ -434,10 +436,16 @@ export default function TabWBS({ projectId, onProgressChange }) {
             </div>
           )}
         </div>
-        <button onClick={() => startAdd('root')}
-          className="flex items-center gap-1 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold text-sm rounded">
-          <Plus className="w-4 h-4" /> Add WBS Item
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowScheduleAssistant(true)}
+            className="flex items-center gap-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white font-semibold text-sm rounded">
+            <Wand2 className="w-4 h-4" /> Schedule Assistant
+          </button>
+          <button onClick={() => startAdd('root')}
+            className="flex items-center gap-1 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold text-sm rounded">
+            <Plus className="w-4 h-4" /> Add WBS Item
+          </button>
+        </div>
       </div>
 
       {adding === 'root' && (
@@ -485,6 +493,14 @@ export default function TabWBS({ projectId, onProgressChange }) {
             {roots.map(item => renderNode(item, 0))}
           </div>
         </PanelWrapper>
+      )}
+
+      {showScheduleAssistant && (
+        <ScheduleAssistantModal
+          projectId={projectId}
+          onClose={() => setShowScheduleAssistant(false)}
+          onApplied={() => { setShowScheduleAssistant(false); load(); }}
+        />
       )}
     </div>
   );
