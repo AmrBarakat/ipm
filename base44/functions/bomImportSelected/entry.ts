@@ -42,6 +42,7 @@ function mapPreviewItemToBOMItem(item, projectId, documentId) {
     notes: [
       item.section ? `Section: ${item.section}` : '',
       item.notes || '',
+      item.review_notes ? `Review note: ${item.review_notes}` : '',
       item.confidence_score !== undefined ? `Confidence: ${item.confidence_score}%` : '',
     ].filter(Boolean).join(' | '),
   };

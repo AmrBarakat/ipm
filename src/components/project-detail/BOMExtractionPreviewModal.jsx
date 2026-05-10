@@ -196,14 +196,16 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
                           </button>
                         </th>
                         <th className="px-3 py-2.5 text-left font-semibold">Part No.</th>
-                        <th className="px-3 py-2.5 text-left font-semibold">Description</th>
+                        <th className="px-3 py-2.5 text-left font-semibold">Description / Section</th>
                         <th className="px-3 py-2.5 text-left font-semibold">Category</th>
                         <th className="px-3 py-2.5 text-left font-semibold">Manufacturer</th>
                         <th className="px-3 py-2.5 text-right font-semibold">Qty</th>
                         <th className="px-3 py-2.5 text-left font-semibold">Unit</th>
-                        <th className="px-3 py-2.5 text-right font-semibold">Unit Cost (SAR)</th>
-                        <th className="px-3 py-2.5 text-right font-semibold">Total Cost (SAR)</th>
-                        <th className="px-3 py-2.5 text-right font-semibold">Unit Sell (SAR)</th>
+                        <th className="px-3 py-2.5 text-right font-semibold">Unit Cost</th>
+                        <th className="px-3 py-2.5 text-right font-semibold">Total Cost</th>
+                        <th className="px-3 py-2.5 text-right font-semibold">Unit Sell</th>
+                        <th className="px-3 py-2.5 text-right font-semibold">Total Sell</th>
+                        <th className="px-3 py-2.5 text-right font-semibold">GP%</th>
                         <th className="px-3 py-2.5 text-center font-semibold">Conf.</th>
                       </tr>
                     </thead>
@@ -227,7 +229,8 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
                             <td className="px-3 py-2 font-mono text-slate-500 whitespace-nowrap">{item.part_no || '—'}</td>
                             <td className="px-3 py-2 text-slate-800 max-w-[220px]">
                               <div className="truncate font-medium">{item.description}</div>
-                              {item.section && <div className="text-slate-400 text-[10px] truncate">{item.section}</div>}
+                              {item.section && <div className="text-slate-400 text-[10px] truncate">📁 {item.section}</div>}
+                              {item.review_notes && <div className="text-amber-600 text-[10px] truncate">⚠ {item.review_notes}</div>}
                             </td>
                             <td className="px-3 py-2">
                               <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${CATEGORY_COLORS[item.category] || 'bg-slate-100 text-slate-500'}`}>
@@ -240,6 +243,14 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
                             <td className="px-3 py-2 text-right text-slate-700">{money(item.unit_cost_sar)}</td>
                             <td className="px-3 py-2 text-right font-semibold text-slate-800">{money(item.total_cost_sar)}</td>
                             <td className="px-3 py-2 text-right text-slate-600">{money(item.unit_selling_sar)}</td>
+                            <td className="px-3 py-2 text-right text-slate-600">{money(item.total_selling_sar)}</td>
+                            <td className="px-3 py-2 text-right">
+                              {item.margin_pct != null ? (
+                                <span className={`font-semibold ${item.margin_pct < 0 ? 'text-red-600' : item.margin_pct < 0.1 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                                  {(item.margin_pct * 100).toFixed(1)}%
+                                </span>
+                              ) : '—'}
+                            </td>
                             <td className="px-3 py-2 text-center">
                               {needsReview ? (
                                 <span className="flex items-center justify-center gap-0.5 text-amber-600">
