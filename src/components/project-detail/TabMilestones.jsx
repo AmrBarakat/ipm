@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
 import { formatDate } from '@/lib/constants';
 import { Plus, Flag, Pencil, Trash2, Save, X, Layers } from 'lucide-react';
@@ -11,11 +11,31 @@ const STATUS_COLORS = {
   overdue:     'bg-red-100 text-red-700',
 };
 
+function buildTree(items) {
+  const tree = {};
+  items.forEach(i => {
+    const pid = i.parent_id || '__root__';
+    if (!tree[pid]) tree[pid] = [];
+    tree[pid].push(i);
+  });
+  return tree;
+}
+
+function rollupProgress(id, tree, byId) {
+  const children = tree[id] || [];
+  if (children.length === 0) return byId[id]?.progress || 0;
+  const childProgresses = children.map(c => ({ p: rollupProgress(c.id, tree, byId), w: c.weight || 1 }));
+  const totalWeight = childProgresses.reduce((s, c) => s + c.w, 0);
+  return Math.round(childProgresses.reduce((s, c) => s + c.p * c.w, 0) / (totalWeight || 1));
+}
+
 function computeMilestoneProgress(milestoneId, wbsItems) {
   const linked = wbsItems.filter(i => i.milestone_id === milestoneId);
   if (linked.length === 0) return null;
+  const tree = buildTree(wbsItems);
+  const byId = Object.fromEntries(wbsItems.map(i => [i.id, i]));
   const totalWeight = linked.reduce((s, i) => s + (i.weight || 1), 0);
-  const weighted = linked.reduce((s, i) => s + (i.progress || 0) * (i.weight || 1), 0);
+  const weighted = linked.reduce((s, i) => s + rollupProgress(i.id, tree, byId) * (i.weight || 1), 0);
   return Math.round(weighted / (totalWeight || 1));
 }
 
