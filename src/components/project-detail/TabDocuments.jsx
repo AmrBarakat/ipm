@@ -4,6 +4,7 @@ import { formatDate, formatBytes, CATEGORY_LABELS } from '@/lib/constants';
 import { FileText, Upload, ExternalLink, Pencil, Trash2, Save, X, Cpu, Wand2 } from 'lucide-react';
 import BOMExtractionModal from './BOMExtractionModal';
 import DocumentExtractionModal from './DocumentExtractionModal';
+import BOMExtractionPreviewModal from './BOMExtractionPreviewModal';
 
 export default function TabDocuments({ projectId }) {
   const [docs, setDocs] = useState([]);
@@ -16,6 +17,7 @@ export default function TabDocuments({ projectId }) {
   const [editForm, setEditForm] = useState({});
   const [extractingDoc, setExtractingDoc] = useState(null);
   const [smartExtractDoc, setSmartExtractDoc] = useState(null);
+  const [bomPreviewDoc, setBomPreviewDoc] = useState(null);
 
   useEffect(() => {load();}, [projectId]);
 
@@ -139,7 +141,7 @@ export default function TabDocuments({ projectId }) {
                   className="flex items-center gap-1 px-3 py-1 text-xs border border-blue-300 rounded hover:bg-blue-50 text-blue-700 font-medium hidden">
                         <Wand2 className="w-3 h-3" /> Extract & Map
                       </button>
-                      <button onClick={() => setExtractingDoc(doc)}
+                      <button onClick={() => setBomPreviewDoc(doc)}
                   className="flex items-center gap-1 px-3 py-1 text-xs border border-amber-300 rounded hover:bg-amber-50 text-amber-700 font-medium">
                         <Cpu className="w-3 h-3" /> Extract BOM
                       </button>
@@ -161,6 +163,14 @@ export default function TabDocuments({ projectId }) {
 
         })}
         </div>
+      }
+
+      {bomPreviewDoc &&
+      <BOMExtractionPreviewModal
+        document={bomPreviewDoc}
+        projectId={projectId}
+        onClose={() => setBomPreviewDoc(null)}
+        onImported={() => setBomPreviewDoc(null)} />
       }
 
       {extractingDoc &&
