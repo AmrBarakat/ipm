@@ -72,6 +72,13 @@ export default function TabWBS({ projectId, onProgressChange }) {
 
   useEffect(() => { load(); }, [projectId]);
 
+  // Sync project progress from WBS on every tab open to fix any stale data
+  useEffect(() => {
+    base44.functions.invoke('syncWBSProgress', { project_id: projectId })
+      .then(res => { if (res?.data?.overallProgress != null) onProgressChange?.(res.data.overallProgress); })
+      .catch(() => {}); // silent — non-critical
+  }, [projectId]);
+
   async function load() {
     setLoading(true);
     const [w, m] = await Promise.all([

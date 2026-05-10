@@ -13,8 +13,8 @@ Deno.serve(async (req) => {
     const base44 = createClientFromRequest(req);
     const body = await req.json();
 
-    // Called from entity automation — get project_id from the changed WBS item
-    const projectId = body?.data?.project_id;
+    // Support both: direct call { project_id } and entity automation { data: { project_id } }
+    const projectId = body?.project_id || body?.data?.project_id;
     if (!projectId) {
       return Response.json({ skipped: true, reason: 'no project_id' });
     }
