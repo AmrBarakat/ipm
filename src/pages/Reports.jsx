@@ -2,9 +2,11 @@ import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { BarChart2 } from 'lucide-react';
 import ProfitMarginReport from '@/components/portfolio/ProfitMarginReport';
+import MaterialTrackingReport from '@/components/portfolio/MaterialTrackingReport';
 
 const TABS = [
   { id: 'profit', label: 'Profit & Margin Report' },
+  { id: 'materials', label: 'Material Tracking Report' },
 ];
 
 export default function Reports() {
@@ -46,6 +48,7 @@ export default function Reports() {
       </div>
 
       {tab === 'profit' && <ProfitMarginReport projects={projects} />}
+      {tab === 'materials' && <MaterialTrackingReport projects={projects} />}
     </div>
   );
 }
