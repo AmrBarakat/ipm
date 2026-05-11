@@ -95,7 +95,6 @@ export default function TabDeliverables({ projectId }) {
   }
 
   async function deleteItem(id) {
-    if (!confirm('Delete this deliverable?')) return;
     await base44.entities.Deliverable.delete(id);
     load();
   }
@@ -199,7 +198,6 @@ export default function TabDeliverables({ projectId }) {
   }
 
   async function bulkDelete() {
-    if (!confirm(`Delete ${selectedIds.size} deliverable(s)?`)) return;
     await Promise.all([...selectedIds].map(id => base44.entities.Deliverable.delete(id)));
     setSelectedIds(new Set());
     load();
