@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { formatDate, formatCurrency, BOM_CATEGORY_LABELS } from '@/lib/constants';
-import { Plus, Package, Pencil, Trash2, Save, X, CheckCircle, Wand2, Loader2 } from 'lucide-react';
+import { Plus, Package, Pencil, Trash2, Save, X, CheckCircle, Wand2, Loader2, Check } from 'lucide-react';
 import PanelWrapper from '@/components/ui/PanelWrapper';
 
 const STATUS_COLORS = {
@@ -32,6 +32,9 @@ export default function TabDeliverables({ projectId }) {
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
   const [generating, setGenerating] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkField, setBulkField] = useState('');
+  const [bulkValue, setBulkValue] = useState('');
 
   useEffect(() => { load(); }, [projectId]);
 
@@ -187,6 +190,29 @@ export default function TabDeliverables({ projectId }) {
     }
   }
 
+  function toggleSelect(id) {
+    setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+  function toggleSelectAll(visibleItems) {
+    const allSel = visibleItems.every(i => selectedIds.has(i.id));
+    setSelectedIds(allSel ? new Set() : new Set(visibleItems.map(i => i.id)));
+  }
+
+  async function bulkDelete() {
+    if (!confirm(`Delete ${selectedIds.size} deliverable(s)?`)) return;
+    await Promise.all([...selectedIds].map(id => base44.entities.Deliverable.delete(id)));
+    setSelectedIds(new Set());
+    load();
+  }
+
+  async function applyBulkEdit() {
+    if (!bulkField || !bulkValue) return;
+    await Promise.all([...selectedIds].map(id => base44.entities.Deliverable.update(id, { [bulkField]: bulkValue })));
+    setBulkField(''); setBulkValue('');
+    setSelectedIds(new Set());
+    load();
+  }
+
   const milestoneById = Object.fromEntries(milestones.map(m => [m.id, m]));
 
   // Group deliverables by milestone
@@ -254,6 +280,57 @@ export default function TabDeliverables({ projectId }) {
         </form>
       )}
 
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex flex-wrap items-center gap-3 bg-slate-800 text-white rounded-lg px-4 py-2.5 text-sm">
+          <span className="font-semibold text-amber-400">{selectedIds.size} selected</span>
+          <span className="text-slate-400">·</span>
+          <span className="text-slate-300 text-xs">Bulk edit:</span>
+          <select value={bulkField} onChange={e => { setBulkField(e.target.value); setBulkValue(''); }}
+            className="text-xs bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white focus:outline-none focus:border-amber-400">
+            <option value="">Field…</option>
+            <option value="status">Status</option>
+            <option value="type">Type</option>
+            <option value="milestone_id">Milestone</option>
+          </select>
+          {bulkField === 'status' && (
+            <select value={bulkValue} onChange={e => setBulkValue(e.target.value)}
+              className="text-xs bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white focus:outline-none focus:border-amber-400">
+              <option value="">Value…</option>
+              {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s.replace(/_/g,' ')}</option>)}
+            </select>
+          )}
+          {bulkField === 'type' && (
+            <select value={bulkValue} onChange={e => setBulkValue(e.target.value)}
+              className="text-xs bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white focus:outline-none focus:border-amber-400">
+              <option value="">Value…</option>
+              {TYPE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          )}
+          {bulkField === 'milestone_id' && (
+            <select value={bulkValue} onChange={e => setBulkValue(e.target.value)}
+              className="text-xs bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white focus:outline-none focus:border-amber-400">
+              <option value="">Value…</option>
+              {milestones.map(m => <option key={m.id} value={m.id}>{m.title}</option>)}
+            </select>
+          )}
+          {bulkField && bulkValue && (
+            <button onClick={applyBulkEdit}
+              className="flex items-center gap-1 px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold text-xs rounded">
+              <Save className="w-3 h-3" /> Apply
+            </button>
+          )}
+          <button onClick={bulkDelete}
+            className="flex items-center gap-1 px-3 py-1 bg-red-600 hover:bg-red-500 text-white font-semibold text-xs rounded ml-auto">
+            <Trash2 className="w-3.5 h-3.5" /> Delete {selectedIds.size}
+          </button>
+          <button onClick={() => { setSelectedIds(new Set()); setBulkField(''); setBulkValue(''); }}
+            className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-white">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {items.length === 0 && !adding ? (
         <div className="text-center py-14 text-slate-400">
           <Package className="w-10 h-10 mx-auto mb-2 opacity-30" />
@@ -292,7 +369,8 @@ export default function TabDeliverables({ projectId }) {
                 <DeliverableTable items={gItems} editingId={editingId} editForm={editForm}
                   setEditForm={setEditForm} milestones={milestones} inp={inp}
                   onEdit={startEdit} onSave={saveEdit} onCancel={() => setEditingId(null)}
-                  onDelete={deleteItem} onQuickStatus={quickStatus} />
+                  onDelete={deleteItem} onQuickStatus={quickStatus}
+                  selectedIds={selectedIds} onToggle={toggleSelect} onToggleAll={toggleSelectAll} />
               </div>
             ))}
 
@@ -305,7 +383,8 @@ export default function TabDeliverables({ projectId }) {
                 <DeliverableTable items={ungrouped} editingId={editingId} editForm={editForm}
                   setEditForm={setEditForm} milestones={milestones} inp={inp}
                   onEdit={startEdit} onSave={saveEdit} onCancel={() => setEditingId(null)}
-                  onDelete={deleteItem} onQuickStatus={quickStatus} />
+                  onDelete={deleteItem} onQuickStatus={quickStatus}
+                  selectedIds={selectedIds} onToggle={toggleSelect} onToggleAll={toggleSelectAll} />
               </div>
             )}
           </div>
@@ -315,11 +394,19 @@ export default function TabDeliverables({ projectId }) {
   );
 }
 
-function DeliverableTable({ items, editingId, editForm, setEditForm, milestones, inp, onEdit, onSave, onCancel, onDelete, onQuickStatus }) {
+function DeliverableTable({ items, editingId, editForm, setEditForm, milestones, inp, onEdit, onSave, onCancel, onDelete, onQuickStatus, selectedIds, onToggle, onToggleAll }) {
+  const allSel = items.length > 0 && items.every(i => selectedIds.has(i.id));
   return (
     <table className="w-full text-sm">
       <thead className="bg-slate-50 text-slate-500 text-xs uppercase border-b border-slate-200">
         <tr>
+          <th className="px-3 py-2 w-8">
+            <button onClick={() => onToggleAll(items)} className="flex items-center justify-center">
+              <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${allSel ? 'bg-amber-400 border-amber-400' : 'border-slate-300 hover:border-amber-400'}`}>
+                {allSel && <Check className="w-2.5 h-2.5 text-slate-900" />}
+              </div>
+            </button>
+          </th>
           <th className="px-4 py-2 text-left">Name</th>
           <th className="px-4 py-2 text-left">Type</th>
           <th className="px-4 py-2 text-left">Qty</th>
@@ -335,7 +422,14 @@ function DeliverableTable({ items, editingId, editForm, setEditForm, milestones,
           const isEditing = editingId === d.id;
           const msTitle = milestones.find(m => m.id === d.milestone_id)?.title;
           return (
-            <tr key={d.id} className="border-t border-slate-100 hover:bg-slate-50">
+            <tr key={d.id} className={`border-t border-slate-100 hover:bg-slate-50 ${selectedIds.has(d.id) ? 'bg-amber-50' : ''}`}>
+              <td className="px-3 py-2">
+                <button onClick={() => onToggle(d.id)} className="flex items-center justify-center">
+                  <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${selectedIds.has(d.id) ? 'bg-amber-400 border-amber-400' : 'border-slate-300 hover:border-amber-400'}`}>
+                    {selectedIds.has(d.id) && <Check className="w-2.5 h-2.5 text-slate-900" />}
+                  </div>
+                </button>
+              </td>
               <td className="px-4 py-2">
                 {isEditing
                   ? <input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} className={inp} />
