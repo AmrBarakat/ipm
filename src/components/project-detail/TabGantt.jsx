@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
 import { formatDate } from '@/lib/constants';
-import { ChevronLeft, ChevronRight, Flag, ZoomIn, ZoomOut, Calendar, AlertTriangle, Layers, GripHorizontal } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Flag, ZoomIn, ZoomOut, Calendar, AlertTriangle, Layers, GripHorizontal, Download, Loader2 } from 'lucide-react';
 import PanelWrapper from '@/components/ui/PanelWrapper';
+import * as XLSX from 'xlsx';
+import html2canvas from 'html2canvas';
 
 const MILESTONE_STATUS_COLORS = {
   pending:     'bg-slate-400',
@@ -46,10 +48,12 @@ export default function TabGantt({ projectId, project }) {
   const [tooltip, setTooltip] = useState(null);
   const [showDeps, setShowDeps] = useState(true);
   const [saving, setSaving] = useState({}); // id -> true while saving
+  const [exporting, setExporting] = useState(false);
 
   // Drag state
   const dragRef = useRef(null); // { id, type: 'move'|'resize-left'|'resize-right', startX, origStart, origEnd, rowEl }
   const chartAreaRef = useRef(null);
+  const chartContainerRef = useRef(null);
 
   const zoom = ZOOM_LEVELS[zoomIdx];
   const visibleDays = zoom.days;
@@ -289,6 +293,81 @@ export default function TabGantt({ projectId, project }) {
     return arrows;
   }, [wbsItems, wbsRows, viewStart, showDeps, wbsImpact]);
 
+  async function exportGantt() {
+    setExporting(true);
+    try {
+      const wb = XLSX.utils.book_new();
+
+      // ── Sheet 1: Milestones ──────────────────────────────────────────
+      const msData = milestones.map(m => ({
+        'Title': m.title,
+        'Status': m.status || '',
+        'Planned Date': m.planned_date || '',
+        'Completed Date': m.completed_date || '',
+        'Progress %': m.progress ?? 0,
+        'Weight': m.weight ?? 0,
+        'Description': m.description || '',
+      }));
+      const msSheet = XLSX.utils.json_to_sheet(msData.length ? msData : [{}]);
+      XLSX.utils.book_append_sheet(wb, msSheet, 'Milestones');
+
+      // ── Sheet 2: WBS Items ───────────────────────────────────────────
+      const wbsData = wbsItems.map(w => {
+        const linkedMs = milestones.find(m => m.id === w.milestone_id);
+        const dep = wbsImpact[w.id] || {};
+        return {
+          'WBS Code': w.wbs_code,
+          'Name': w.name,
+          'Status': w.status || '',
+          'Assignee': w.assignee || '',
+          'Planned Start': w.planned_start || '',
+          'Planned End': w.planned_end || '',
+          'Actual Start': w.actual_start || '',
+          'Actual End': w.actual_end || '',
+          'Progress %': w.progress ?? 0,
+          'Weight': w.weight ?? 0,
+          'Planned Hours': w.planned_hours ?? '',
+          'Actual Hours': w.actual_hours ?? '',
+          'Planned Cost': w.planned_cost ?? '',
+          'Actual Cost': w.actual_cost ?? '',
+          'Linked Milestone': linkedMs?.title || '',
+          'Schedule Conflict': dep.delayed ? 'Yes' : 'No',
+          'Description': w.description || '',
+        };
+      });
+      const wbsSheet = XLSX.utils.json_to_sheet(wbsData.length ? wbsData : [{}]);
+      XLSX.utils.book_append_sheet(wb, wbsSheet, 'WBS Items');
+
+      // ── Sheet 3: Chart view metadata ─────────────────────────────────
+      const viewLabel = zoom.label;
+      const viewData = [{
+        'View Filter': viewLabel,
+        'View Start': viewStart ? toISO(viewStart) : '',
+        'View End': viewEnd ? toISO(viewEnd) : '',
+        'Milestones Count': milestones.length,
+        'WBS Items Count': wbsItems.length,
+        'WBS Items with Dates': wbsRows.length,
+        'Schedule Conflicts': Object.values(wbsImpact).filter(v => v.delayed).length,
+      }];
+      const viewSheet = XLSX.utils.json_to_sheet(viewData);
+      XLSX.utils.book_append_sheet(wb, viewSheet, 'View Info');
+
+      const fileName = `Gantt_${project?.code || 'Project'}_${viewLabel}_${new Date().toISOString().slice(0,10)}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+
+      // ── Also capture chart as PNG ────────────────────────────────────
+      if (chartContainerRef.current) {
+        const canvas = await html2canvas(chartContainerRef.current, { scale: 1.5, useCORS: true, backgroundColor: '#ffffff' });
+        const link = document.createElement('a');
+        link.download = `Gantt_${project?.code || 'Project'}_${viewLabel}_${new Date().toISOString().slice(0,10)}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+      }
+    } finally {
+      setExporting(false);
+    }
+  }
+
   if (loading) return (
     <div className="flex justify-center py-16">
       <div className="w-7 h-7 border-4 border-slate-200 border-t-amber-500 rounded-full animate-spin" />
@@ -366,6 +445,11 @@ export default function TabGantt({ projectId, project }) {
             className="px-3 py-1.5 text-xs border border-slate-200 rounded hover:bg-slate-100 text-slate-600 font-medium">
             Today
           </button>
+          <button onClick={exportGantt} disabled={exporting}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-slate-200 rounded hover:bg-slate-100 text-slate-600 font-medium disabled:opacity-50">
+            {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+            Export ({zoom.label})
+          </button>
         </div>
       </div>
 
@@ -380,7 +464,7 @@ export default function TabGantt({ projectId, project }) {
       </div>
 
       {/* Chart */}
-      <div className="bg-white rounded-lg shadow-sm overflow-hidden border border-slate-200">
+      <div ref={chartContainerRef} className="bg-white rounded-lg shadow-sm overflow-hidden border border-slate-200">
         {/* Header */}
         <div className="flex border-b border-slate-200 bg-slate-50">
           <div className="w-52 shrink-0 px-4 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wide border-r border-slate-200">Item</div>
