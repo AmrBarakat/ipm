@@ -417,32 +417,43 @@ export default function TabBOM({ projectId }) {
             });
             const sortedCats = catOrder.filter(c => groups[c]);
 
-            const TABLE_HEADER = (
-              <thead className="bg-slate-50 text-slate-500 text-xs uppercase border-b border-slate-200 sticky top-0 z-10">
-                <tr>
-                  <th className="px-3 py-3 w-8">
-                    <button onClick={toggleSelectAll} className="flex items-center justify-center">
-                      <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${selectedIds.size === filtered.length && filtered.length > 0 ? 'bg-amber-400 border-amber-400' : 'border-slate-300 hover:border-amber-400'}`}>
-                        {selectedIds.size === filtered.length && filtered.length > 0 && <Check className="w-2.5 h-2.5 text-slate-900" />}
-                      </div>
-                    </button>
-                  </th>
-                  <th className="px-3 py-3 text-left">Description / Part No.</th>
-                  <th className="px-3 py-3 text-left">Category</th>
-                  <th className="px-3 py-3 text-left">Supplier</th>
-                  <th className="px-3 py-3 text-right">Qty</th>
-                  <th className="px-3 py-3 text-right">Stock</th>
-                  <th className="px-3 py-3 text-right">Order Qty</th>
-                  <th className="px-3 py-3 text-right">Planned Cost</th>
-                  <th className="px-3 py-3 text-right">Actual Cost</th>
-                  <th className="px-3 py-3 text-right">Sell Value</th>
-                  <th className="px-3 py-3 text-left">Order</th>
-                  <th className="px-3 py-3 text-left">Delivery</th>
-                  <th className="px-3 py-3 text-left">Exp. Delivery</th>
-                  <th className="px-3 py-3 w-8"></th>
-                </tr>
-              </thead>
-            );
+            function GroupTableHeader({ catItems }) {
+              const allCatSelected = catItems.length > 0 && catItems.every(i => selectedIds.has(i.id));
+              function toggleGroupAll() {
+                setSelectedIds(prev => {
+                  const next = new Set(prev);
+                  if (allCatSelected) catItems.forEach(i => next.delete(i.id));
+                  else catItems.forEach(i => next.add(i.id));
+                  return next;
+                });
+              }
+              return (
+                <thead className="bg-slate-50 text-slate-500 text-xs uppercase border-b border-slate-200 sticky top-0 z-10">
+                  <tr>
+                    <th className="px-3 py-3 w-8">
+                      <button onClick={toggleGroupAll} className="flex items-center justify-center">
+                        <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${allCatSelected ? 'bg-amber-400 border-amber-400' : 'border-slate-300 hover:border-amber-400'}`}>
+                          {allCatSelected && <Check className="w-2.5 h-2.5 text-slate-900" />}
+                        </div>
+                      </button>
+                    </th>
+                    <th className="px-3 py-3 text-left">Description / Part No.</th>
+                    <th className="px-3 py-3 text-left">Category</th>
+                    <th className="px-3 py-3 text-left">Supplier</th>
+                    <th className="px-3 py-3 text-right">Qty</th>
+                    <th className="px-3 py-3 text-right">Stock</th>
+                    <th className="px-3 py-3 text-right">Order Qty</th>
+                    <th className="px-3 py-3 text-right">Planned Cost</th>
+                    <th className="px-3 py-3 text-right">Actual Cost</th>
+                    <th className="px-3 py-3 text-right">Sell Value</th>
+                    <th className="px-3 py-3 text-left">Order</th>
+                    <th className="px-3 py-3 text-left">Delivery</th>
+                    <th className="px-3 py-3 text-left">Exp. Delivery</th>
+                    <th className="px-3 py-3 w-8"></th>
+                  </tr>
+                </thead>
+              );
+            }
 
             return (
               <div className="space-y-3">
@@ -467,7 +478,7 @@ export default function TabBOM({ projectId }) {
                       </div>
                       <div className="overflow-x-auto">
                         <table className="w-full text-sm min-w-[1200px]">
-                          {TABLE_HEADER}
+                          <GroupTableHeader catItems={catItems} />
                           <tbody>
                             {catItems.map(item => {
                               const oQty = orderQty(item);
