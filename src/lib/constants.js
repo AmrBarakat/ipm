@@ -51,6 +51,8 @@ export const CATEGORY_LABELS = {
   offer: 'Offer / Quotation',
   delivery_note: 'Delivery Note',
   engineering: 'Engineering Document',
+  drawing: 'Drawing (DWG / CAD)',
+  submittal: 'Submittal',
   report: 'Report',
   invoice: 'Invoice',
   other: 'Other',

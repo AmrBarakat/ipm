@@ -17,6 +17,8 @@
         "offer",
         "delivery_note",
         "engineering",
+        "drawing",
+        "submittal",
         "report",
         "invoice",
         "other"
@@ -48,6 +50,14 @@
     },
     "description": {
       "type": "string"
+    },
+    "linked_milestone_id": {
+      "type": "string",
+      "description": "Optional link to a Milestone"
+    },
+    "linked_task_id": {
+      "type": "string",
+      "description": "Optional link to a Task"
     },
     "bom_extraction_status": {
       "type": "string",
