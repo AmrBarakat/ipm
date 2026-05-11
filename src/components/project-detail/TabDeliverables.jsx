@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { formatDate } from '@/lib/constants';
-import { Plus, Package, Pencil, Trash2, Save, X, CheckCircle } from 'lucide-react';
+import { formatDate, formatCurrency, BOM_CATEGORY_LABELS } from '@/lib/constants';
+import { Plus, Package, Pencil, Trash2, Save, X, CheckCircle, Wand2, Loader2 } from 'lucide-react';
 import PanelWrapper from '@/components/ui/PanelWrapper';
 
 const STATUS_COLORS = {
@@ -31,6 +31,7 @@ export default function TabDeliverables({ projectId }) {
   const [form, setForm]         = useState(EMPTY);
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
+  const [generating, setGenerating] = useState(false);
 
   useEffect(() => { load(); }, [projectId]);
 
@@ -110,6 +111,82 @@ export default function TabDeliverables({ projectId }) {
     load();
   }
 
+  async function autoGenerate() {
+    if (!confirm('This will create deliverables from BOM items (panel, software & IT-HW as combined lines, others individually). Continue?')) return;
+    setGenerating(true);
+    try {
+      const bomItems = await base44.entities.BOMItem.filter({ project_id: projectId }, 'category', 500);
+
+      const toCreate = [];
+
+      // Panel items → one combined deliverable
+      const panelItems = bomItems.filter(i => i.category === 'panel');
+      if (panelItems.length > 0) {
+        const names = [...new Set(panelItems.map(i => i.description).filter(Boolean))];
+        const totalQty = panelItems.reduce((s, i) => s + (Number(i.quantity) || 1), 0);
+        toCreate.push({
+          project_id: projectId,
+          name: names.length === 1 ? names[0] : `Panel / Enclosure (${panelItems.length} items)`,
+          description: names.length > 1 ? names.slice(0, 5).join(', ') + (names.length > 5 ? '…' : '') : '',
+          type: 'hardware',
+          status: 'pending',
+          quantity: totalQty,
+          unit: 'pc',
+        });
+      }
+
+      // Software items → one combined deliverable
+      const softwareItems = bomItems.filter(i => i.category === 'software');
+      if (softwareItems.length > 0) {
+        const names = [...new Set(softwareItems.map(i => i.description).filter(Boolean))];
+        toCreate.push({
+          project_id: projectId,
+          name: `Software & Licenses (${softwareItems.length} items)`,
+          description: names.slice(0, 5).join(', ') + (names.length > 5 ? '…' : ''),
+          type: 'software',
+          status: 'pending',
+          quantity: softwareItems.reduce((s, i) => s + (Number(i.quantity) || 1), 0),
+          unit: 'license',
+        });
+      }
+
+      // IT-HW items → one combined deliverable
+      const itHwItems = bomItems.filter(i => i.category === 'IT-HW');
+      if (itHwItems.length > 0) {
+        const names = [...new Set(itHwItems.map(i => i.description).filter(Boolean))];
+        toCreate.push({
+          project_id: projectId,
+          name: `IT Hardware (${itHwItems.length} items)`,
+          description: names.slice(0, 5).join(', ') + (names.length > 5 ? '…' : ''),
+          type: 'hardware',
+          status: 'pending',
+          quantity: itHwItems.reduce((s, i) => s + (Number(i.quantity) || 1), 0),
+          unit: 'pc',
+        });
+      }
+
+      // All other categories → individual deliverables per item
+      const groupedCats = new Set(['panel', 'software', 'IT-HW']);
+      const otherItems = bomItems.filter(i => !groupedCats.has(i.category));
+      for (const item of otherItems) {
+        toCreate.push({
+          project_id: projectId,
+          name: item.description || item.manufacturer_part_number || 'BOM Item',
+          description: item.manufacturer_part_number ? `Part No: ${item.manufacturer_part_number}` : '',
+          type: ['service'].includes(item.category) ? 'service' : 'hardware',
+          status: 'pending',
+          quantity: Number(item.quantity) || 1,
+          unit: item.unit || 'pc',
+        });
+      }
+
+      await base44.entities.Deliverable.bulkCreate(toCreate);
+      load();
+    } finally {
+      setGenerating(false);
+    }
+  }
+
   const milestoneById = Object.fromEntries(milestones.map(m => [m.id, m]));
 
   // Group deliverables by milestone
@@ -133,7 +210,12 @@ export default function TabDeliverables({ projectId }) {
       </div>
 
       {/* Toolbar */}
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <button onClick={autoGenerate} disabled={generating}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm rounded disabled:opacity-50">
+          {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+          Auto-Generate from BOM
+        </button>
         <button onClick={() => { setAdding(v => !v); setForm(EMPTY); }}
           className="flex items-center gap-1 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold text-sm rounded">
           <Plus className="w-4 h-4" /> Add Deliverable

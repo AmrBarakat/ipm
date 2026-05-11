@@ -115,6 +115,7 @@ export const BOM_CATEGORY_LABELS = {
   network: 'Network / Comms',
   software: 'Software / License',
   service: 'Service / Labor',
+  'IT-HW': 'IT Hardware',
   other: 'Other',
 };
 
