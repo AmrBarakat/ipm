@@ -177,17 +177,28 @@ export default function GanttExportButton({
         doc.setTextColor(203, 213, 225);
         doc.text(`${project?.code || ''}  |  View: ${zoom?.label || ''}  |  ${toISO(viewStart)} → ${toISO(viewEnd)}`, pageW / 2, 8, { align: 'center' });
 
-        const canvas = await html2canvas(chartContainerRef.current, {
-          scale: 2,
+        // Temporarily expand the chart container so html2canvas sees the full width
+        const el = chartContainerRef.current;
+        const prevOverflow = el.style.overflow;
+        el.style.overflow = 'visible';
+
+        const canvas = await html2canvas(el, {
+          scale: 4,
           useCORS: true,
           backgroundColor: '#ffffff',
           logging: false,
+          scrollX: 0,
+          scrollY: -window.scrollY,
+          windowWidth: el.scrollWidth,
+          windowHeight: el.scrollHeight,
         });
 
-        const imgData = canvas.toDataURL('image/png');
+        el.style.overflow = prevOverflow;
+
+        const imgData = canvas.toDataURL('image/png', 1.0);
         const imgW = contentW;
         const imgH = Math.min((canvas.height / canvas.width) * imgW, pageH - 22);
-        doc.addImage(imgData, 'PNG', margin, 16, imgW, imgH);
+        doc.addImage(imgData, 'PNG', margin, 16, imgW, imgH, undefined, 'FAST');
       }
 
       // ── Page 3: Milestones Table ──────────────────────────────────────────────
