@@ -56,6 +56,40 @@ function computeConfidence(item) {
   return Math.max(0, Math.min(100, score));
 }
 
+// Detect panel sections in raw CSV text and pre-aggregate them before sending to LLM.
+// A "Panel" header = a line that contains "panel" (case-insensitive) but does NOT start with a number.
+// Its items = all consecutive lines that start with a serial number (digits), until the next non-serial line.
+function preAggregatePanels(text) {
+  const lines = text.split('\n');
+  const panelGroups = {}; // sectionName -> [ ...item lines ]
+  let currentPanel = null;
+
+  // Regex: line starts with optional whitespace then 1+ digits (serial number)
+  const SERIAL_LINE = /^\s*\d+[\s,]/;
+  const PANEL_HEADER = /panel/i;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    const isSerial = SERIAL_LINE.test(trimmed);
+
+    if (!isSerial && PANEL_HEADER.test(trimmed)) {
+      // This is a new Panel header
+      currentPanel = trimmed;
+      if (!panelGroups[currentPanel]) panelGroups[currentPanel] = [];
+    } else if (!isSerial) {
+      // A non-serial, non-panel line ends any active panel group
+      currentPanel = null;
+    } else if (isSerial && currentPanel) {
+      // Serial item inside a panel section
+      panelGroups[currentPanel].push(trimmed);
+    }
+  }
+
+  return panelGroups; // { "Panel Name": ["1, desc, ...", "2, desc, ..."], ... }
+}
+
 // Split text into chunks at line boundaries, keeping sheet headers
 function splitIntoChunks(text, chunkSize = 10000) {
   const lines = text.split('\n');
@@ -159,8 +193,72 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Split into ~10k char chunks and process in parallel
-    const chunks = splitIntoChunks(plain_text, 10000);
+    // Step 1: Pre-aggregate Panel sections directly from raw text structure
+    // (no LLM needed for these — structure is deterministic)
+    const panelGroups = preAggregatePanels(plain_text);
+    const panelPreviewItems = [];
+
+    // Build a set of line prefixes to exclude from LLM batches
+    const panelLineSet = new Set();
+    Object.entries(panelGroups).forEach(([sectionName, itemLines]) => {
+      panelLineSet.add(sectionName);
+      itemLines.forEach(l => panelLineSet.add(l));
+
+      // Parse each item line: try to extract numbers from CSV fields
+      // Format expected: serial, description, ..., unit_cost, total_cost, unit_sell, total_sell
+      const members = itemLines.map(line => {
+        const cols = line.split(',').map(c => c.trim());
+        // serial is cols[0], description is cols[1]
+        const description = cleanText(cols[1] || cols[0] || '');
+        const qty = toNumber(cols[2], 1) || 1;
+        // Try to find cost/selling from later columns
+        const nums = cols.slice(3).map(c => toNumber(c, null)).filter(n => n !== null && n > 0);
+        const unitCost = nums[0] ?? null;
+        const totalCost = nums[1] ?? (unitCost != null ? unitCost * qty : null);
+        const unitSell = nums[2] ?? null;
+        const totalSell = nums[3] ?? (unitSell != null ? unitSell * qty : null);
+        return { description, qty, unit_cost_sar: unitCost, total_cost_sar: totalCost, unit_selling_sar: unitSell, total_selling_sar: totalSell };
+      });
+
+      const totalCostAgg = members.reduce((s, i) => s + (i.total_cost_sar ?? 0), 0);
+      const totalSellAgg = members.reduce((s, i) => s + (i.total_selling_sar ?? 0), 0);
+      const grossProfitAgg = totalSellAgg > 0 ? totalSellAgg - totalCostAgg : null;
+      const marginPctAgg = (grossProfitAgg != null && totalSellAgg > 0) ? grossProfitAgg / totalSellAgg : null;
+      const subItemNotes = members.map(i => `${i.description}${i.qty > 1 ? ` (×${i.qty})` : ''}`).join('; ');
+
+      panelPreviewItems.push({
+        preview_id: `panel_agg_${sectionName.replace(/\s+/g, '_').slice(0, 40)}`,
+        part_no: '',
+        description: sectionName,
+        category: 'panel',
+        manufacturer: '',
+        supplier: '',
+        qty: 1,
+        unit: 'set',
+        unit_cost_sar: totalCostAgg || null,
+        total_cost_sar: totalCostAgg || null,
+        unit_selling_sar: totalSellAgg || null,
+        total_selling_sar: totalSellAgg || null,
+        gross_profit: grossProfitAgg,
+        margin_pct: marginPctAgg,
+        section: sectionName,
+        notes: `Aggregated from ${members.length} item(s): ${subItemNotes}`,
+        expected_delivery_date: '',
+        review_notes: '',
+        confidence_score: 85,
+        review_required: false,
+        is_panel_aggregate: true,
+        panel_item_count: members.length,
+      });
+    });
+
+    // Step 2: Strip panel lines from text before sending to LLM, then batch-process remaining
+    const strippedText = plain_text
+      .split('\n')
+      .filter(line => !panelLineSet.has(line.trim()))
+      .join('\n');
+
+    const chunks = splitIntoChunks(strippedText, 10000);
 
     const batchResults = await Promise.all(
       chunks.map((chunkText, idx) =>
@@ -169,22 +267,13 @@ Deno.serve(async (req) => {
           prompt: PROMPT_TEMPLATE(idx, chunks.length, file_name, chunkText),
           response_json_schema: ITEM_SCHEMA,
         }).then(r => (r?.response || r)?.items || [])
-         .catch(() => []) // if one batch fails, skip it rather than killing everything
+         .catch(() => [])
       )
     );
 
-    // Merge all batch results
     const rawItems = batchResults.flat();
-    const sheetName = '';
 
-    if (!rawItems.length) {
-      return Response.json({
-        items: [],
-        summary: { total: 0, auto_selected: 0, review_required: 0, sheet_name: '' }
-      });
-    }
-
-    // Normalize and enrich
+    // Normalize non-panel items
     const normalizedItems = rawItems
       .filter(row => row.description || row.part_no)
       .map((row, index) => {
@@ -224,53 +313,8 @@ Deno.serve(async (req) => {
         };
       });
 
-    // Panel aggregation: sections whose header contains "Panel"
-    const PANEL_REGEX = /panel/i;
-    const panelSections = new Set(
-      normalizedItems.map(i => i.section).filter(s => s && PANEL_REGEX.test(s))
-    );
-
-    const previewItems = [];
-    const consumedSections = new Set();
-
-    panelSections.forEach(sectionName => {
-      const members = normalizedItems.filter(i => i.section === sectionName);
-      if (!members.length) return;
-      consumedSections.add(sectionName);
-      const totalCostAgg = members.reduce((s, i) => s + (i.total_cost_sar ?? 0), 0);
-      const totalSellAgg = members.reduce((s, i) => s + (i.total_selling_sar ?? 0), 0);
-      const grossProfitAgg = totalSellAgg > 0 ? totalSellAgg - totalCostAgg : null;
-      const marginPctAgg = (grossProfitAgg != null && totalSellAgg > 0) ? grossProfitAgg / totalSellAgg : null;
-      const subItemNotes = members.map(i => `${i.description}${i.qty > 1 ? ` (×${i.qty})` : ''}`).join('; ');
-      previewItems.push({
-        preview_id: `panel_agg_${sectionName.replace(/\s+/g, '_')}`,
-        part_no: '',
-        description: sectionName,
-        category: 'panel',
-        manufacturer: members[0]?.manufacturer || '',
-        supplier: members[0]?.supplier || '',
-        qty: 1,
-        unit: 'set',
-        unit_cost_sar: totalCostAgg || null,
-        total_cost_sar: totalCostAgg || null,
-        unit_selling_sar: totalSellAgg || null,
-        total_selling_sar: totalSellAgg || null,
-        gross_profit: grossProfitAgg,
-        margin_pct: marginPctAgg,
-        section: sectionName,
-        notes: `Aggregated from ${members.length} item(s): ${subItemNotes}`,
-        expected_delivery_date: '',
-        review_notes: '',
-        confidence_score: 85,
-        review_required: false,
-        is_panel_aggregate: true,
-        panel_item_count: members.length,
-      });
-    });
-
-    normalizedItems
-      .filter(i => !consumedSections.has(i.section))
-      .forEach(i => previewItems.push(i));
+    // Merge: panel aggregates first, then regular items
+    const previewItems = [...panelPreviewItems, ...normalizedItems];
 
     const autoSelected = previewItems.filter(i => !i.review_required).length;
 
