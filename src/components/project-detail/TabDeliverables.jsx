@@ -124,9 +124,16 @@ export default function TabDeliverables({ projectId }) {
       // Panel items → one deliverable per individual panel item
       const panelItems = bomItems.filter(i => i.category === 'panel');
       for (const item of panelItems) {
+        // Extract just the panel name: take the first meaningful segment before any dash-separated suffix details
+        // or use the raw description as-is if it looks like a clean name already
+        const rawName = item.description || item.manufacturer_part_number || 'Panel / Enclosure';
+        // Strip common generic prefixes like "Supply of", "Supply and Install", "Manufacture of", etc.
+        const panelName = rawName
+          .replace(/^(supply\s+(of\s+|and\s+install\s+of\s+)?|manufacture\s+of\s+|fabrication\s+of\s+|provision\s+of\s+)/i, '')
+          .trim();
         toCreate.push({
           project_id: projectId,
-          name: item.description || item.manufacturer_part_number || 'Panel / Enclosure',
+          name: panelName,
           description: item.manufacturer_part_number ? `Part No: ${item.manufacturer_part_number}` : '',
           type: 'hardware',
           status: 'pending',
