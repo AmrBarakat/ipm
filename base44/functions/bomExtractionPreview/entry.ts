@@ -314,8 +314,36 @@ Deno.serve(async (req) => {
         };
       });
 
-    // Merge: panel aggregates first, then regular items
-    const previewItems = [...panelPreviewItems, ...normalizedItems];
+    // Deduplicate: aggregate items with same part_no + description by summing qty and total costs
+    const dedupMap = new Map();
+    for (const item of normalizedItems) {
+      const key = `${item.part_no.toLowerCase().trim()}||${item.description.toLowerCase().trim()}`;
+      if (dedupMap.has(key)) {
+        const existing = dedupMap.get(key);
+        const newQty = existing.qty + item.qty;
+        const newTotalCost = (existing.total_cost_sar ?? 0) + (item.total_cost_sar ?? 0) || null;
+        const newTotalSell = (existing.total_selling_sar ?? 0) + (item.total_selling_sar ?? 0) || null;
+        const grossProfit = (newTotalSell != null && newTotalCost != null) ? newTotalSell - newTotalCost : null;
+        const marginPct = (grossProfit != null && newTotalSell > 0) ? grossProfit / newTotalSell : null;
+        dedupMap.set(key, {
+          ...existing,
+          qty: newQty,
+          total_cost_sar: newTotalCost,
+          total_selling_sar: newTotalSell,
+          gross_profit: grossProfit,
+          margin_pct: marginPct,
+        });
+      } else {
+        dedupMap.set(key, item);
+      }
+    }
+    const deduplicatedItems = [...dedupMap.values()].map((item, index) => ({
+      ...item,
+      preview_id: `item_${index}`,
+    }));
+
+    // Merge: panel aggregates first, then deduplicated regular items
+    const previewItems = [...panelPreviewItems, ...deduplicatedItems];
 
     const autoSelected = previewItems.filter(i => !i.review_required).length;
 
