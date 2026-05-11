@@ -88,7 +88,7 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
       const plainText = await convertFileToPlainText(document.file_url);
       if (!plainText || plainText.trim().length < 20) throw new Error('Could not read content from this file.');
       const res = await base44.functions.invoke('bomExtractionPreview', {
-        plain_text: plainText.slice(0, 40000),
+        plain_text: plainText.slice(0, 25000),
         project_id: projectId,
         document_id: document.id,
         file_name: document.file_name || document.title,

@@ -77,7 +77,7 @@ Deno.serve(async (req) => {
 
     // Use LLM with the plain text converted from Excel in the browser
     const llmResult = await base44.asServiceRole.integrations.Core.InvokeLLM({
-      model: 'claude_sonnet_4_6',
+      model: 'gpt_5_4',
       prompt: `You are a production-grade BOM (Bill of Materials) extraction engine for industrial automation projects.
 The content below is plain text converted from an Excel workbook (file: ${file_name || 'BOM document'}).
 Each sheet is separated by "=== SHEET: name ===" markers. Rows are comma-separated values.
