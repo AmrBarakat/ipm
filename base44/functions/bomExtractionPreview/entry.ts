@@ -272,6 +272,7 @@ Deno.serve(async (req) => {
     );
 
     const rawItems = batchResults.flat();
+    const sheetName = '';
 
     // Normalize non-panel items
     const normalizedItems = rawItems
