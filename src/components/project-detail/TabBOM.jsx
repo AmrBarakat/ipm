@@ -405,10 +405,20 @@ export default function TabBOM({ projectId }) {
             { key: 'expected_delivery', label: 'Expected Delivery' },
           ]}
         >
-          <div className="text-xs text-slate-500 mb-2">{filtered.length} of {items.length} items · <span className="italic">Click any cell to edit · Check rows for bulk edit</span></div>
-          <div className="bg-white rounded-lg shadow-sm overflow-x-auto">
-            <table className="w-full text-sm min-w-[1200px]">
-              <thead className="bg-slate-50 text-slate-500 text-xs uppercase border-b border-slate-200">
+          {/* Group items by category */}
+          {(() => {
+            // Build ordered category groups from filtered items
+            const catOrder = Object.keys(BOM_CATEGORY_LABELS);
+            const groups = {};
+            filtered.forEach(item => {
+              const cat = item.category || 'other';
+              if (!groups[cat]) groups[cat] = [];
+              groups[cat].push(item);
+            });
+            const sortedCats = catOrder.filter(c => groups[c]);
+
+            const TABLE_HEADER = (
+              <thead className="bg-slate-50 text-slate-500 text-xs uppercase border-b border-slate-200 sticky top-0 z-10">
                 <tr>
                   <th className="px-3 py-3 w-8">
                     <button onClick={toggleSelectAll} className="flex items-center justify-center">
@@ -421,216 +431,155 @@ export default function TabBOM({ projectId }) {
                   <th className="px-3 py-3 text-left">Category</th>
                   <th className="px-3 py-3 text-left">Supplier</th>
                   <th className="px-3 py-3 text-right">Qty</th>
-                  <th className="px-3 py-3 text-right">Stock Qty</th>
+                  <th className="px-3 py-3 text-right">Stock</th>
                   <th className="px-3 py-3 text-right">Order Qty</th>
                   <th className="px-3 py-3 text-right">Planned Cost</th>
                   <th className="px-3 py-3 text-right">Actual Cost</th>
                   <th className="px-3 py-3 text-right">Sell Value</th>
-                  <th className="px-3 py-3 text-left">Order Status</th>
+                  <th className="px-3 py-3 text-left">Order</th>
                   <th className="px-3 py-3 text-left">Delivery</th>
                   <th className="px-3 py-3 text-left">Exp. Delivery</th>
                   <th className="px-3 py-3 w-8"></th>
                 </tr>
               </thead>
-              <tbody>
-                {filtered.map(item => {
-                  const oQty = orderQty(item);
-                  const plannedUnit = Number(item.planned_cost_price) || Number(item.cost_price) || 0;
-                  const actualUnit = Number(item.actual_cost_price) || 0;
-                  const itemOrderStatus = item.order_status || (item.ordered ? 'ordered' : 'not_ordered');
-                  const isSaving = saving[item.id];
+            );
 
-                  const isSelected = selectedIds.has(item.id);
+            return (
+              <div className="space-y-3">
+                <div className="text-xs text-slate-500">{filtered.length} of {items.length} items · <span className="italic">Click any cell to edit · Check rows for bulk edit</span></div>
+                {sortedCats.map(cat => {
+                  const catItems = groups[cat];
+                  const catPlanned = catItems.reduce((s, i) => s + (Number(i.planned_cost_price) || Number(i.cost_price) || 0) * (Number(i.quantity) || 1), 0);
+                  const catActual = catItems.reduce((s, i) => s + (Number(i.actual_cost_price) || 0) * (Number(i.quantity) || 1), 0);
+                  const catSell = catItems.reduce((s, i) => s + (Number(i.selling_price) || 0) * (Number(i.quantity) || 1), 0);
                   return (
-                    <tr key={item.id} className={`border-t border-slate-100 hover:bg-amber-50/30 ${isSaving ? 'opacity-70' : ''} ${isSelected ? 'bg-amber-50' : ''}`}>
-                      {/* Checkbox */}
-                      <td className="px-3 py-1">
-                        <button onClick={() => toggleSelect(item.id)} className="flex items-center justify-center">
-                          <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${isSelected ? 'bg-amber-400 border-amber-400' : 'border-slate-300 hover:border-amber-400'}`}>
-                            {isSelected && <Check className="w-2.5 h-2.5 text-slate-900" />}
-                          </div>
-                        </button>
-                      </td>
-                      {/* Description / Part No */}
-                      <td className="px-1 py-1">
-                        <div className="space-y-0.5">
-                          <input
-                            className={inp}
-                            value={item.description || ''}
-                            onChange={e => updateField(item.id, 'description', e.target.value)}
-                            onBlur={e => handleBlur(item, 'description', e.target.value)}
-                            placeholder="Description"
-                          />
-                          <input
-                            className={inp + ' text-slate-400'}
-                            value={item.manufacturer_part_number || ''}
-                            onChange={e => updateField(item.id, 'manufacturer_part_number', e.target.value)}
-                            onBlur={e => handleBlur(item, 'manufacturer_part_number', e.target.value)}
-                            placeholder="Part No."
-                          />
-                        </div>
-                      </td>
-                      {/* Category */}
-                      <td className="px-1 py-1">
-                        <select
-                          className={inp + ' cursor-pointer'}
-                          value={item.category || 'other'}
-                          onChange={e => handleSelectChange(item, 'category', e.target.value)}
-                        >
-                          {Object.entries(BOM_CATEGORY_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                        </select>
-                      </td>
-                      {/* Supplier */}
-                      <td className="px-1 py-1">
-                        <input
-                          className={inp}
-                          value={item.supplier || ''}
-                          onChange={e => updateField(item.id, 'supplier', e.target.value)}
-                          onBlur={e => handleBlur(item, 'supplier', e.target.value)}
-                          placeholder="Supplier"
-                        />
-                      </td>
-                      {/* Qty */}
-                      <td className="px-1 py-1 text-right">
-                        <div className="flex gap-1 justify-end items-center">
-                          <input
-                            type="number"
-                            className={inp + ' text-right'}
-                            style={{ width: 55 }}
-                            value={item.quantity ?? 1}
-                            onChange={e => updateField(item.id, 'quantity', e.target.value)}
-                            onBlur={e => handleBlur(item, 'quantity', e.target.value)}
-                            min="0"
-                          />
-                          <input
-                            className={inp}
-                            style={{ width: 40 }}
-                            value={item.unit || 'pcs'}
-                            onChange={e => updateField(item.id, 'unit', e.target.value)}
-                            onBlur={e => handleBlur(item, 'unit', e.target.value)}
-                          />
-                        </div>
-                      </td>
-                      {/* Stock Qty */}
-                      <td className="px-1 py-1 text-right">
-                        <input
-                          type="number"
-                          className={inp + ' text-right'}
-                          style={{ width: 65 }}
-                          value={item.stock_qty ?? 0}
-                          onChange={e => updateField(item.id, 'stock_qty', e.target.value)}
-                          onBlur={e => handleBlur(item, 'stock_qty', e.target.value)}
-                          min="0"
-                        />
-                      </td>
-                      {/* Order Qty (computed, read-only) */}
-                      <td className="px-3 py-2 text-right">
-                        <span className={`font-semibold text-xs ${oQty > 0 ? 'text-amber-700' : 'text-emerald-600'}`}>{oQty}</span>
-                      </td>
-                      {/* Planned Cost */}
-                      <td className="px-1 py-1 text-right">
-                        <div className="flex flex-col items-end">
-                          <input
-                            type="number"
-                            className={inp + ' text-right'}
-                            style={{ width: 90 }}
-                            value={item.planned_cost_price ?? 0}
-                            onChange={e => updateField(item.id, 'planned_cost_price', e.target.value)}
-                            onBlur={e => handleBlur(item, 'planned_cost_price', e.target.value)}
-                            min="0"
-                            placeholder="0"
-                          />
-                          <span className="text-xs text-slate-400 mt-0.5">= {formatCurrency(plannedUnit * (Number(item.quantity) || 1), item.currency || 'SAR')}</span>
-                        </div>
-                      </td>
-                      {/* Actual Cost */}
-                      <td className="px-1 py-1 text-right">
-                        <div className="flex flex-col items-end">
-                          <input
-                            type="number"
-                            className={inp + ' text-right'}
-                            style={{ width: 90 }}
-                            value={item.actual_cost_price ?? 0}
-                            onChange={e => updateField(item.id, 'actual_cost_price', e.target.value)}
-                            onBlur={e => handleBlur(item, 'actual_cost_price', e.target.value)}
-                            min="0"
-                            placeholder="0"
-                          />
-                          <span className="text-xs text-slate-400 mt-0.5">= {formatCurrency(actualUnit * (Number(item.quantity) || 1), item.currency || 'SAR')}</span>
-                        </div>
-                      </td>
-                      {/* Sell Value */}
-                      <td className="px-1 py-1 text-right">
-                        <div className="flex flex-col items-end">
-                          <input
-                            type="number"
-                            className={inp + ' text-right'}
-                            style={{ width: 90 }}
-                            value={item.selling_price ?? 0}
-                            onChange={e => updateField(item.id, 'selling_price', e.target.value)}
-                            onBlur={e => handleBlur(item, 'selling_price', e.target.value)}
-                            min="0"
-                            placeholder="0"
-                          />
-                          <span className="text-xs text-slate-400 mt-0.5">= {formatCurrency((Number(item.selling_price) || 0) * (Number(item.quantity) || 1), item.currency || 'SAR')}</span>
-                        </div>
-                      </td>
-                      {/* Order Status */}
-                      <td className="px-1 py-1">
-                        <select
-                          className={`text-xs px-2 py-1 rounded font-semibold border-0 cursor-pointer ${ORDER_COLORS[itemOrderStatus] || 'bg-slate-100 text-slate-600'}`}
-                          value={itemOrderStatus}
-                          onChange={e => handleSelectChange(item, 'order_status', e.target.value)}
-                        >
-                          <option value="not_ordered">Not Ordered</option>
-                          <option value="ordered">Ordered</option>
-                        </select>
-                      </td>
-                      {/* Delivery Status */}
-                      <td className="px-1 py-1">
-                        <select
-                          className={`text-xs px-2 py-1 rounded font-semibold border-0 cursor-pointer ${DELIVERY_COLORS[item.delivery_status] || 'bg-slate-100 text-slate-600'}`}
-                          value={item.delivery_status || 'pending'}
-                          onChange={e => handleSelectChange(item, 'delivery_status', e.target.value)}
-                        >
-                          <option value="pending">Pending</option>
-                          <option value="partially_received">Partially Received</option>
-                          <option value="received">Received</option>
-                        </select>
-                      </td>
-                      {/* Expected Delivery */}
-                      <td className="px-1 py-1">
-                        <input
-                          type="date"
-                          className={inp}
-                          value={item.expected_delivery_date || ''}
-                          onChange={e => updateField(item.id, 'expected_delivery_date', e.target.value)}
-                          onBlur={e => handleBlur(item, 'expected_delivery_date', e.target.value)}
-                        />
-                      </td>
-                      {/* Delete */}
-                      <td className="px-2 py-1">
-                        <button onClick={() => deleteItem(item.id)} className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </td>
-                    </tr>
+                    <div key={cat} className="bg-white rounded-lg shadow-sm overflow-hidden border border-slate-200">
+                      {/* Category header row */}
+                      <div className="flex items-center gap-3 px-4 py-2.5 bg-slate-800 text-white text-xs font-semibold">
+                        <span className="uppercase tracking-wide text-slate-300">{BOM_CATEGORY_LABELS[cat] || cat}</span>
+                        <span className="text-slate-400">·</span>
+                        <span className="text-slate-300">{catItems.length} item{catItems.length !== 1 ? 's' : ''}</span>
+                        <span className="ml-auto flex gap-4 text-xs">
+                          <span>Planned: <span className="text-amber-300 font-bold">{formatCurrency(catPlanned, 'SAR')}</span></span>
+                          <span>Actual: <span className="text-blue-300 font-bold">{formatCurrency(catActual, 'SAR')}</span></span>
+                          <span>Sell: <span className="text-emerald-300 font-bold">{formatCurrency(catSell, 'SAR')}</span></span>
+                        </span>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm min-w-[1200px]">
+                          {TABLE_HEADER}
+                          <tbody>
+                            {catItems.map(item => {
+                              const oQty = orderQty(item);
+                              const plannedUnit = Number(item.planned_cost_price) || Number(item.cost_price) || 0;
+                              const actualUnit = Number(item.actual_cost_price) || 0;
+                              const itemOrderStatus = item.order_status || (item.ordered ? 'ordered' : 'not_ordered');
+                              const isSaving = saving[item.id];
+                              const isSelected = selectedIds.has(item.id);
+                              return (
+                                <tr key={item.id} className={`border-t border-slate-100 hover:bg-amber-50/30 ${isSaving ? 'opacity-70' : ''} ${isSelected ? 'bg-amber-50' : ''}`}>
+                                  <td className="px-3 py-1">
+                                    <button onClick={() => toggleSelect(item.id)} className="flex items-center justify-center">
+                                      <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${isSelected ? 'bg-amber-400 border-amber-400' : 'border-slate-300 hover:border-amber-400'}`}>
+                                        {isSelected && <Check className="w-2.5 h-2.5 text-slate-900" />}
+                                      </div>
+                                    </button>
+                                  </td>
+                                  <td className="px-1 py-1">
+                                    <div className="space-y-0.5">
+                                      <input className={inp} value={item.description || ''} onChange={e => updateField(item.id, 'description', e.target.value)} onBlur={e => handleBlur(item, 'description', e.target.value)} placeholder="Description" />
+                                      <input className={inp + ' text-slate-400'} value={item.manufacturer_part_number || ''} onChange={e => updateField(item.id, 'manufacturer_part_number', e.target.value)} onBlur={e => handleBlur(item, 'manufacturer_part_number', e.target.value)} placeholder="Part No." />
+                                    </div>
+                                  </td>
+                                  <td className="px-1 py-1">
+                                    <select className={inp + ' cursor-pointer'} value={item.category || 'other'} onChange={e => handleSelectChange(item, 'category', e.target.value)}>
+                                      {Object.entries(BOM_CATEGORY_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                                    </select>
+                                  </td>
+                                  <td className="px-1 py-1">
+                                    <input className={inp} value={item.supplier || ''} onChange={e => updateField(item.id, 'supplier', e.target.value)} onBlur={e => handleBlur(item, 'supplier', e.target.value)} placeholder="Supplier" />
+                                  </td>
+                                  <td className="px-1 py-1 text-right">
+                                    <div className="flex gap-1 justify-end items-center">
+                                      <input type="number" className={inp + ' text-right'} style={{ width: 55 }} value={item.quantity ?? 1} onChange={e => updateField(item.id, 'quantity', e.target.value)} onBlur={e => handleBlur(item, 'quantity', e.target.value)} min="0" />
+                                      <input className={inp} style={{ width: 40 }} value={item.unit || 'pcs'} onChange={e => updateField(item.id, 'unit', e.target.value)} onBlur={e => handleBlur(item, 'unit', e.target.value)} />
+                                    </div>
+                                  </td>
+                                  <td className="px-1 py-1 text-right">
+                                    <input type="number" className={inp + ' text-right'} style={{ width: 65 }} value={item.stock_qty ?? 0} onChange={e => updateField(item.id, 'stock_qty', e.target.value)} onBlur={e => handleBlur(item, 'stock_qty', e.target.value)} min="0" />
+                                  </td>
+                                  <td className="px-3 py-2 text-right">
+                                    <span className={`font-semibold text-xs ${oQty > 0 ? 'text-amber-700' : 'text-emerald-600'}`}>{oQty}</span>
+                                  </td>
+                                  <td className="px-1 py-1 text-right">
+                                    <div className="flex flex-col items-end">
+                                      <input type="number" className={inp + ' text-right'} style={{ width: 90 }} value={item.planned_cost_price ?? 0} onChange={e => updateField(item.id, 'planned_cost_price', e.target.value)} onBlur={e => handleBlur(item, 'planned_cost_price', e.target.value)} min="0" placeholder="0" />
+                                      <span className="text-xs text-slate-400 mt-0.5">= {formatCurrency(plannedUnit * (Number(item.quantity) || 1), item.currency || 'SAR')}</span>
+                                    </div>
+                                  </td>
+                                  <td className="px-1 py-1 text-right">
+                                    <div className="flex flex-col items-end">
+                                      <input type="number" className={inp + ' text-right'} style={{ width: 90 }} value={item.actual_cost_price ?? 0} onChange={e => updateField(item.id, 'actual_cost_price', e.target.value)} onBlur={e => handleBlur(item, 'actual_cost_price', e.target.value)} min="0" placeholder="0" />
+                                      <span className="text-xs text-slate-400 mt-0.5">= {formatCurrency(actualUnit * (Number(item.quantity) || 1), item.currency || 'SAR')}</span>
+                                    </div>
+                                  </td>
+                                  <td className="px-1 py-1 text-right">
+                                    <div className="flex flex-col items-end">
+                                      <input type="number" className={inp + ' text-right'} style={{ width: 90 }} value={item.selling_price ?? 0} onChange={e => updateField(item.id, 'selling_price', e.target.value)} onBlur={e => handleBlur(item, 'selling_price', e.target.value)} min="0" placeholder="0" />
+                                      <span className="text-xs text-slate-400 mt-0.5">= {formatCurrency((Number(item.selling_price) || 0) * (Number(item.quantity) || 1), item.currency || 'SAR')}</span>
+                                    </div>
+                                  </td>
+                                  <td className="px-1 py-1">
+                                    <select className={`text-xs px-2 py-1 rounded font-semibold border-0 cursor-pointer ${ORDER_COLORS[itemOrderStatus] || 'bg-slate-100 text-slate-600'}`} value={itemOrderStatus} onChange={e => handleSelectChange(item, 'order_status', e.target.value)}>
+                                      <option value="not_ordered">Not Ordered</option>
+                                      <option value="ordered">Ordered</option>
+                                    </select>
+                                  </td>
+                                  <td className="px-1 py-1">
+                                    <select className={`text-xs px-2 py-1 rounded font-semibold border-0 cursor-pointer ${DELIVERY_COLORS[item.delivery_status] || 'bg-slate-100 text-slate-600'}`} value={item.delivery_status || 'pending'} onChange={e => handleSelectChange(item, 'delivery_status', e.target.value)}>
+                                      <option value="pending">Pending</option>
+                                      <option value="partially_received">Partially Received</option>
+                                      <option value="received">Received</option>
+                                    </select>
+                                  </td>
+                                  <td className="px-1 py-1">
+                                    <input type="date" className={inp} value={item.expected_delivery_date || ''} onChange={e => updateField(item.id, 'expected_delivery_date', e.target.value)} onBlur={e => handleBlur(item, 'expected_delivery_date', e.target.value)} />
+                                  </td>
+                                  <td className="px-2 py-1">
+                                    <button onClick={() => deleteItem(item.id)} className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded">
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                          <tfoot className="bg-slate-50 border-t border-slate-200 text-xs font-semibold text-slate-600">
+                            <tr>
+                              <td colSpan={7} className="px-3 py-2">Subtotal ({catItems.length})</td>
+                              <td className="px-3 py-2 text-right">{formatCurrency(catPlanned, 'SAR')}</td>
+                              <td className="px-3 py-2 text-right">{formatCurrency(catActual, 'SAR')}</td>
+                              <td className="px-3 py-2 text-right text-emerald-700">{formatCurrency(catSell, 'SAR')}</td>
+                              <td colSpan={4}></td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    </div>
                   );
                 })}
-              </tbody>
-              {filtered.length > 0 && (
-                <tfoot className="bg-slate-50 border-t-2 border-slate-300 text-xs font-semibold text-slate-700">
-                  <tr>
-                    <td className="px-3 py-2 text-slate-500" colSpan={7}>Totals ({filtered.length} items)</td>
-                    <td className="px-3 py-2 text-right">{formatCurrency(filtered.reduce((s, i) => s + (Number(i.planned_cost_price) || Number(i.cost_price) || 0) * (Number(i.quantity) || 1), 0), 'SAR')}</td>
-                    <td className="px-3 py-2 text-right">{formatCurrency(filtered.reduce((s, i) => s + (Number(i.actual_cost_price) || 0) * (Number(i.quantity) || 1), 0), 'SAR')}</td>
-                    <td className="px-3 py-2 text-right text-emerald-700">{formatCurrency(filtered.reduce((s, i) => s + (Number(i.selling_price) || 0) * (Number(i.quantity) || 1), 0), 'SAR')}</td>
-                    <td colSpan={4}></td>
-                  </tr>
-                </tfoot>
-              )}
-            </table>
-          </div>
+                {/* Grand total */}
+                <div className="bg-slate-800 text-white rounded-lg px-4 py-3 flex flex-wrap gap-6 text-xs font-semibold">
+                  <span className="text-slate-300">Grand Total ({filtered.length} items)</span>
+                  <span className="ml-auto flex gap-6">
+                    <span>Planned: <span className="text-amber-300">{formatCurrency(filtered.reduce((s, i) => s + (Number(i.planned_cost_price) || Number(i.cost_price) || 0) * (Number(i.quantity) || 1), 0), 'SAR')}</span></span>
+                    <span>Actual: <span className="text-blue-300">{formatCurrency(filtered.reduce((s, i) => s + (Number(i.actual_cost_price) || 0) * (Number(i.quantity) || 1), 0), 'SAR')}</span></span>
+                    <span>Sell: <span className="text-emerald-300">{formatCurrency(filtered.reduce((s, i) => s + (Number(i.selling_price) || 0) * (Number(i.quantity) || 1), 0), 'SAR')}</span></span>
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
         </PanelWrapper>
       )}
 
