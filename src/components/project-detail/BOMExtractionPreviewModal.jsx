@@ -1,11 +1,12 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import * as XLSX from 'xlsx';
 import {
   X, Loader2, CheckCircle2, FileSearch, AlertTriangle,
-  ChevronDown, ChevronUp, Check, Pencil, Layers
+  ChevronDown, ChevronUp, Check, Pencil, Layers, FileText, Settings
 } from 'lucide-react';
 import { BOM_CATEGORY_LABELS } from '@/lib/constants';
+import BOMTemplateEditor from '@/components/bom/BOMTemplateEditor';
 
 async function convertFileToPlainText(fileUrl) {
   const response = await fetch(fileUrl);
@@ -49,9 +50,17 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [error, setError] = useState('');
   const [showAll, setShowAll] = useState(false);
+  const [showTemplateEditor, setShowTemplateEditor] = useState(false);
+  const [activeTemplate, setActiveTemplate] = useState(null);
   // Bulk edit state for preview
   const [bulkCategory, setBulkCategory] = useState('');
   const [bulkSupplier, setBulkSupplier] = useState('');
+
+  // Load default template on mount
+  useEffect(() => {
+    base44.entities.BOMTemplate.filter({ is_default: true }, '-created_date', 1)
+      .then(results => { if (results[0]) setActiveTemplate(results[0]); });
+  }, []);
 
   const selectedItems = useMemo(() => items.filter(i => selectedIds.has(i.preview_id)), [items, selectedIds]);
   const allSelected = items.length > 0 && selectedIds.size === items.length;
@@ -92,6 +101,7 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
         project_id: projectId,
         document_id: document.id,
         file_name: document.file_name || document.title,
+        template: activeTemplate || undefined,
       });
       const previewItems = res?.data?.items || [];
       setSummary(res?.data?.summary || null);
@@ -147,7 +157,7 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
         <div className="flex-1 overflow-auto p-6">
 
           {step === 'idle' && (
-            <div className="text-center py-12">
+            <div className="text-center py-10">
               <div className="w-16 h-16 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-4">
                 <FileSearch className="w-8 h-8 text-amber-500" />
               </div>
@@ -155,14 +165,41 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
               <p className="text-slate-500 text-sm max-w-md mx-auto mb-2">
                 AI will scan this document and extract all equipment, materials, and services. Sections with "Panel" in their header will be automatically aggregated into a single panel item.
               </p>
-              <p className="text-slate-400 text-xs max-w-md mx-auto mb-6">
+              <p className="text-slate-400 text-xs max-w-md mx-auto mb-5">
                 After extraction you can edit categories and suppliers inline before importing.
               </p>
+
+              {/* Active template indicator */}
+              <div className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg mb-5 text-sm">
+                <FileText className="w-4 h-4 text-slate-400 shrink-0" />
+                {activeTemplate ? (
+                  <span className="text-slate-700">
+                    Template: <span className="font-semibold text-amber-600">{activeTemplate.name}</span>
+                    {activeTemplate.default_supplier && <span className="text-slate-400 ml-1">· {activeTemplate.default_supplier}</span>}
+                  </span>
+                ) : (
+                  <span className="text-slate-400">No template selected — using defaults</span>
+                )}
+                <button onClick={() => setShowTemplateEditor(true)}
+                  className="ml-2 flex items-center gap-1 text-xs text-slate-500 hover:text-amber-600 border border-slate-200 rounded px-2 py-0.5 hover:border-amber-300 transition">
+                  <Settings className="w-3 h-3" /> Manage
+                </button>
+              </div>
+
               {error && <div className="text-red-600 text-sm mb-4 bg-red-50 border border-red-200 rounded p-3 max-w-md mx-auto">{error}</div>}
-              <button onClick={runPreview} className="px-6 py-3 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold rounded-lg text-sm">
-                Start BOM Extraction
-              </button>
+              <div>
+                <button onClick={runPreview} className="px-6 py-3 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold rounded-lg text-sm">
+                  Start BOM Extraction
+                </button>
+              </div>
             </div>
+          )}
+
+          {showTemplateEditor && (
+            <BOMTemplateEditor
+              onClose={() => setShowTemplateEditor(false)}
+              onTemplateSelected={(tpl) => { setActiveTemplate(tpl); setShowTemplateEditor(false); }}
+            />
           )}
 
           {step === 'loading' && (

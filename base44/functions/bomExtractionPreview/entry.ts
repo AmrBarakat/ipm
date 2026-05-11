@@ -59,14 +59,13 @@ function computeConfidence(item) {
 // Detect panel sections in raw CSV text and pre-aggregate them before sending to LLM.
 // A "Panel" header = a line that contains "panel" (case-insensitive) but does NOT start with a number.
 // Its items = all consecutive lines that start with a serial number (digits), until the next non-serial line.
-function preAggregatePanels(text) {
+function preAggregatePanels(text, panelKeyword = 'Panel') {
   const lines = text.split('\n');
   const panelGroups = {}; // sectionName -> [ ...item lines ]
   let currentPanel = null;
 
-  // Regex: line starts with optional whitespace then 1+ digits (serial number)
   const SERIAL_LINE = /^\s*\d+[\s,]/;
-  const PANEL_HEADER = /panel/i;
+  const PANEL_HEADER = new RegExp(panelKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
 
   for (const line of lines) {
     const trimmed = line.trim();
@@ -112,7 +111,7 @@ function splitIntoChunks(text, chunkSize = 10000) {
   return chunks;
 }
 
-const PROMPT_TEMPLATE = (chunkIndex, totalChunks, fileName, chunkText) => `You are a BOM extraction engine for industrial automation projects.
+const PROMPT_TEMPLATE = (chunkIndex, totalChunks, fileName, chunkText, extraInstructions = '', columnHints = '') => `You are a BOM extraction engine for industrial automation projects.
 This is chunk ${chunkIndex + 1} of ${totalChunks} from file: ${fileName || 'BOM document'}.
 Extract EVERY BOM line item from this portion. Context carries over across chunks.
 
@@ -141,7 +140,7 @@ plc, hmi, drive, sensor, meter, panel, cable, network, software, service, other
 ## NUMBERS: strip SAR/USD/EUR/AED, remove commas, null for missing values.
 
 ## CONTENT:
-${chunkText}`;
+${chunkText}${columnHints ? `\n\n## COLUMN HINTS:\n${columnHints}` : ''}${extraInstructions ? `\n\n## EXTRA INSTRUCTIONS:\n${extraInstructions}` : ''}`;
 
 const ITEM_SCHEMA = {
   type: 'object',
@@ -181,10 +180,19 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { plain_text, project_id, document_id, file_name } = await req.json();
+    const { plain_text, project_id, document_id, file_name, template } = await req.json();
     if (!plain_text || !project_id) {
       return Response.json({ error: 'plain_text and project_id are required' }, { status: 400 });
     }
+
+    // Apply template settings
+    const tplPanelKeyword = template?.panel_keyword || 'Panel';
+    const tplDefaultSupplier = template?.default_supplier || '';
+    const tplDefaultCategory = template?.default_category || '';
+    const tplAggregateDuplicates = template?.aggregate_duplicates !== false; // default true
+    const tplExtraInstructions = template?.extra_instructions || '';
+    const tplColumnMappings = template?.column_mappings || {};
+    const tplCurrency = template?.default_currency || 'SAR';
 
     if (document_id) {
       await base44.asServiceRole.entities.Document.update(document_id, {
@@ -194,8 +202,7 @@ Deno.serve(async (req) => {
     }
 
     // Step 1: Pre-aggregate Panel sections directly from raw text structure
-    // (no LLM needed for these — structure is deterministic)
-    const panelGroups = preAggregatePanels(plain_text);
+    const panelGroups = preAggregatePanels(plain_text, tplPanelKeyword);
     const panelPreviewItems = [];
 
     // Build a set of line prefixes to exclude from LLM batches
@@ -260,11 +267,17 @@ Deno.serve(async (req) => {
 
     const chunks = splitIntoChunks(strippedText, 10000);
 
+    // Build column hints string from template
+    const colHintsStr = Object.entries(tplColumnMappings)
+      .filter(([, v]) => v && v.trim())
+      .map(([k, v]) => `- ${k}: "${v}"`)
+      .join('\n');
+
     const batchResults = await Promise.all(
       chunks.map((chunkText, idx) =>
         base44.asServiceRole.integrations.Core.InvokeLLM({
           model: 'gpt_5_4',
-          prompt: PROMPT_TEMPLATE(idx, chunks.length, file_name, chunkText),
+          prompt: PROMPT_TEMPLATE(idx, chunks.length, file_name, chunkText, tplExtraInstructions, colHintsStr),
           response_json_schema: ITEM_SCHEMA,
         }).then(r => (r?.response || r)?.items || [])
          .catch(() => [])
@@ -290,13 +303,19 @@ Deno.serve(async (req) => {
           part_no: row.part_no, description, qty, unit_cost_sar: unitCost,
           section: row.section, review_notes: row.review_notes,
         });
+        const rawSupplier = cleanText(row.supplier || '').replace(/^<UNKNOWN>$/i, '');
+        const resolvedSupplier = (tplDefaultSupplier && !rawSupplier) ? tplDefaultSupplier : rawSupplier;
+        const resolvedCategory = (() => {
+          const cat = normalizeCategory(row.category, description);
+          return (tplDefaultCategory && cat === 'other') ? tplDefaultCategory : cat;
+        })();
         return {
           preview_id: `item_${index}`,
           part_no: cleanText(row.part_no || ''),
           description,
-          category: normalizeCategory(row.category, description),
+          category: resolvedCategory,
           manufacturer: cleanText(row.manufacturer || '').replace(/^<UNKNOWN>$/i, ''),
-          supplier: cleanText(row.supplier || '').replace(/^<UNKNOWN>$/i, ''),
+          supplier: resolvedSupplier,
           qty,
           unit: row.unit || 'pcs',
           unit_cost_sar: unitCost,
@@ -311,10 +330,20 @@ Deno.serve(async (req) => {
           review_notes: cleanText(row.review_notes || ''),
           confidence_score: confidence,
           review_required: confidence < 60 || (row.review_notes && row.review_notes.length > 0),
+          currency: tplCurrency,
         };
       });
 
-    // Deduplicate: aggregate items with same part_no + description by summing qty and total costs
+    // Deduplicate: aggregate items with same part_no + description (if enabled)
+    if (!tplAggregateDuplicates) {
+      const previewItems = [...panelPreviewItems, ...normalizedItems.map((item, i) => ({ ...item, preview_id: `item_${i}` }))];
+      const autoSelected = previewItems.filter(i => !i.review_required).length;
+      return Response.json({
+        items: previewItems,
+        summary: { total: previewItems.length, auto_selected: autoSelected, review_required: previewItems.length - autoSelected, sheet_name: sheetName, batches: chunks.length }
+      });
+    }
+
     const dedupMap = new Map();
     for (const item of normalizedItems) {
       const key = `${item.part_no.toLowerCase().trim()}||${item.description.toLowerCase().trim()}`;

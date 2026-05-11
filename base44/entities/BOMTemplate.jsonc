@@ -1,0 +1,89 @@
+{
+  "name": "BOMTemplate",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Template name"
+    },
+    "description": {
+      "type": "string",
+      "description": "Optional description"
+    },
+    "column_mappings": {
+      "type": "object",
+      "description": "Maps BOM fields to column names/positions in the source file",
+      "properties": {
+        "part_no": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "qty": {
+          "type": "string"
+        },
+        "unit": {
+          "type": "string"
+        },
+        "unit_cost": {
+          "type": "string"
+        },
+        "total_cost": {
+          "type": "string"
+        },
+        "unit_selling": {
+          "type": "string"
+        },
+        "total_selling": {
+          "type": "string"
+        },
+        "supplier": {
+          "type": "string"
+        },
+        "manufacturer": {
+          "type": "string"
+        }
+      }
+    },
+    "default_category": {
+      "type": "string",
+      "description": "Default category to assign if not detected"
+    },
+    "default_supplier": {
+      "type": "string",
+      "description": "Default supplier to apply to all items"
+    },
+    "default_currency": {
+      "type": "string",
+      "default": "SAR"
+    },
+    "panel_keyword": {
+      "type": "string",
+      "default": "Panel",
+      "description": "Keyword to detect panel section headers"
+    },
+    "skip_rows": {
+      "type": "number",
+      "default": 0,
+      "description": "Number of header rows to skip"
+    },
+    "aggregate_duplicates": {
+      "type": "boolean",
+      "default": true,
+      "description": "Aggregate items with same part number and description"
+    },
+    "extra_instructions": {
+      "type": "string",
+      "description": "Additional instructions for the AI extraction"
+    },
+    "is_default": {
+      "type": "boolean",
+      "default": false,
+      "description": "Use this template by default"
+    }
+  },
+  "required": [
+    "name"
+  ]
+}
