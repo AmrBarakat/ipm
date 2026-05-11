@@ -56,6 +56,91 @@ function computeConfidence(item) {
   return Math.max(0, Math.min(100, score));
 }
 
+// Split text into chunks at line boundaries, keeping sheet headers
+function splitIntoChunks(text, chunkSize = 10000) {
+  const lines = text.split('\n');
+  const chunks = [];
+  let current = '';
+  let currentSheet = '';
+
+  for (const line of lines) {
+    // Track current sheet header so each chunk knows its context
+    if (line.startsWith('=== SHEET:')) currentSheet = line;
+
+    if (current.length + line.length > chunkSize && current.length > 0) {
+      chunks.push(current.trim());
+      // Start new chunk with sheet context
+      current = currentSheet ? currentSheet + '\n' : '';
+    }
+    current += line + '\n';
+  }
+  if (current.trim().length > 0) chunks.push(current.trim());
+  return chunks;
+}
+
+const PROMPT_TEMPLATE = (chunkIndex, totalChunks, fileName, chunkText) => `You are a BOM extraction engine for industrial automation projects.
+This is chunk ${chunkIndex + 1} of ${totalChunks} from file: ${fileName || 'BOM document'}.
+Extract EVERY BOM line item from this portion. Context carries over across chunks.
+
+## INCLUDE:
+- Rows with part number OR description + quantity + pricing
+- Service rows (ENGINEERING, COMMISSIONING, INSTALLATION, FAT, SAT, LABOR, etc.)
+
+## EXCLUDE:
+- Section headers — use them to set the "section" field on items
+- Summary rows (SUBTOTAL, GRAND TOTAL, TOTAL)
+- Empty rows, page headers, notes with no data
+
+## HEADER SYNONYMS:
+- Part No: PART NO, P/N, ITEM CODE, MODEL, ARTICLE NO
+- Description: DESCRIPTION, ITEM DESCRIPTION, MATERIAL DESCRIPTION
+- Qty: QTY, QUANTITY, T.QTY
+- Vendor: VENDOR, SUPPLIER, MAKE, MANUFACTURER
+- Unit Cost: UNIT COST, UNIT PRICE, BUYING PRICE
+- Total Cost: TOTAL COST, EXTENDED COST
+- Unit Selling: LIST PRICE, UNIT SELLING, SELLING PRICE
+- Total Selling: TOTAL SELLING, CUSTOMER TOTAL
+
+## CATEGORIES:
+plc, hmi, drive, sensor, meter, panel, cable, network, software, service, other
+
+## NUMBERS: strip SAR/USD/EUR/AED, remove commas, null for missing values.
+
+## CONTENT:
+${chunkText}`;
+
+const ITEM_SCHEMA = {
+  type: 'object',
+  properties: {
+    items: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          part_no: { type: 'string' },
+          description: { type: 'string' },
+          category: { type: 'string' },
+          manufacturer: { type: 'string' },
+          supplier: { type: 'string' },
+          qty: { type: 'number' },
+          unit: { type: 'string' },
+          unit_cost_sar: { type: 'number' },
+          total_cost_sar: { type: 'number' },
+          unit_selling_sar: { type: 'number' },
+          total_selling_sar: { type: 'number' },
+          gross_profit: { type: 'number' },
+          margin_pct: { type: 'number' },
+          section: { type: 'string' },
+          notes: { type: 'string' },
+          expected_delivery_date: { type: 'string' },
+          review_notes: { type: 'string' },
+        }
+      }
+    },
+    sheet_name: { type: 'string' },
+  }
+};
+
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
@@ -67,7 +152,6 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'plain_text and project_id are required' }, { status: 400 });
     }
 
-    // Mark document as processing
     if (document_id) {
       await base44.asServiceRole.entities.Document.update(document_id, {
         bom_extraction_status: 'processing',
@@ -75,143 +159,33 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Use LLM with the plain text converted from Excel in the browser
-    const llmResult = await base44.asServiceRole.integrations.Core.InvokeLLM({
-      model: 'gpt_5_4',
-      prompt: `You are a production-grade BOM (Bill of Materials) extraction engine for industrial automation projects.
-The content below is plain text converted from an Excel workbook (file: ${file_name || 'BOM document'}).
-Each sheet is separated by "=== SHEET: name ===" markers. Rows are comma-separated values.
-Your task is to read ALL sheets and extract EVERY BOM line item you can find.
+    // Split into ~10k char chunks and process in parallel
+    const chunks = splitIntoChunks(plain_text, 10000);
 
-## EXTRACTION RULES:
+    const batchResults = await Promise.all(
+      chunks.map((chunkText, idx) =>
+        base44.asServiceRole.integrations.Core.InvokeLLM({
+          model: 'gpt_5_4',
+          prompt: PROMPT_TEMPLATE(idx, chunks.length, file_name, chunkText),
+          response_json_schema: ITEM_SCHEMA,
+        }).then(r => (r?.response || r)?.items || [])
+         .catch(() => []) // if one batch fails, skip it rather than killing everything
+      )
+    );
 
-### What to INCLUDE as BOM items:
-- Material rows: rows with a part number OR description + quantity + pricing
-- Service rows: rows with service keywords (ENGINEERING, COMMISSIONING, TESTING, INSTALLATION, PROGRAMMING, FAT, SAT, DELIVERY, LABOR, DESIGN, etc.) + quantity/pricing
-- Any row representing a purchasable or billable item
-
-### What to EXCLUDE:
-- Section headers (e.g. "PLC SECTION", "PANEL SECTION") — but USE them to set the "section" field on subsequent items
-- Summary rows (SUBTOTAL, GRAND TOTAL, TOTAL PROJECT, REVENUE, PROFIT)
-- Repeated page headers (PAGE, REVISION, PROJECT NAME, CUSTOMER, TITLE)
-- Completely empty rows
-- Notes or comment rows with no commercial data
-
-### Header synonym mapping — recognize these as equivalent:
-- Part Number: PART NO, PART NUMBER, P/N, ITEM CODE, MODEL, MODEL NUMBER, ARTICLE NO
-- Description: DESCRIPTION, ITEM DESCRIPTION, DETAILS, MATERIAL DESCRIPTION
-- Quantity: QTY, QUANTITY, T.QTY, TOTAL QTY
-- Vendor/Manufacturer: VENDOR, SUPPLIER, MAKE, MANUFACTURER
-- Unit Cost: UNIT COST, UNIT PRICE, UNIT PRICE EQUIPMENT SAR, BUYING PRICE
-- Total Cost: TOTAL COST, TOTAL EQUIPMENT SAR, EXTENDED COST
-- Unit Selling: LIST PRICE, NET PRICE, UNIT SELLING, CUSTOMER PRICE, SELLING PRICE
-- Total Selling: TOTAL SELLING, TOTAL SALES, CUSTOMER TOTAL
-
-### Category mapping:
-- plc: PLC, CPU, I/O, CODESYS, RTU
-- hmi: HMI, TOUCH, PANEL PC
-- drive: DRIVE, VFD, INVERTER, FREQUENCY CONVERTER
-- sensor: SENSOR, TRANSMITTER, DETECTOR
-- meter: METER, ANALYSER, ANALYZER
-- panel: PANEL, CABINET, ENCLOSURE, MCC
-- cable: CABLE, WIRE, CONDUIT
-- network: SWITCH, NETWORK, ETHERNET, ROUTER, MODEM
-- software: SCADA, SOFTWARE, LICENSE, LICENCE
-- service: ENGINEERING, COMMISSIONING, TESTING, INSTALLATION, PROGRAMMING, FAT, SAT, LABOR, DELIVERY, TRAINING
-- other: anything else
-
-### Numeric normalization:
-- Strip currency symbols (SAR, USD, EUR, AED)
-- Remove commas from numbers
-- Convert (500) to -500
-- Convert percentages to decimals (15% → 0.15)
-- Blank/missing numeric values → use null
-
-### Section inheritance:
-- When you detect a section header row, use that section name for ALL subsequent items until the next section header
-- Preserve hierarchy: section → subsection → item
-
-### Profitability fields (compute if cost and selling are available):
-- total_cost_sar = qty × unit_cost_sar
-- total_selling_sar = qty × unit_selling_sar  
-- gross_profit = total_selling_sar - total_cost_sar
-- margin_pct = gross_profit / total_selling_sar (if total_selling_sar > 0)
-
-## OUTPUT:
-Return a JSON object with:
-- items: array of all extracted BOM items (as many as exist in the document)
-- sheet_name: name of the worksheet/sheet if detectable
-- total_rows_scanned: how many rows were processed
-
-Each item must have these fields:
-- part_no: string (part number / model number, empty string if not found)
-- description: string (required, non-empty)
-- category: one of: plc, hmi, drive, sensor, meter, panel, cable, network, software, service, other
-- manufacturer: string
-- supplier: string
-- qty: number (default 1)
-- unit: string (pcs, m, set, lot, hr, etc.)
-- unit_cost_sar: number or null
-- total_cost_sar: number or null
-- unit_selling_sar: number or null
-- total_selling_sar: number or null
-- gross_profit: number or null
-- margin_pct: number or null
-- section: string (section header this item belongs to)
-- notes: string (any extra info)
-- expected_delivery_date: string YYYY-MM-DD or empty string
-- review_notes: string (reason this item needs review, empty if ok)
-
-## DOCUMENT CONTENT (CSV/plain text from Excel):
-${plain_text}`,
-      response_json_schema: {
-        type: 'object',
-        properties: {
-          items: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                part_no: { type: 'string' },
-                description: { type: 'string' },
-                category: { type: 'string' },
-                manufacturer: { type: 'string' },
-                supplier: { type: 'string' },
-                qty: { type: 'number' },
-                unit: { type: 'string' },
-                unit_cost_sar: { type: 'number' },
-                total_cost_sar: { type: 'number' },
-                unit_selling_sar: { type: 'number' },
-                total_selling_sar: { type: 'number' },
-                gross_profit: { type: 'number' },
-                margin_pct: { type: 'number' },
-                section: { type: 'string' },
-                notes: { type: 'string' },
-                expected_delivery_date: { type: 'string' },
-                review_notes: { type: 'string' },
-              }
-            }
-          },
-          sheet_name: { type: 'string' },
-          total_rows_scanned: { type: 'number' }
-        }
-      }
-    });
-
-    // InvokeLLM with response_json_schema wraps the result in a "response" key
-    const parsed = llmResult?.response || llmResult;
-    const rawItems = parsed?.items || [];
+    // Merge all batch results
+    const rawItems = batchResults.flat();
+    const sheetName = '';
 
     if (!rawItems.length) {
-      // Return debug info to understand what LLM returned
       return Response.json({
         items: [],
-        summary: { total: 0, auto_selected: 0, review_required: 0, sheet_name: parsed?.sheet_name || '' }
+        summary: { total: 0, auto_selected: 0, review_required: 0, sheet_name: '' }
       });
     }
 
-    // Step 3: Normalize and enrich each item
-    const previewItems = rawItems
+    // Normalize and enrich
+    const normalizedItems = rawItems
       .filter(row => row.description || row.part_no)
       .map((row, index) => {
         const description = cleanText(row.description || row.part_no || '');
@@ -222,16 +196,10 @@ ${plain_text}`,
         const totalSelling = toNumber(row.total_selling_sar, null) ?? (unitSelling != null ? unitSelling * qty : null);
         const grossProfit = (totalSelling != null && totalCost != null) ? (totalSelling - totalCost) : null;
         const marginPct = (grossProfit != null && totalSelling && totalSelling > 0) ? grossProfit / totalSelling : null;
-
         const confidence = computeConfidence({
-          part_no: row.part_no,
-          description,
-          qty,
-          unit_cost_sar: unitCost,
-          section: row.section,
-          review_notes: row.review_notes,
+          part_no: row.part_no, description, qty, unit_cost_sar: unitCost,
+          section: row.section, review_notes: row.review_notes,
         });
-
         return {
           preview_id: `item_${index}`,
           part_no: cleanText(row.part_no || ''),
@@ -256,6 +224,54 @@ ${plain_text}`,
         };
       });
 
+    // Panel aggregation: sections whose header contains "Panel"
+    const PANEL_REGEX = /panel/i;
+    const panelSections = new Set(
+      normalizedItems.map(i => i.section).filter(s => s && PANEL_REGEX.test(s))
+    );
+
+    const previewItems = [];
+    const consumedSections = new Set();
+
+    panelSections.forEach(sectionName => {
+      const members = normalizedItems.filter(i => i.section === sectionName);
+      if (!members.length) return;
+      consumedSections.add(sectionName);
+      const totalCostAgg = members.reduce((s, i) => s + (i.total_cost_sar ?? 0), 0);
+      const totalSellAgg = members.reduce((s, i) => s + (i.total_selling_sar ?? 0), 0);
+      const grossProfitAgg = totalSellAgg > 0 ? totalSellAgg - totalCostAgg : null;
+      const marginPctAgg = (grossProfitAgg != null && totalSellAgg > 0) ? grossProfitAgg / totalSellAgg : null;
+      const subItemNotes = members.map(i => `${i.description}${i.qty > 1 ? ` (×${i.qty})` : ''}`).join('; ');
+      previewItems.push({
+        preview_id: `panel_agg_${sectionName.replace(/\s+/g, '_')}`,
+        part_no: '',
+        description: sectionName,
+        category: 'panel',
+        manufacturer: members[0]?.manufacturer || '',
+        supplier: members[0]?.supplier || '',
+        qty: 1,
+        unit: 'set',
+        unit_cost_sar: totalCostAgg || null,
+        total_cost_sar: totalCostAgg || null,
+        unit_selling_sar: totalSellAgg || null,
+        total_selling_sar: totalSellAgg || null,
+        gross_profit: grossProfitAgg,
+        margin_pct: marginPctAgg,
+        section: sectionName,
+        notes: `Aggregated from ${members.length} item(s): ${subItemNotes}`,
+        expected_delivery_date: '',
+        review_notes: '',
+        confidence_score: 85,
+        review_required: false,
+        is_panel_aggregate: true,
+        panel_item_count: members.length,
+      });
+    });
+
+    normalizedItems
+      .filter(i => !consumedSections.has(i.section))
+      .forEach(i => previewItems.push(i));
+
     const autoSelected = previewItems.filter(i => !i.review_required).length;
 
     return Response.json({
@@ -264,8 +280,8 @@ ${plain_text}`,
         total: previewItems.length,
         auto_selected: autoSelected,
         review_required: previewItems.length - autoSelected,
-        sheet_name: parsed?.sheet_name || '',
-        rows_scanned: parsed?.total_rows_scanned || 0,
+        sheet_name: sheetName,
+        batches: chunks.length,
       }
     });
 
