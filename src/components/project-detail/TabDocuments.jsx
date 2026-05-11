@@ -11,6 +11,7 @@ const CATEGORY_ICONS = {
   drawing: '📐',
   submittal: '📋',
   engineering: '⚙️',
+  bom: '🔩',
   contract: '📜',
   po: '🛒',
   offer: '💼',

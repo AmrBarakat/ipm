@@ -53,6 +53,7 @@ export const CATEGORY_LABELS = {
   engineering: 'Engineering Document',
   drawing: 'Drawing (DWG / CAD)',
   submittal: 'Submittal',
+  bom: 'Bill of Materials (BOM)',
   report: 'Report',
   invoice: 'Invoice',
   other: 'Other',
