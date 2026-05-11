@@ -165,15 +165,16 @@ export default function TabDeliverables({ projectId }) {
         });
       }
 
-      // All other categories → individual deliverables per item
+      // All other categories → individual deliverables per item (excluding ignored categories)
       const groupedCats = new Set(['panel', 'software', 'IT-HW']);
-      const otherItems = bomItems.filter(i => !groupedCats.has(i.category));
+      const ignoredCats = new Set(['plc', 'hmi', 'drive', 'cable', 'network', 'service', 'other']);
+      const otherItems = bomItems.filter(i => !groupedCats.has(i.category) && !ignoredCats.has(i.category));
       for (const item of otherItems) {
         toCreate.push({
           project_id: projectId,
           name: item.description || item.manufacturer_part_number || 'BOM Item',
           description: item.manufacturer_part_number ? `Part No: ${item.manufacturer_part_number}` : '',
-          type: ['service'].includes(item.category) ? 'service' : 'hardware',
+          type: 'hardware',
           status: 'pending',
           quantity: Number(item.quantity) || 1,
           unit: item.unit || 'pc',
