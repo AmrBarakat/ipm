@@ -121,19 +121,17 @@ export default function TabDeliverables({ projectId }) {
 
       const toCreate = [];
 
-      // Panel items → one combined deliverable
+      // Panel items → one deliverable per individual panel item
       const panelItems = bomItems.filter(i => i.category === 'panel');
-      if (panelItems.length > 0) {
-        const names = [...new Set(panelItems.map(i => i.description).filter(Boolean))];
-        const totalQty = panelItems.reduce((s, i) => s + (Number(i.quantity) || 1), 0);
+      for (const item of panelItems) {
         toCreate.push({
           project_id: projectId,
-          name: names.length === 1 ? names[0] : `Panel / Enclosure (${panelItems.length} items)`,
-          description: names.length > 1 ? names.slice(0, 5).join(', ') + (names.length > 5 ? '…' : '') : '',
+          name: item.description || item.manufacturer_part_number || 'Panel / Enclosure',
+          description: item.manufacturer_part_number ? `Part No: ${item.manufacturer_part_number}` : '',
           type: 'hardware',
           status: 'pending',
-          quantity: totalQty,
-          unit: 'pc',
+          quantity: Number(item.quantity) || 1,
+          unit: item.unit || 'pc',
         });
       }
 
