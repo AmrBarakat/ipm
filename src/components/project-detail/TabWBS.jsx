@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import { base44 } from '@/api/base44Client';
 import { formatDate } from '@/lib/constants';
-import { Plus, ChevronRight, ChevronDown, Trash2, Pencil, Save, X, Layers, AlertTriangle, Link, Wand2 } from 'lucide-react';
+import { Plus, ChevronRight, ChevronDown, Trash2, Pencil, Save, X, Layers, AlertTriangle, Link, Wand2, BookOpen } from 'lucide-react';
 import PanelWrapper from '@/components/ui/PanelWrapper';
 import ScheduleAssistantModal from './ScheduleAssistantModal';
+import ProjectPlanTemplateModal from './ProjectPlanTemplateModal';
 
 const STATUS_COLORS = {
   not_started: 'bg-slate-100 text-slate-600',
@@ -54,7 +55,7 @@ async function syncProjectProgress(projectId, items, tree, byId) {
   return overallProgress;
 }
 
-export default function TabWBS({ projectId, onProgressChange }) {
+export default function TabWBS({ projectId, project, onProgressChange }) {
   const [items, setItems] = useState([]);
   const [milestones, setMilestones] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -64,6 +65,7 @@ export default function TabWBS({ projectId, onProgressChange }) {
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
   const [showScheduleAssistant, setShowScheduleAssistant] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
 
   function emptyForm() {
     return { wbs_code: '', name: '', assignee: '', description: '',
@@ -437,6 +439,10 @@ export default function TabWBS({ projectId, onProgressChange }) {
           )}
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => setShowTemplates(true)}
+            className="flex items-center gap-1 px-3 py-1.5 border border-slate-300 hover:bg-slate-100 text-slate-700 font-semibold text-sm rounded">
+            <BookOpen className="w-4 h-4" /> Templates
+          </button>
           <button onClick={() => setShowScheduleAssistant(true)}
             className="flex items-center gap-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white font-semibold text-sm rounded">
             <Wand2 className="w-4 h-4" /> Schedule Assistant
@@ -500,6 +506,14 @@ export default function TabWBS({ projectId, onProgressChange }) {
           projectId={projectId}
           onClose={() => setShowScheduleAssistant(false)}
           onApplied={() => { setShowScheduleAssistant(false); load(); }}
+        />
+      )}
+      {showTemplates && (
+        <ProjectPlanTemplateModal
+          projectId={projectId}
+          project={project}
+          onClose={() => setShowTemplates(false)}
+          onApplied={() => { setShowTemplates(false); load(); }}
         />
       )}
     </div>

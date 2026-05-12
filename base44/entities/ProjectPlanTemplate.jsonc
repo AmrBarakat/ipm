@@ -1,0 +1,85 @@
+{
+  "name": "ProjectPlanTemplate",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Template name"
+    },
+    "description": {
+      "type": "string"
+    },
+    "project_type": {
+      "type": "string",
+      "enum": [
+        "plc",
+        "plc_scada",
+        "pme",
+        "service",
+        "other"
+      ],
+      "description": "Applicable project type"
+    },
+    "milestones": {
+      "type": "array",
+      "description": "Milestone templates",
+      "items": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "offset_days": {
+            "type": "number",
+            "description": "Days from project start"
+          },
+          "weight": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "wbs_items": {
+      "type": "array",
+      "description": "WBS item templates",
+      "items": {
+        "type": "object",
+        "properties": {
+          "wbs_code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "parent_code": {
+            "type": "string",
+            "description": "wbs_code of parent item"
+          },
+          "milestone_title": {
+            "type": "string",
+            "description": "Links to milestone by title"
+          },
+          "assignee": {
+            "type": "string"
+          },
+          "duration_days": {
+            "type": "number"
+          },
+          "offset_days": {
+            "type": "number",
+            "description": "Days from project start"
+          },
+          "weight": {
+            "type": "number"
+          },
+          "planned_hours": {
+            "type": "number"
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "name"
+  ]
+}
