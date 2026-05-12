@@ -1,6 +1,85 @@
 import { useState } from 'react';
 import { base44 } from '@/api/base44Client';
-import { X, Loader2, CheckCircle2, AlertTriangle, FileSpreadsheet, ChevronDown, ChevronUp, Info } from 'lucide-react';
+import { X, Loader2, CheckCircle2, AlertTriangle, FileSpreadsheet, ChevronDown, ChevronUp, Info, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
+
+function downloadTemplate() {
+  const wb = XLSX.utils.book_new();
+
+  // ── Sheet 1: WBS Items ──────────────────────────────────────────────────────
+  const wbsHeaders = [
+    'WBS', 'Activity Name', 'Task Mode', 'Duration (Days)',
+    'Start Date', 'Finish Date', 'Predecessor',
+    'Responsible', 'Status', 'Weight (%)', 'EV Method', 'Deliverable / Remarks'
+  ];
+  const wbsSamples = [
+    ['1',     'INITIATION',                 'Summary',  '',  '2025-01-01', '2025-01-10', '',  '',          'not_started', '',   '',                  ''],
+    ['1.1',   'Project Kickoff Meeting',    'Task',      2,  '2025-01-01', '2025-01-02', '',  'PM',        'not_started', '',   '50/50',             'Kickoff minutes'],
+    ['1.2',   'Project Charter Approved',   'Milestone', 0,  '2025-01-10', '2025-01-10', '1.1','PM',      'not_started', '',   '0/100',             'Signed charter'],
+    ['2',     'ENGINEERING',                'Summary',  '',  '2025-01-11', '2025-02-28', '',  '',          'not_started', '',   '',                  ''],
+    ['2.1',   'Electrical Design',          'Task',     20,  '2025-01-11', '2025-01-31', '1.2','Engineer', 'not_started', '',   '% Complete',        'Drawings set'],
+    ['2.2',   'PLC Programming',            'Task',     30,  '2025-02-01', '2025-02-28', '2.1','Engineer', 'not_started', '',   'Weighted Milestone','Program files'],
+    ['2.3',   'Engineering Complete',       'Milestone', 0,  '2025-02-28', '2025-02-28', '2.2','',        'not_started', '',   '0/100',             ''],
+    ['3',     'PROCUREMENT',                'Summary',  '',  '2025-01-15', '2025-03-15', '',  '',          'not_started', '',   '',                  ''],
+    ['3.1',   'PLC Hardware Ordered',       'Task',      5,  '2025-01-15', '2025-01-20', '1.2','PM',       'not_started', '',   '0/100',             'PO issued'],
+    ['3.2',   'Hardware Received',          'Milestone', 0,  '2025-03-15', '2025-03-15', '3.1','',        'not_started', '',   '0/100',             ''],
+    ['4',     'T&C ACTIVITIES',             'Summary',  '',  '2025-03-16', '2025-04-30', '',  '',          'not_started', '',   '',                  ''],
+    ['4.1',   'Signal Testing',             'Task',     14,  '2025-03-16', '2025-03-30', '3.2','Engineer', 'not_started', '',   '% Complete',        'Test sheets'],
+    ['4.2',   'FAT',                        'Task',      5,  '2025-04-01', '2025-04-05', '4.1','PM',       'not_started', '',   'Weighted Milestone','FAT report'],
+    ['4.3',   'SAT',                        'Task',      5,  '2025-04-10', '2025-04-15', '4.2','Engineer', 'not_started', '',   'Weighted Milestone','SAT report'],
+    ['4.4',   'Commissioning Complete',     'Milestone', 0,  '2025-04-30', '2025-04-30', '4.3','',        'not_started', '',   '0/100',             ''],
+    ['5',     'HANDOVER',                   'Summary',  '',  '2025-05-01', '2025-05-15', '',  '',          'not_started', '',   '',                  ''],
+    ['5.1',   'As-Built Documentation',     'Task',      7,  '2025-05-01', '2025-05-07', '4.4','Engineer', 'not_started', '',   '0/100',             'As-built docs'],
+    ['5.2',   'Project Handover Sign-off',  'Milestone', 0,  '2025-05-15', '2025-05-15', '5.1','PM',      'not_started', '',   '0/100',             'Signed handover'],
+  ];
+  const wbsWs = XLSX.utils.aoa_to_sheet([wbsHeaders, ...wbsSamples]);
+  // Column widths
+  wbsWs['!cols'] = [8,32,12,8,12,12,10,12,12,8,16,24].map(w => ({ wch: w }));
+  XLSX.utils.book_append_sheet(wb, wbsWs, 'WBS Items');
+
+  // ── Sheet 2: Milestones ─────────────────────────────────────────────────────
+  const msHeaders = ['Title', 'Planned Date', 'Weight (%)', 'Description'];
+  const msSamples = [
+    ['PROJECT KICKOFF',          '2025-01-02', 10, 'Project officially started'],
+    ['ENGINEERING COMPLETE',     '2025-02-28', 20, 'All drawings approved'],
+    ['HARDWARE RECEIVED',        '2025-03-15', 15, 'All equipment on site'],
+    ['FAT COMPLETE',             '2025-04-05', 20, 'Factory acceptance passed'],
+    ['SAT COMPLETE',             '2025-04-15', 20, 'Site acceptance passed'],
+    ['PROJECT HANDOVER',         '2025-05-15', 15, 'Final handover signed off'],
+  ];
+  const msWs = XLSX.utils.aoa_to_sheet([msHeaders, ...msSamples]);
+  msWs['!cols'] = [30, 14, 10, 36].map(w => ({ wch: w }));
+  XLSX.utils.book_append_sheet(wb, msWs, 'Milestones');
+
+  // ── Sheet 3: Instructions ───────────────────────────────────────────────────
+  const instrData = [
+    ['FIELD',          'REQUIRED?', 'ACCEPTED VALUES / FORMAT',                           'NOTES'],
+    ['WBS',            'Auto',      '1 / 1.1 / 1.1.1  (dot-notation, max 3 levels)',      'Leave blank — AI will auto-number from hierarchy'],
+    ['Activity Name',  'YES',       'Any text',                                            'Use ALL CAPS for Phase headers (e.g. INITIATION)'],
+    ['Task Mode',      'Optional',  'Summary | Task | Milestone',                          'Blank → AI auto-detects from WBS depth & duration'],
+    ['Duration (Days)','Optional',  'Number (integer)',                                    '0 or blank on a phase header → treated as Milestone'],
+    ['Start Date',     'Optional',  'YYYY-MM-DD',                                          ''],
+    ['Finish Date',    'Optional',  'YYYY-MM-DD',                                          ''],
+    ['Predecessor',    'Optional',  'WBS code of predecessor task (e.g. 2.1)',             'Leave blank if none'],
+    ['Responsible',    'Optional',  'Name or role',                                        ''],
+    ['Status',         'Optional',  'not_started | in_progress | completed | blocked',     'Default: not_started'],
+    ['Weight (%)',     'Optional',  '0–100 (leaf tasks should sum to 100)',                'Leave blank → AI calculates from duration'],
+    ['EV Method',      'Optional',  '0/100 | 50/50 | % Complete | Weighted Milestone',    'Leave blank → AI assigns based on task type'],
+    ['Deliverable',    'Optional',  'Any text',                                            'Document or output description'],
+    ['','','',''],
+    ['TIPS','','',''],
+    ['1. Phase headers (Level 1) should be ALL CAPS with no duration — they become Summary rows.','','',''],
+    ['2. Milestones should have Duration = 0 OR end with keywords: Kickoff, Completion, Handover, Sign-off, Approved, FAT, SAT.','','',''],
+    ['3. Parent–child relationships are derived from WBS dot-notation depth (1 → 1.1 → 1.1.1).','','',''],
+    ['4. Keep the column headers exactly as shown (or use recognised aliases listed above).','','',''],
+    ['5. Dates must be YYYY-MM-DD format for reliable parsing.','','',''],
+  ];
+  const instrWs = XLSX.utils.aoa_to_sheet(instrData);
+  instrWs['!cols'] = [22, 10, 44, 40].map(w => ({ wch: w }));
+  XLSX.utils.book_append_sheet(wb, instrWs, 'Instructions');
+
+  XLSX.writeFile(wb, 'ProjectPlan_Template.xlsx');
+}
 
 /**
  * Extracts WBS items and Milestones from a Project Plan Excel/CSV document
@@ -283,20 +362,41 @@ Project context:
 
           {/* Idle */}
           {step === 'idle' && (
-            <div className="text-center py-10 space-y-4">
-              <FileSpreadsheet className="w-14 h-14 mx-auto text-blue-300" />
-              <p className="text-slate-600 text-sm max-w-md mx-auto">
-                AI will read the file and extract <strong>WBS items</strong> and <strong>Milestones</strong> using smart auto-detection:
-                column mapping, hierarchy recognition, milestone triggers, EV method assignment, and weight normalization.
-              </p>
-              <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-left max-w-md mx-auto">
+            <div className="py-6 space-y-5">
+              <div className="text-center space-y-3">
+                <FileSpreadsheet className="w-12 h-12 mx-auto text-blue-300" />
+                <p className="text-slate-600 text-sm max-w-md mx-auto">
+                  AI will read the file and extract <strong>WBS items</strong> and <strong>Milestones</strong> using smart auto-detection:
+                  column mapping, hierarchy recognition, milestone triggers, EV method assignment, and weight normalization.
+                </p>
+              </div>
+
+              {/* Template download card */}
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3 max-w-lg mx-auto">
+                <Download className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-amber-800">For best results, use the standard template</p>
+                  <p className="text-xs text-amber-700 mt-0.5 mb-2">
+                    Download the Excel template with sample data, correct column names, and instructions sheet. Fill it in and re-upload as a <em>Project Plan</em> document.
+                  </p>
+                  <button onClick={downloadTemplate}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-white text-xs font-semibold rounded">
+                    <Download className="w-3.5 h-3.5" /> Download Template (.xlsx)
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 max-w-lg mx-auto">
                 <Info className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
                 <p className="text-xs text-blue-700">Uses Claude Sonnet for high-quality extraction. This may take 15–30 seconds.</p>
               </div>
-              <button onClick={runExtraction}
-                className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm rounded-lg">
-                Start Extraction
-              </button>
+
+              <div className="text-center">
+                <button onClick={runExtraction}
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm rounded-lg">
+                  Start Extraction
+                </button>
+              </div>
             </div>
           )}
 
