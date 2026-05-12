@@ -276,7 +276,7 @@ export default function TabDocuments({ projectId }) {
                                     className="flex items-center gap-1 px-2.5 py-1 text-xs border border-slate-300 rounded hover:bg-slate-100 text-slate-600">
                                     <ExternalLink className="w-3 h-3" /> Open
                                   </a>
-                                  {['engineering', 'drawing', 'submittal', 'other'].includes(doc.category) && (
+                                  {['engineering', 'drawing', 'submittal', 'other', 'bom', 'charter'].includes(doc.category) && (
                                     <button onClick={() => setBomPreviewDoc(doc)}
                                       className="flex items-center gap-1 px-2.5 py-1 text-xs border border-amber-300 rounded hover:bg-amber-50 text-amber-700 font-medium">
                                       <Cpu className="w-3 h-3" /> Extract BOM
