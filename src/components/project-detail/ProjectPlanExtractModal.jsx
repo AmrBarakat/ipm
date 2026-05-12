@@ -104,156 +104,24 @@ export default function ProjectPlanExtractModal({ document, projectId, project, 
     setStep('extracting');
     setError('');
     try {
+      // Upload the file so the backend function can access it via URL
       const fileRes = await fetch(document.file_url);
       const blob = await fileRes.blob();
       const file = new File([blob], document.file_name || 'project_plan.xlsx', { type: blob.type || 'application/octet-stream' });
       const uploadRes = await base44.integrations.Core.UploadFile({ file });
-      const fileUrl = uploadRes.file_url;
 
-      const result = await base44.integrations.Core.InvokeLLM({
-        model: 'claude_sonnet_4_6',
-        prompt: `You are an expert project management assistant following the "Auto-Detection: WBS & Milestone Generator" specification v1.0.
-
-Analyze the uploaded project plan file (Excel/CSV/TSV) and extract all WBS items and Milestones using these rules:
-
-=== FILE & STRUCTURE DETECTION ===
-- If multi-sheet: pick the sheet with the most project keywords (WBS, Task, Activity, Phase, Duration, Start, Finish, Predecessor, Status, Milestone).
-- Scan first 10 rows to find the header row (≥4 keywords present). Text above = project title.
-- Strip merged cells, leading/trailing whitespace. Convert WBS values to strings.
-
-=== COLUMN MAPPING (fuzzy match aliases) ===
-- WBS: also "WBS No", "WBS Code", "ID", "Code", "Ref"
-- Activity Name: also "Task Name", "Description", "Activity", "Work Item", "Name"  ← REQUIRED
-- Task Mode / Type: also "Type", "Level", "Mode", "Category"
-- Duration: also "Duration (Days)", "Days", "Dur"
-- Start Day: also "Start", "Start Date", "Begin", "From"
-- Finish Day: also "Finish", "End", "End Date", "To", "Completion"
-- Predecessor: also "Depends On", "Dependency", "Pred"
-- Responsible: also "Resource", "Owner", "Assigned To", "Team", "Role"
-- Status: also "Progress", "State", "% Done"
-- Weight (%): also "Weight", "Progress Weight", "EV Weight"
-- EV Method: also "EV Rule", "Measurement", "Earned Value Method"
-- Deliverable / Remarks: also "Output", "Remarks", "Notes", "Document"
-
-=== HIERARCHY DETECTION (try in order) ===
-1. If WBS column exists: parse dot-notation depth. "1"=Level1/Phase, "1.1"=Level2/Task, "1.1.1"=Level3/SubTask. Max depth 3; flatten deeper to level 3.
-2. If no WBS: detect from indentation of Activity Name (0 indent=Level1, 1 indent=Level2, 2 indent=Level3).
-3. If no WBS and no indentation: detect phase headers from ALL-CAPS names or known keywords (INITIATION, PROCUREMENT, DELIVERY, COMMISSIONING, TESTING, T&C, HANDOVER, CLOSEOUT, FAT, SAT, DEVELOPMENT, SIGNAL, NETWORK, ENGINEERING, DESIGN).
-4. Auto-renumber WBS sequentially (1, 1.1, 1.1.1, 1.1.2, 1.2, 2, 2.1…). Store original in original_wbs.
-
-=== WBS NUMBERING ===
-- Use dot-notation. Each Phase resets task counter. Each task resets sub-task counter.
-- If source WBS has gaps, renumber sequentially and store original in original_wbs.
-- If PLC/SCADA/T&C/FAT/SAT/commissioning/automation detected: WBS1=Initiation, WBS2=Procurement, WBS3=T&C Activities, WBS9=Handover.
-
-=== MILESTONE AUTO-DETECTION ===
-Flag a row as a Milestone if ANY condition is true:
-- Task Mode = "Milestone"
-- Duration = 0 or blank AND it is a phase/header row
-- Activity Name ends with: Confirmation, Completion, Delivery, Handover, Sign-off, Approved, Received, Issued, Kickoff, Meeting, FAT, SAT
-- Row is a Phase Header (Level 1, no duration, no predecessor)
-
-For each group of tasks: if no opening milestone exists, auto-insert "[Phase Name] — Start" before first task. If no closing milestone exists, auto-insert "[Phase Name] — Complete" after last task. Mark these with is_ai_generated=true in remarks.
-
-Milestone naming: normalize to UPPER CASE. Set ev_method = "0/100" for all milestones.
-
-=== EV METHOD AUTO-ASSIGNMENT (for WBS items) ===
-Apply in order:
-1. Milestone row → "0/100"
-2. Duration ≤ 2 days → "50/50"
-3. Duration ≥ 3 days AND deliverable is binary (signed/approved/received) → "0/100"
-4. Duration ≥ 3 days AND involves configuration/development/programming → "Weighted Milestone"
-5. Duration ≥ 3 days AND quantity-based (drawings/panels/items) → "% Complete"
-6. Default → "% Complete"
-
-=== WEIGHT AUTO-CALCULATION ===
-If weights are missing or all zero:
-- Raw score = Duration days (blank → 1)
-- Apply multipliers: FAT/SAT tasks ×2.0 | PLC/SCADA dev ×1.7 | Signal testing ×1.3 | Procurement binary ×0.8
-- Normalize all LEAF task raw scores to sum = 100% (2 decimal places)
-- Phase/parent rows: set weight = sum of their children (display-only, not in the 100% sum)
-- Round to 2 decimals
-
-=== TASK MODE MAPPING ===
-- "Milestone" → task_mode: "milestone"
-- "Summary" or "Task" → task_mode: "summary"
-- "Sub-Task" / "Subtask" / "Activity" → task_mode: "task"
-- Phase header (level 1, no duration) → task_mode: "summary"
-
-=== QUALITY CHECKS ===
-- Detect duplicate activity names within the same parent → append "(duplicate N)"
-- Rows with blank Activity Name but a WBS value → name = "Unnamed Task", remarks = "Review Required"
-- Orphan tasks (parent WBS not found) → remarks = "Orphan Task — No Parent Found"
-- Invalid predecessor references → predecessor = "TBD"
-
-=== OUTPUT ===
-Return JSON with:
-- "project_name": detected project name from header metadata (string or null)
-- "milestones": array of milestone objects
-- "wbs_items": array of all WBS items (including phase headers and tasks — NOT including rows already extracted as milestones unless they appear in both contexts)
-
-For EACH WBS item include ALL of these fields (omit only if truly absent in source):
-wbs_code, original_wbs, name, task_mode (milestone|summary|task), assignee, planned_start (YYYY-MM-DD), planned_end (YYYY-MM-DD), duration_days, weight (number 0-100), parent_code, status (not_started|in_progress|completed|blocked), ev_method, predecessor, deliverable, remarks, is_ai_generated (bool)
-
-For EACH Milestone include:
-title (UPPER CASE), planned_date (YYYY-MM-DD), weight (number), description, ev_method ("0/100"), is_ai_generated (bool)
-
-Project context:
-- Project name: ${project?.name || 'Unknown'}
-- Project type: ${project?.project_type || 'Unknown'}
-- Start date: ${project?.start_date || 'Unknown'}
-`,
-        file_urls: [fileUrl],
-        response_json_schema: {
-          type: 'object',
-          properties: {
-            project_name: { type: 'string' },
-            milestones: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  title: { type: 'string' },
-                  planned_date: { type: 'string' },
-                  weight: { type: 'number' },
-                  description: { type: 'string' },
-                  ev_method: { type: 'string' },
-                  is_ai_generated: { type: 'boolean' },
-                },
-              },
-            },
-            wbs_items: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  wbs_code: { type: 'string' },
-                  original_wbs: { type: 'string' },
-                  name: { type: 'string' },
-                  task_mode: { type: 'string' },
-                  assignee: { type: 'string' },
-                  planned_start: { type: 'string' },
-                  planned_end: { type: 'string' },
-                  duration_days: { type: 'number' },
-                  weight: { type: 'number' },
-                  parent_code: { type: 'string' },
-                  status: { type: 'string' },
-                  ev_method: { type: 'string' },
-                  predecessor: { type: 'string' },
-                  deliverable: { type: 'string' },
-                  remarks: { type: 'string' },
-                  is_ai_generated: { type: 'boolean' },
-                },
-              },
-            },
-          },
-        },
+      // Call backend function — avoids frontend request timeout on large files
+      const res = await base44.functions.invoke('extractProjectPlan', {
+        file_url: uploadRes.file_url,
+        file_name: document.file_name,
+        project_name: project?.name,
+        project_type: project?.project_type,
+        start_date: project?.start_date,
       });
 
-      const milestones = (result.milestones || []).filter(m => m.title);
-      const wbs_items = (result.wbs_items || []).filter(w => w.name);
+      const { milestones = [], wbs_items = [], project_name } = res.data;
 
-      setExtracted({ milestones, wbs_items, project_name: result.project_name });
+      setExtracted({ milestones, wbs_items, project_name });
 
       const ms = {};
       milestones.forEach((_, i) => { ms[i] = true; });
