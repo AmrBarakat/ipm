@@ -6,6 +6,7 @@ import {
   Cpu, Filter, FolderOpen, Link2, ChevronDown, ChevronRight, FileCheck
 } from 'lucide-react';
 import BOMExtractionPreviewModal from './BOMExtractionPreviewModal';
+import ProjectPlanExtractModal from './ProjectPlanExtractModal';
 
 const CATEGORY_ICONS = {
   drawing: '📐',
@@ -30,7 +31,7 @@ const EMPTY_FORM = {
 
 const inp = 'border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white w-full';
 
-export default function TabDocuments({ projectId }) {
+export default function TabDocuments({ projectId, project }) {
   const [docs, setDocs] = useState([]);
   const [milestones, setMilestones] = useState([]);
   const [tasks, setTasks] = useState([]);
@@ -42,6 +43,7 @@ export default function TabDocuments({ projectId }) {
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
   const [bomPreviewDoc, setBomPreviewDoc] = useState(null);
+  const [planExtractDoc, setPlanExtractDoc] = useState(null);
   const [filterCategory, setFilterCategory] = useState('');
   const [collapsed, setCollapsed] = useState({});
 
@@ -282,6 +284,12 @@ export default function TabDocuments({ projectId }) {
                                       <Cpu className="w-3 h-3" /> Extract BOM
                                     </button>
                                   )}
+                                  {doc.category === 'project_plan' && (
+                                    <button onClick={() => setPlanExtractDoc(doc)}
+                                      className="flex items-center gap-1 px-2.5 py-1 text-xs border border-blue-300 rounded hover:bg-blue-50 text-blue-700 font-medium">
+                                      <FileCheck className="w-3 h-3" /> Extract Plan
+                                    </button>
+                                  )}
                                 </>
                               )}
                               <button onClick={() => startEdit(doc)} className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded">
@@ -309,6 +317,14 @@ export default function TabDocuments({ projectId }) {
           projectId={projectId}
           onClose={() => setBomPreviewDoc(null)}
           onImported={() => setBomPreviewDoc(null)} />
+      )}
+      {planExtractDoc && (
+        <ProjectPlanExtractModal
+          document={planExtractDoc}
+          projectId={projectId}
+          project={project}
+          onClose={() => setPlanExtractDoc(null)}
+          onApplied={() => setPlanExtractDoc(null)} />
       )}
     </div>
   );

@@ -54,6 +54,7 @@ export const CATEGORY_LABELS = {
   drawing: 'Drawing (DWG / CAD)',
   submittal: 'Submittal',
   bom: 'Bill of Materials (BOM)',
+  project_plan: 'Project Plan',
   report: 'Report',
   invoice: 'Invoice',
   other: 'Other',
