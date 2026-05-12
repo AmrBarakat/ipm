@@ -27,7 +27,8 @@ export default function ProjectPlanExtractModal({ document, projectId, project, 
     try {
       const fileRes = await fetch(document.file_url);
       const blob = await fileRes.blob();
-      const uploadRes = await base44.integrations.Core.UploadFile({ file: blob });
+      const file = new File([blob], document.file_name || 'project_plan.xlsx', { type: blob.type || 'application/octet-stream' });
+      const uploadRes = await base44.integrations.Core.UploadFile({ file });
       const fileUrl = uploadRes.file_url;
 
       const result = await base44.integrations.Core.InvokeLLM({
