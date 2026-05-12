@@ -91,6 +91,24 @@ function downloadTemplate() {
  *  - Weight auto-calculation (duration-adjusted, normalised to 100%)
  *  - AI-generated milestone insertion for phases with no open/close milestone
  */
+async function convertFileToPlainText(fileUrl) {
+  const response = await fetch(fileUrl);
+  const arrayBuffer = await response.arrayBuffer();
+  const url = (fileUrl || '').toLowerCase().split('?')[0];
+  const ext = url.match(/\.[^.]+$/)?.[0] || '';
+  if (ext === '.csv' || ext === '.txt') {
+    return new TextDecoder().decode(arrayBuffer);
+  }
+  const workbook = XLSX.read(arrayBuffer, { type: 'array', cellFormula: false, cellHTML: false });
+  const allText = [];
+  for (const sheetName of workbook.SheetNames) {
+    const sheet = workbook.Sheets[sheetName];
+    const csv = XLSX.utils.sheet_to_csv(sheet, { blankrows: false });
+    if (csv.trim().length > 10) allText.push(`=== SHEET: ${sheetName} ===\n${csv}`);
+  }
+  return allText.join('\n\n');
+}
+
 export default function ProjectPlanExtractModal({ document, projectId, project, onClose, onApplied }) {
   const [step, setStep] = useState('idle');
   const [error, setError] = useState('');
@@ -104,15 +122,13 @@ export default function ProjectPlanExtractModal({ document, projectId, project, 
     setStep('extracting');
     setError('');
     try {
-      // Upload the file so the backend function can access it via URL
-      const fileRes = await fetch(document.file_url);
-      const blob = await fileRes.blob();
-      const file = new File([blob], document.file_name || 'project_plan.xlsx', { type: blob.type || 'application/octet-stream' });
-      const uploadRes = await base44.integrations.Core.UploadFile({ file });
+      // Convert Excel/CSV to plain text on the frontend (same as BOM extraction)
+      const plainText = await convertFileToPlainText(document.file_url);
+      if (!plainText || plainText.trim().length < 20) throw new Error('Could not read content from this file. Please ensure it is a valid Excel or CSV file.');
 
-      // Call backend function — avoids frontend request timeout on large files
+      // Send plain text to backend
       const res = await base44.functions.invoke('extractProjectPlan', {
-        file_url: uploadRes.file_url,
+        plain_text: plainText.slice(0, 80000),
         file_name: document.file_name,
         project_name: project?.name,
         project_type: project?.project_type,
