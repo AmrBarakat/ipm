@@ -6,12 +6,16 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { file_url, file_name, project_name, project_type, start_date } = await req.json();
-    if (!file_url) return Response.json({ error: 'file_url is required' }, { status: 400 });
+    const { plain_text, file_name, project_name, project_type, start_date } = await req.json();
+    if (!plain_text) return Response.json({ error: 'plain_text is required' }, { status: 400 });
 
     const result = await base44.asServiceRole.integrations.Core.InvokeLLM({
       model: 'claude_sonnet_4_6',
-      prompt: `You are an expert project management assistant. Analyze the uploaded project plan file (Excel/CSV) and extract all WBS items and Milestones.
+      prompt: `You are an expert project management assistant. Analyze the following project plan data (extracted from an Excel/CSV file) and extract all WBS items and Milestones.
+
+=== PROJECT PLAN DATA ===
+${plain_text}
+=== END DATA ===
 
 === COLUMN MAPPING (fuzzy match aliases) ===
 - WBS: also "WBS No", "WBS Code", "ID", "Code", "Ref"
@@ -64,7 +68,6 @@ Return JSON with:
 - "milestones": array of milestone objects with: title (UPPER CASE), planned_date (YYYY-MM-DD), weight (number), description, ev_method ("0/100"), is_ai_generated (bool)
 - "wbs_items": array of WBS item objects with: wbs_code, original_wbs, name, task_mode (milestone|summary|task), assignee, planned_start (YYYY-MM-DD), planned_end (YYYY-MM-DD), duration_days, weight (number), parent_code, status (not_started|in_progress|completed|blocked), ev_method, predecessor, deliverable, remarks, is_ai_generated (bool)
 `,
-      file_urls: [file_url],
       response_json_schema: {
         type: 'object',
         properties: {
@@ -111,10 +114,11 @@ Return JSON with:
       },
     });
 
+    const parsed = result?.response || result;
     return Response.json({
-      project_name: result.project_name || null,
-      milestones: (result.milestones || []).filter(m => m.title),
-      wbs_items: (result.wbs_items || []).filter(w => w.name),
+      project_name: parsed.project_name || null,
+      milestones: (parsed.milestones || []).filter(m => m.title),
+      wbs_items: (parsed.wbs_items || []).filter(w => w.name),
     });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
