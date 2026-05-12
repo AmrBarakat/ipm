@@ -109,7 +109,10 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
       setSelectedIds(new Set(previewItems.filter(i => !i.review_required).map(i => i.preview_id)));
       setStep('review');
     } catch (err) {
-      setError(err?.response?.data?.error || err?.message || 'Extraction failed.');
+      const msg = err?.response?.data?.error || err?.message || 'Extraction failed.';
+      setError(msg.toLowerCase().includes('unauthorized') || msg.toLowerCase().includes('authentication')
+        ? 'You must be logged in to use this feature. Please refresh the page and log in.'
+        : msg);
       setStep('idle');
     }
   }
