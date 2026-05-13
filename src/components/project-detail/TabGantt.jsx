@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
 import { formatDate } from '@/lib/constants';
-import { ChevronLeft, ChevronRight, Flag, ZoomIn, ZoomOut, Calendar, AlertTriangle, Layers } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Flag, ZoomIn, ZoomOut, Calendar, AlertTriangle, Layers, Check, X, RefreshCw } from 'lucide-react';
 import GanttExportButton from '@/components/project-detail/GanttExportButton';
 
 const MILESTONE_STATUS_COLORS = {
@@ -40,15 +40,20 @@ function toISO(date) {
 export default function TabGantt({ projectId, project }) {
   const [milestones, setMilestones] = useState([]);
   const [wbsItems, setWbsItems] = useState([]);
+  // committedItems = last saved state; wbsItems = live (includes optimistic drag changes)
+  const committedItemsRef = useRef([]);
   const [loading, setLoading] = useState(true);
   const [zoomIdx, setZoomIdx] = useState(1);
   const [viewStart, setViewStart] = useState(null);
   const [tooltip, setTooltip] = useState(null);
   const [showDeps, setShowDeps] = useState(true);
-  const [saving, setSaving] = useState({}); // id -> true while saving
+  const [syncing, setSyncing] = useState(false);
+
+  // Pending changes: Map of id -> { planned_start, planned_end, name, wbs_code }
+  const [pendingChanges, setPendingChanges] = useState(new Map());
 
   // Drag state
-  const dragRef = useRef(null); // { id, type: 'move'|'resize-left'|'resize-right', startX, origStart, origEnd, rowEl }
+  const dragRef = useRef(null);
   const chartAreaRef = useRef(null);
   const chartContainerRef = useRef(null);
 
@@ -64,6 +69,8 @@ export default function TabGantt({ projectId, project }) {
       ]);
       setMilestones(m);
       setWbsItems(w);
+      committedItemsRef.current = w;
+      setPendingChanges(new Map());
       setLoading(false);
     }
     load();
@@ -175,20 +182,39 @@ export default function TabGantt({ projectId, project }) {
 
   // ── Drag & drop logic ──────────────────────────────────────────────────────
 
-  // Convert pixel offset (relative to chart area) to days delta
   function pxToDays(px) {
     if (!chartAreaRef.current) return 0;
     const w = chartAreaRef.current.getBoundingClientRect().width;
     return (px / w) * visibleDays;
   }
 
-  // Save updated dates to the entity and update local state
-  const saveWbsDates = useCallback(async (id, planned_start, planned_end) => {
-    setSaving(s => ({ ...s, [id]: true }));
-    setWbsItems(prev => prev.map(i => i.id === id ? { ...i, planned_start, planned_end } : i));
-    await base44.entities.WBSItem.update(id, { planned_start, planned_end });
-    setSaving(s => { const n = { ...s }; delete n[id]; return n; });
-  }, []);
+  // Cascade dependency shifts: given a moved item, shift all successors by the same delta
+  function cascadeShifts(movedId, deltaDays, currentItems) {
+    const byId = Object.fromEntries(currentItems.map(i => [i.id, { ...i }]));
+    // Build successor map
+    const successors = {};
+    for (const item of currentItems) {
+      for (const predId of (item.predecessor_ids || [])) {
+        if (!successors[predId]) successors[predId] = [];
+        successors[predId].push(item.id);
+      }
+    }
+    // BFS cascade
+    const visited = new Set([movedId]);
+    const queue = [...(successors[movedId] || [])];
+    while (queue.length) {
+      const id = queue.shift();
+      if (visited.has(id)) continue;
+      visited.add(id);
+      const item = byId[id];
+      if (!item) continue;
+      if (item.planned_start) item.planned_start = toISO(addDays(item.planned_start, deltaDays));
+      if (item.planned_end)   item.planned_end   = toISO(addDays(item.planned_end,   deltaDays));
+      byId[id] = item;
+      for (const succId of (successors[id] || [])) { if (!visited.has(succId)) queue.push(succId); }
+    }
+    return Object.values(byId);
+  }
 
   const onBarMouseDown = useCallback((e, wbsItem, type) => {
     e.preventDefault();
@@ -217,24 +243,25 @@ export default function TabGantt({ projectId, project }) {
 
       if (drag.type === 'move') {
         newStart = toISO(addDays(drag.origStart, deltaDays));
-        newEnd = toISO(addDays(drag.origEnd, deltaDays));
+        newEnd   = toISO(addDays(drag.origEnd,   deltaDays));
       } else if (drag.type === 'resize-left') {
         const candidate = toISO(addDays(drag.origStart, deltaDays));
-        // Don't allow start to exceed end - 1 day
         if (candidate < drag.origEnd) newStart = candidate;
         newEnd = drag.origEnd;
       } else if (drag.type === 'resize-right') {
         const candidate = toISO(addDays(drag.origEnd, deltaDays));
-        // Don't allow end to go before start + 1 day
         if (candidate > drag.origStart) newEnd = candidate;
         newStart = drag.origStart;
       }
 
-      // Optimistic UI update during drag (no save yet)
-      setWbsItems(prev => prev.map(i => i.id === drag.id
-        ? { ...i, planned_start: newStart, planned_end: newEnd }
-        : i
-      ));
+      // Optimistic visual update — cascade successors too (move only)
+      setWbsItems(prev => {
+        const updated = prev.map(i => i.id === drag.id ? { ...i, planned_start: newStart, planned_end: newEnd } : i);
+        if (drag.type === 'move') {
+          return cascadeShifts(drag.id, Math.round(pxToDays(e.clientX - drag.startX)), updated);
+        }
+        return updated;
+      });
     }
 
     function onMouseUp(e) {
@@ -244,13 +271,32 @@ export default function TabGantt({ projectId, project }) {
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
 
-      // Find the current state for this item
+      // Compute final delta and cascade, then stage as pending changes
       setWbsItems(prev => {
-        const item = prev.find(i => i.id === drag.id);
-        if (item && (item.planned_start !== drag.origStart || item.planned_end !== drag.origEnd)) {
-          // Persist
-          saveWbsDates(drag.id, item.planned_start, item.planned_end);
-        }
+        const movedItem = prev.find(i => i.id === drag.id);
+        if (!movedItem) return prev;
+        const dateChanged = movedItem.planned_start !== drag.origStart || movedItem.planned_end !== drag.origEnd;
+        if (!dateChanged) return prev;
+
+        const committed = committedItemsRef.current;
+        const newPending = new Map();
+
+        // Find all items that changed vs committed state
+        prev.forEach(item => {
+          const orig = committed.find(c => c.id === item.id);
+          if (orig && (item.planned_start !== orig.planned_start || item.planned_end !== orig.planned_end)) {
+            newPending.set(item.id, {
+              planned_start: item.planned_start,
+              planned_end: item.planned_end,
+              name: item.name,
+              wbs_code: item.wbs_code,
+              orig_start: orig.planned_start,
+              orig_end: orig.planned_end,
+            });
+          }
+        });
+
+        setPendingChanges(newPending);
         return prev;
       });
     }
@@ -261,7 +307,24 @@ export default function TabGantt({ projectId, project }) {
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
     };
-  }, [visibleDays, saveWbsDates]);
+  }, [visibleDays]);
+
+  // Sync pending changes to the database
+  async function syncPendingChanges() {
+    setSyncing(true);
+    await Promise.all([...pendingChanges.entries()].map(([id, ch]) =>
+      base44.entities.WBSItem.update(id, { planned_start: ch.planned_start, planned_end: ch.planned_end })
+    ));
+    committedItemsRef.current = wbsItems.map(i => ({ ...i }));
+    setPendingChanges(new Map());
+    setSyncing(false);
+  }
+
+  // Discard pending changes — revert to committed state
+  function discardPendingChanges() {
+    setWbsItems(committedItemsRef.current.map(i => ({ ...i })));
+    setPendingChanges(new Map());
+  }
 
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -364,6 +427,39 @@ export default function TabGantt({ projectId, project }) {
         </div>
       </div>
 
+      {/* Pending changes banner */}
+      {pendingChanges.size > 0 && (
+        <div className="flex flex-wrap items-start gap-3 bg-amber-50 border border-amber-300 rounded-lg px-4 py-3">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-amber-800 mb-1">
+              {pendingChanges.size} task{pendingChanges.size !== 1 ? 's' : ''} have unsaved date changes
+            </p>
+            <div className="space-y-0.5">
+              {[...pendingChanges.entries()].map(([id, ch]) => (
+                <div key={id} className="text-xs text-amber-700">
+                  <span className="font-mono text-amber-500">{ch.wbs_code}</span> {ch.name}
+                  <span className="text-amber-400 mx-1">·</span>
+                  <span className="line-through text-amber-400">{formatDate(ch.orig_start)} → {formatDate(ch.orig_end)}</span>
+                  <span className="mx-1 text-amber-600">⟶</span>
+                  <span className="font-medium">{formatDate(ch.planned_start)} → {formatDate(ch.planned_end)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <button onClick={discardPendingChanges}
+              className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 text-slate-600 text-xs font-medium rounded hover:bg-slate-100">
+              <X className="w-3.5 h-3.5" /> Discard
+            </button>
+            <button onClick={syncPendingChanges} disabled={syncing}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-900 text-xs font-semibold rounded disabled:opacity-60">
+              {syncing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+              {syncing ? 'Saving…' : 'Sync to Database'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Legend */}
       <div className="flex flex-wrap gap-4 text-xs text-slate-500">
         <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-purple-400 inline-block" /> WBS Planned <span className="text-slate-400 italic">(drag to move · handles to resize)</span></div>
@@ -442,12 +538,12 @@ export default function TabGantt({ projectId, project }) {
               const linkedMs = milestones.find(m => m.id === w.milestone_id);
               const msStyle = linkedMs ? getMilestoneStyle(linkedMs.planned_date) : null;
               const dep = wbsImpact[w.id] || {};
-              const isSaving = saving[w.id];
+              const hasPending = pendingChanges.has(w.id);
               return (
-                <div key={w.id} className={`flex border-b border-slate-100 hover:bg-slate-50 ${dep.delayed ? 'bg-red-50' : ''}`} style={{ minHeight: ROW_H }}>
+                <div key={w.id} className={`flex border-b border-slate-100 hover:bg-slate-50 ${dep.delayed ? 'bg-red-50' : hasPending ? 'bg-amber-50/40' : ''}`} style={{ minHeight: ROW_H }}>
                   <div className="w-52 shrink-0 px-4 py-2 text-xs text-slate-700 font-medium truncate border-r border-slate-200 flex items-center gap-1">
                     {dep.delayed && <AlertTriangle className="w-3 h-3 text-red-500 shrink-0" />}
-                    {isSaving && <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" title="Saving…" />}
+                    {hasPending && <div className="w-2 h-2 rounded-full bg-amber-400 shrink-0" title="Unsaved change" />}
                     <span className="font-mono text-slate-400 shrink-0">{w.wbs_code}</span>
                     <span className="truncate">{w.name}</span>
                   </div>
@@ -461,7 +557,7 @@ export default function TabGantt({ projectId, project }) {
                     {/* Planned bar — draggable */}
                     {plannedBar && (
                       <div
-                        className={`absolute h-5 rounded ${dep.delayed ? 'bg-red-400' : 'bg-purple-400'} ${isSaving ? 'opacity-50' : 'opacity-80 hover:opacity-100'} z-20 flex items-center overflow-visible select-none`}
+                        className={`absolute h-5 rounded ${dep.delayed ? 'bg-red-400' : hasPending ? 'bg-amber-400' : 'bg-purple-400'} opacity-80 hover:opacity-100 z-20 flex items-center overflow-visible select-none`}
                         style={{ ...plannedBar, top: 6 }}
                         onMouseEnter={e => {
                           if (dragRef.current) return;
