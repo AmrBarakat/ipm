@@ -26,14 +26,6 @@ async function convertFileToPlainText(fileUrl) {
   return allText.join('\n\n');
 }
 
-const CATEGORY_COLORS = {
-  plc: 'bg-blue-100 text-blue-700', hmi: 'bg-purple-100 text-purple-700',
-  drive: 'bg-indigo-100 text-indigo-700', sensor: 'bg-cyan-100 text-cyan-700',
-  meter: 'bg-teal-100 text-teal-700', panel: 'bg-orange-100 text-orange-700',
-  cable: 'bg-yellow-100 text-yellow-700', network: 'bg-green-100 text-green-700',
-  software: 'bg-pink-100 text-pink-700', service: 'bg-slate-100 text-slate-600',
-  other: 'bg-slate-100 text-slate-500',
-};
 
 function money(val) {
   const n = Number(val || 0);
@@ -272,13 +264,6 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
                 </button>
               </div>
             </div>
-          )}
-
-          {showTemplateEditor && (
-            <BOMTemplateEditor
-              onClose={() => setShowTemplateEditor(false)}
-              onTemplateSelected={(tpl) => { setActiveTemplate(tpl); setShowTemplateEditor(false); }}
-            />
           )}
 
           {step === 'loading' && (
@@ -551,6 +536,14 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
             </div>
           )}
         </div>
+
+        {/* Template editor overlay — rendered at modal root so it layers correctly */}
+        {showTemplateEditor && (
+          <BOMTemplateEditor
+            onClose={() => setShowTemplateEditor(false)}
+            onTemplateSelected={(tpl) => { setActiveTemplate(tpl); setShowTemplateEditor(false); }}
+          />
+        )}
 
         {/* Footer */}
         {step === 'review' && (

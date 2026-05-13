@@ -214,11 +214,24 @@ Deno.serve(async (req) => {
     const panelGroups = preAggregatePanels(plain_text, tplPanelKeyword);
     const panelPreviewItems = [];
 
-    // Build a set of line prefixes to exclude from LLM batches
+    // Build a set of trimmed lines to exclude from LLM batches.
+    // We must store the normalized section name AND every raw item line (already trimmed).
+    // Also store the original raw lines from the source text to ensure the filter catches them.
     const panelLineSet = new Set();
+    // First pass: collect all raw lines that belong to panels from the original text
+    const rawLines = plain_text.split('\n');
+    let _curPanel = null;
+    const SERIAL_RE = /^\s*\d+[\s,]/;
+    const PANEL_RE = new RegExp(tplPanelKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    for (const rawLine of rawLines) {
+      const t = rawLine.trim();
+      if (!t) continue;
+      if (!SERIAL_RE.test(t) && PANEL_RE.test(t)) { _curPanel = t; panelLineSet.add(t); }
+      else if (!SERIAL_RE.test(t)) { _curPanel = null; }
+      else if (_curPanel) { panelLineSet.add(t); }
+    }
+
     Object.entries(panelGroups).forEach(([sectionName, itemLines]) => {
-      panelLineSet.add(sectionName);
-      itemLines.forEach(l => panelLineSet.add(l));
 
       // Parse each item line using explicit column indices matching real BOM file structure:
       // col[0]=No, col[1]=Description, col[2]=Unit, col[3]=T.QTY,
@@ -304,7 +317,11 @@ Deno.serve(async (req) => {
           model: 'gpt_5_4',
           prompt: PROMPT_TEMPLATE(idx, chunks.length, file_name, chunkText, tplExtraInstructions, colHintsStr),
           response_json_schema: ITEM_SCHEMA,
-        }).then(r => (r?.response || r)?.items || [])
+        }).then(r => {
+            // SDK returns data directly (not wrapped in .response)
+            const d = r?.items ? r : (r?.response ?? r);
+            return Array.isArray(d?.items) ? d.items : [];
+          })
          .catch(() => [])
       )
     );
