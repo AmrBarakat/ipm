@@ -56,13 +56,10 @@ function computeConfidence(item) {
   return Math.max(0, Math.min(100, score));
 }
 
-// Normalize panel section names: collapse whitespace and remove location qualifiers
-// so e.g. "RTU   Outdoor Panel" and "RTU   Panel" both map to "RTU Panel"
+// Normalize panel section names: collapse extra whitespace only.
+// Keep location qualifiers (Outdoor, Indoor, etc.) so different panels stay separate.
 function normalizePanelKey(rawName) {
-  return rawName
-    .replace(/\s+/g, ' ')                                          // collapse multiple spaces
-    .replace(/\s*(Outdoor|Indoor|External|Remote)\s*/gi, ' ')      // remove location qualifiers
-    .trim();
+  return rawName.replace(/\s+/g, ' ').trim();
 }
 
 // Detect panel sections in raw CSV text and pre-aggregate them before sending to LLM.
@@ -223,22 +220,25 @@ Deno.serve(async (req) => {
       panelLineSet.add(sectionName);
       itemLines.forEach(l => panelLineSet.add(l));
 
-      // Parse each item line using explicit column indices matching known BOM file structure:
-      // col[1]=description, col[5]=T.Qty, col[9]=Unit Price SAR, col[10]=Total SAR,
-      // col[13]=List Price USD/SAR, col[14]=List Price SAR
+      // Parse each item line using explicit column indices matching real BOM file structure:
+      // col[0]=No, col[1]=Description, col[2]=Unit, col[3]=T.QTY,
+      // col[4]=Unit Weight, col[5]=Total Weight,
+      // col[6]=Unit Price Equipment SAR, col[7]=Unit Price Services SAR, col[8]=Unit Price SAR,
+      // col[9]=Total Equipment SAR, col[10]=Total Services SAR, col[11]=Total SAR,
+      // col[12]=Customer Discount, col[13]=List Price USD, col[14]=List Price SAR,
+      // col[15]=Customer Total USD, col[16]=Customer Total SAR
       const members = itemLines.map(line => {
         const cols = line.split(',').map(c => c.trim());
         const description = cleanText(cols[1] || cols[0] || '');
-        const qty = toNumber(cols[5], null) || toNumber(cols[2], 1) || 1; // T.Qty at col 5, fallback col 2
+        const qty = toNumber(cols[3], null) || toNumber(cols[2], 1) || 1; // T.QTY at col[3]
 
-        // Use explicit column indices instead of blind number scan
-        const unitCost = toNumber(cols[9], null);                  // Unit Price Equipment SAR
-        const totalCost = toNumber(cols[10], null)                  // Total Equipment SAR
+        const unitCost = toNumber(cols[6], null);                   // Unit Price Equipment SAR
+        const totalCost = toNumber(cols[9], null)                   // Total Equipment SAR
           ?? (unitCost != null ? unitCost * qty : null);
 
-        const unitSell = toNumber(cols[14], null)                   // List Price Equipment SAR
-          ?? toNumber(cols[13], null);                              // fallback col 13
-        const totalSell = unitSell != null ? unitSell * qty : null;
+        const unitSell = toNumber(cols[14], null);                  // List Price SAR
+        const totalSell = toNumber(cols[16], null)                  // Customer Total SAR
+          ?? (unitSell != null ? unitSell * qty : null);
 
         return { description, qty, unit_cost_sar: unitCost, total_cost_sar: totalCost, unit_selling_sar: unitSell, total_selling_sar: totalSell };
       });

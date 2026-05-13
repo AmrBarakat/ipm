@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, Fragment } from 'react';
 import { base44 } from '@/api/base44Client';
 import * as XLSX from 'xlsx';
 import {
@@ -397,9 +397,8 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
                         const isExpanded = expandedPanels.has(item.preview_id);
                         const isDragTarget = dragOverPanel === item.preview_id;
                         return (
-                          <>
+                          <Fragment key={item.preview_id}>
                           <tr
-                            key={item.preview_id}
                             className={`border-t border-slate-100 transition ${
                               isPanelAgg && isDragTarget ? 'bg-orange-200 ring-2 ring-orange-400' :
                               isPanelAgg ? 'bg-orange-50' :
@@ -481,7 +480,7 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
 
                           {/* Expandable child items sub-table */}
                           {isPanelAgg && isExpanded && (item.child_items || []).length > 0 && (
-                            <tr key={`${item.preview_id}_children`} className="border-t border-orange-200">
+                            <tr className="border-t border-orange-200">
                               <td colSpan={12} className="p-0 bg-orange-50/60">
                                 <div className="border-l-4 border-orange-300 ml-8 mr-2 my-1 rounded overflow-hidden">
                                   <table className="w-full text-xs">
@@ -523,7 +522,7 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
                               </td>
                             </tr>
                           )}
-                          </>
+                          </Fragment>
                         );
                       })}
                     </tbody>
