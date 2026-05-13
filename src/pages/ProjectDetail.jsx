@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { STATUS_COLORS, STATUS_LABELS, PRIORITY_COLORS, PRIORITY_LABELS, TYPE_LABELS, formatCurrency, formatDate } from '@/lib/constants';
-import { ArrowLeft, Pencil, FolderOpen } from 'lucide-react';
+import { ArrowLeft, Pencil, FolderOpen, BarChart2 } from 'lucide-react';
 import ProjectPDFExport from '@/components/project-detail/ProjectPDFExport';
+import ProgressReportModal from '@/components/project-detail/ProgressReportModal';
 import ProjectForm from '@/components/projects/ProjectForm';
 import TabOverview from '@/components/project-detail/TabOverview';
 import TabTasks from '@/components/project-detail/TabTasks';
@@ -40,6 +41,7 @@ export default function ProjectDetail() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
   const [editing, setEditing] = useState(false);
+  const [showProgressReport, setShowProgressReport] = useState(false);
 
   useEffect(() => { loadProject(); }, [id]);
 
@@ -104,6 +106,12 @@ export default function ProjectDetail() {
             <div className="text-xs text-slate-500">Contract Value</div>
             <div className="font-bold text-slate-800">{formatCurrency(project.contract_value, project.currency)}</div>
           </div>
+          <button
+            onClick={() => setShowProgressReport(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded border border-amber-300 bg-amber-50 hover:bg-amber-100 text-sm text-amber-700 font-medium transition"
+          >
+            <BarChart2 className="w-4 h-4" /> Progress Report
+          </button>
           <ProjectPDFExport project={project} />
           <button
             onClick={() => setEditing(v => !v)}
@@ -167,6 +175,9 @@ export default function ProjectDetail() {
             {activeTab === 'vendors'    && <TabVendors    projectId={id} project={project} />}
           </div>
         </>
+      )}
+      {showProgressReport && (
+        <ProgressReportModal project={project} onClose={() => setShowProgressReport(false)} />
       )}
     </div>
   );
