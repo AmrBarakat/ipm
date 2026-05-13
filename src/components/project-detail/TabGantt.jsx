@@ -47,6 +47,7 @@ export default function TabGantt({ projectId, project }) {
   const [viewStart, setViewStart] = useState(null);
   const [tooltip, setTooltip] = useState(null);
   const [showDeps, setShowDeps] = useState(true);
+  const [showCriticalPath, setShowCriticalPath] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
 
@@ -92,6 +93,70 @@ export default function TabGantt({ projectId, project }) {
     }
     return result;
   }, [wbsItems]);
+
+  // ── Critical Path Method (CPM) ─────────────────────────────────────────────
+  // Uses planned_start / planned_end dates to compute durations, then runs a
+  // forward pass (ES/EF) and backward pass (LS/LF) to find zero-float tasks.
+  const criticalPathIds = useMemo(() => {
+    const items = wbsItems.filter(w => w.planned_start && w.planned_end);
+    if (items.length === 0) return new Set();
+
+    const byId = Object.fromEntries(items.map(i => [i.id, i]));
+
+    // Duration in days (minimum 1)
+    const dur = id => Math.max(1, daysBetween(byId[id]?.planned_start, byId[id]?.planned_end));
+
+    // Build successor map
+    const successors = {};
+    items.forEach(i => {
+      if (!successors[i.id]) successors[i.id] = [];
+      (i.predecessor_ids || []).forEach(predId => {
+        if (!successors[predId]) successors[predId] = [];
+        successors[predId].push(i.id);
+      });
+    });
+
+    // Forward pass — ES (Early Start) and EF (Early Finish) in days from project start
+    const es = {}, ef = {};
+    // Topological sort via Kahn's algorithm
+    const inDeg = {};
+    items.forEach(i => { inDeg[i.id] = (i.predecessor_ids || []).filter(p => byId[p]).length; });
+    const queue = items.filter(i => inDeg[i.id] === 0).map(i => i.id);
+    const order = [];
+    while (queue.length) {
+      const id = queue.shift();
+      order.push(id);
+      (successors[id] || []).forEach(sid => {
+        inDeg[sid] = (inDeg[sid] || 0) - 1;
+        if (inDeg[sid] === 0) queue.push(sid);
+      });
+    }
+
+    order.forEach(id => {
+      const preds = (byId[id]?.predecessor_ids || []).filter(p => byId[p]);
+      es[id] = preds.length === 0 ? 0 : Math.max(...preds.map(p => ef[p] || 0));
+      ef[id] = es[id] + dur(id);
+    });
+
+    const projectDuration = Math.max(...Object.values(ef));
+
+    // Backward pass — LS (Late Start) and LF (Late Finish)
+    const lf = {}, ls = {};
+    [...order].reverse().forEach(id => {
+      const succs = (successors[id] || []).filter(s => byId[s]);
+      lf[id] = succs.length === 0 ? projectDuration : Math.min(...succs.map(s => ls[s] ?? Infinity));
+      ls[id] = lf[id] - dur(id);
+    });
+
+    // Zero total float → on critical path
+    const critSet = new Set();
+    items.forEach(i => {
+      const totalFloat = (ls[i.id] ?? 0) - (es[i.id] ?? 0);
+      if (Math.abs(totalFloat) <= 0.5) critSet.add(i.id);
+    });
+    return critSet;
+  }, [wbsItems]);
+  // ──────────────────────────────────────────────────────────────────────────
 
   const { minDate } = useMemo(() => {
     const dates = [];
@@ -339,20 +404,21 @@ export default function TabGantt({ projectId, project }) {
     const byId = Object.fromEntries(wbsItems.map(i => [i.id, i]));
     const arrows = [];
     for (const item of wbsRows) {
-      for (const predId of (item.predecessor_ids || [])) {
-        const pred = byId[predId];
-        if (!pred) continue;
-        const predEnd = pred.actual_end || pred.planned_end;
-        const itemStart = item.actual_start || item.planned_start;
-        if (!predEnd || !itemStart) continue;
-        const fromPct = clamp(pct(predEnd), 0, 100);
-        const toPct = clamp(pct(itemStart), 0, 100);
-        const isConflict = (wbsImpact[item.id] || {}).delayed;
-        arrows.push({ predId, itemId: item.id, fromPct, toPct, isConflict });
-      }
+    for (const predId of (item.predecessor_ids || [])) {
+    const pred = byId[predId];
+    if (!pred) continue;
+    const predEnd = pred.actual_end || pred.planned_end;
+    const itemStart = item.actual_start || item.planned_start;
+    if (!predEnd || !itemStart) continue;
+    const fromPct = clamp(pct(predEnd), 0, 100);
+    const toPct = clamp(pct(itemStart), 0, 100);
+    const isConflict = (wbsImpact[item.id] || {}).delayed;
+    const isCriticalLink = showCriticalPath && criticalPathIds.has(predId) && criticalPathIds.has(item.id);
+    arrows.push({ predId, itemId: item.id, fromPct, toPct, isConflict, isCriticalLink });
+    }
     }
     return arrows;
-  }, [wbsItems, wbsRows, viewStart, showDeps, wbsImpact]);
+    }, [wbsItems, wbsRows, viewStart, showDeps, wbsImpact, criticalPathIds, showCriticalPath]);
 
   if (loading) return (
     <div className="flex justify-center py-16">
@@ -403,6 +469,11 @@ export default function TabGantt({ projectId, project }) {
           <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
             <input type="checkbox" checked={showDeps} onChange={e => setShowDeps(e.target.checked)} className="accent-amber-500" />
             Show dependencies
+          </label>
+          <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
+            <input type="checkbox" checked={showCriticalPath} onChange={e => setShowCriticalPath(e.target.checked)} className="accent-rose-500" />
+            <span className="text-rose-600 font-medium">Critical path</span>
+            {criticalPathIds.size > 0 && <span className="text-slate-400">({criticalPathIds.size} tasks)</span>}
           </label>
         </div>
         <div className="flex gap-2">
@@ -474,6 +545,7 @@ export default function TabGantt({ projectId, project }) {
         <div className="flex items-center gap-1.5"><span className="w-3 h-3 rotate-45 bg-amber-500 inline-block" /> Milestone</div>
         <div className="flex items-center gap-1.5"><span className="w-4 border-t-2 border-dashed border-slate-400 inline-block" /> Dependency</div>
         <div className="flex items-center gap-1.5"><span className="w-4 border-l-2 border-red-400 inline-block h-3" /> Today</div>
+        <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-rose-500 inline-block ring-2 ring-rose-300" /> Critical Path</div>
       </div>
 
       {/* Chart */}
@@ -546,10 +618,12 @@ export default function TabGantt({ projectId, project }) {
               const msStyle = linkedMs ? getMilestoneStyle(linkedMs.planned_date) : null;
               const dep = wbsImpact[w.id] || {};
               const hasPending = pendingChanges.has(w.id);
+              const isCritical = showCriticalPath && criticalPathIds.has(w.id);
               return (
-                <div key={w.id} className={`flex border-b border-slate-100 hover:bg-slate-50 ${dep.delayed ? 'bg-red-50' : hasPending ? 'bg-amber-50/40' : ''}`} style={{ minHeight: ROW_H }}>
-                  <div className="w-52 shrink-0 px-4 py-2 text-xs text-slate-700 font-medium truncate border-r border-slate-200 flex items-center gap-1">
+                <div key={w.id} className={`flex border-b hover:bg-slate-50 ${dep.delayed ? 'bg-red-50 border-red-100' : isCritical ? 'bg-rose-50 border-rose-100' : hasPending ? 'bg-amber-50/40 border-slate-100' : 'border-slate-100'}`} style={{ minHeight: ROW_H }}>
+                  <div className={`w-52 shrink-0 px-4 py-2 text-xs font-medium truncate border-r flex items-center gap-1 ${isCritical ? 'border-rose-200 text-rose-800' : 'border-slate-200 text-slate-700'}`}>
                     {dep.delayed && <AlertTriangle className="w-3 h-3 text-red-500 shrink-0" />}
+                    {isCritical && !dep.delayed && <span className="text-rose-500 shrink-0 font-bold" title="Critical path">●</span>}
                     {hasPending && <div className="w-2 h-2 rounded-full bg-amber-400 shrink-0" title="Unsaved change" />}
                     <span className="font-mono text-slate-400 shrink-0">{w.wbs_code}</span>
                     <span className="truncate">{w.name}</span>
@@ -564,7 +638,7 @@ export default function TabGantt({ projectId, project }) {
                     {/* Planned bar — draggable */}
                     {plannedBar && (
                       <div
-                        className={`absolute h-5 rounded ${dep.delayed ? 'bg-red-400' : hasPending ? 'bg-amber-400' : 'bg-purple-400'} opacity-80 hover:opacity-100 z-20 flex items-center overflow-visible select-none`}
+                        className={`absolute h-5 rounded ${dep.delayed ? 'bg-red-400' : isCritical ? 'bg-rose-500 shadow-sm shadow-rose-300' : hasPending ? 'bg-amber-400' : 'bg-purple-400'} opacity-90 hover:opacity-100 z-20 flex items-center overflow-visible select-none`}
                         style={{ ...plannedBar, top: 6 }}
                         onMouseEnter={e => {
                           if (dragRef.current) return;
@@ -577,6 +651,7 @@ export default function TabGantt({ projectId, project }) {
                             progress: w.progress,
                             milestone: linkedMs?.title,
                             delayed: dep.delayed,
+                            critical: isCritical,
                           });
                         }}
                         onMouseLeave={() => setTooltip(null)}
@@ -647,6 +722,9 @@ export default function TabGantt({ projectId, project }) {
                   <marker id="arrow-conflict" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
                     <path d="M0,0 L0,6 L6,3 z" fill="#ef4444" />
                   </marker>
+                  <marker id="arrow-critical" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+                    <path d="M0,0 L0,6 L6,3 z" fill="#f43f5e" />
+                  </marker>
                 </defs>
                 {depArrows.map((arrow, i) => {
                   const fromRowIdx = wbsRows.findIndex(w => w.id === arrow.predId);
@@ -656,14 +734,17 @@ export default function TabGantt({ projectId, project }) {
                   const toX = `${arrow.toPct}%`;
                   const fromY = fromRowIdx * ROW_H + ROW_H / 2;
                   const toY = toRowIdx * ROW_H + ROW_H / 2;
-                  const color = arrow.isConflict ? '#ef4444' : '#94a3b8';
-                  const markerId = arrow.isConflict ? 'arrow-conflict' : 'arrow-normal';
+                  const color = arrow.isConflict ? '#ef4444' : arrow.isCriticalLink ? '#f43f5e' : '#94a3b8';
+                  const markerId = arrow.isConflict ? 'arrow-conflict' : arrow.isCriticalLink ? 'arrow-critical' : 'arrow-normal';
+                  const dashArray = arrow.isCriticalLink ? 'none' : '4 3';
+                  const strokeW = arrow.isCriticalLink ? 2 : 1.5;
                   return (
                     <g key={i}>
                       <path
                         d={`M ${fromX} ${fromY} C ${fromX} ${(fromY + toY) / 2}, ${toX} ${(fromY + toY) / 2}, ${toX} ${toY}`}
-                        fill="none" stroke={color} strokeWidth="1.5" strokeDasharray="4 3"
-                        markerEnd={`url(#${markerId})`} opacity="0.7"
+                        fill="none" stroke={color} strokeWidth={strokeW}
+                        strokeDasharray={dashArray}
+                        markerEnd={`url(#${markerId})`} opacity={arrow.isCriticalLink ? 0.9 : 0.7}
                       />
                     </g>
                   );
@@ -688,6 +769,7 @@ export default function TabGantt({ projectId, project }) {
           {tooltip.progress > 0 && <div className="text-slate-400">Progress: {tooltip.progress}%</div>}
           {tooltip.milestone && <div className="text-amber-400 mt-0.5">🏁 Milestone: {tooltip.milestone}</div>}
           {tooltip.delayed && <div className="text-red-400 font-semibold mt-1">⚠ Starts before predecessor finishes</div>}
+          {tooltip.critical && !tooltip.delayed && <div className="text-rose-400 font-semibold mt-1">🔴 On Critical Path</div>}
         </div>
       )}
     </div>
