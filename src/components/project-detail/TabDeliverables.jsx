@@ -204,7 +204,7 @@ export default function TabDeliverables({ projectId }) {
   }
 
   async function bulkDelete() {
-    await Promise.all([...selectedIds].map(id => base44.entities.Deliverable.delete(id)));
+    await Promise.allSettled([...selectedIds].map(id => base44.entities.Deliverable.delete(id)));
     setSelectedIds(new Set());
     load();
   }
