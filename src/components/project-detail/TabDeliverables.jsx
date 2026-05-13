@@ -220,10 +220,12 @@ export default function TabDeliverables({ projectId }) {
   const milestoneById = Object.fromEntries(milestones.map(m => [m.id, m]));
 
   // Group deliverables by milestone
+  const milestoneIds = new Set(milestones.map(m => m.id));
   const groups = milestones
     .map(m => ({ milestone: m, items: items.filter(d => d.milestone_id === m.id) }))
     .filter(g => g.items.length > 0);
-  const ungrouped = items.filter(d => !d.milestone_id);
+  // Ungrouped = no milestone OR milestone that no longer exists
+  const ungrouped = items.filter(d => !d.milestone_id || !milestoneIds.has(d.milestone_id));
 
   const accepted = items.filter(d => d.status === 'accepted').length;
 

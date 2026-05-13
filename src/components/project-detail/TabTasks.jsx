@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { Plus, Pencil, X, Trash2, RefreshCw, Layers } from 'lucide-react';
+import { Plus, Pencil, X, Trash2, RefreshCw, Layers, Check, Save } from 'lucide-react';
 
 // Map WBS status -> Task status
 const WBS_TO_TASK_STATUS = {
@@ -45,6 +45,9 @@ export default function TabTasks({ projectId }) {
   const [newAssignee, setNewAssignee] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkField, setBulkField] = useState('');
+  const [bulkValue, setBulkValue] = useState('');
 
   useEffect(() => { load(); }, [projectId]);
 
@@ -126,6 +129,24 @@ export default function TabTasks({ projectId }) {
     load();
   }
 
+  function toggleSelect(id) {
+    setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+  function selectAll() { setSelectedIds(new Set(tasks.map(t => t.id))); }
+  function clearSelection() { setSelectedIds(new Set()); setBulkField(''); setBulkValue(''); }
+
+  async function bulkDelete() {
+    if (!confirm(`Delete ${selectedIds.size} tasks?`)) return;
+    await Promise.all([...selectedIds].map(id => base44.entities.Task.delete(id)));
+    clearSelection(); load();
+  }
+
+  async function applyBulkEdit() {
+    if (!bulkField || !bulkValue) return;
+    await Promise.all([...selectedIds].map(id => base44.entities.Task.update(id, { [bulkField]: bulkValue })));
+    clearSelection(); load();
+  }
+
   async function moveTask(task, status) {
     await base44.entities.Task.update(task.id, { status });
     // Sync back to WBS if this task is linked
@@ -151,7 +172,10 @@ export default function TabTasks({ projectId }) {
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <p className="text-sm text-slate-500">{tasks.length} task{tasks.length !== 1 ? 's' : ''}</p>
         <div className="flex items-center gap-2">
-          <p className="text-xs text-slate-400 italic hidden sm:block">Move tasks via status buttons on each card</p>
+          <button onClick={selectedIds.size === tasks.length ? clearSelection : selectAll}
+            className="text-xs text-slate-500 hover:text-slate-700 underline hidden sm:block">
+            {selectedIds.size === tasks.length && tasks.length > 0 ? 'Deselect all' : 'Select all'}
+          </button>
           <button
             onClick={syncFromWBS}
             disabled={syncing}
@@ -162,6 +186,52 @@ export default function TabTasks({ projectId }) {
           </button>
         </div>
       </div>
+
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex flex-wrap items-center gap-3 bg-slate-800 text-white rounded-lg px-4 py-2.5 text-sm mb-3">
+          <span className="font-semibold text-amber-400">{selectedIds.size} selected</span>
+          <span className="text-slate-400">·</span>
+          <select value={bulkField} onChange={e => { setBulkField(e.target.value); setBulkValue(''); }}
+            className="text-xs bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white focus:outline-none focus:border-amber-400">
+            <option value="">Field…</option>
+            <option value="status">Status</option>
+            <option value="priority">Priority</option>
+            <option value="assignee">Assignee</option>
+          </select>
+          {bulkField === 'status' && (
+            <select value={bulkValue} onChange={e => setBulkValue(e.target.value)}
+              className="text-xs bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white focus:outline-none focus:border-amber-400">
+              <option value="">Value…</option>
+              {COLUMNS.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+            </select>
+          )}
+          {bulkField === 'priority' && (
+            <select value={bulkValue} onChange={e => setBulkValue(e.target.value)}
+              className="text-xs bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white focus:outline-none focus:border-amber-400">
+              <option value="">Value…</option>
+              {['low','medium','high','critical'].map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+          )}
+          {bulkField === 'assignee' && (
+            <input value={bulkValue} onChange={e => setBulkValue(e.target.value)} placeholder="Assignee name"
+              className="text-xs bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white placeholder-slate-400 focus:outline-none focus:border-amber-400 w-36" />
+          )}
+          {bulkField && bulkValue && (
+            <button onClick={applyBulkEdit}
+              className="flex items-center gap-1 px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold text-xs rounded">
+              <Save className="w-3 h-3" /> Apply
+            </button>
+          )}
+          <button onClick={bulkDelete}
+            className="flex items-center gap-1 px-3 py-1 bg-red-600 hover:bg-red-500 text-white font-semibold text-xs rounded ml-auto">
+            <Trash2 className="w-3.5 h-3.5" /> Delete {selectedIds.size}
+          </button>
+          <button onClick={clearSelection} className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-white">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-start">
         {COLUMNS.map(col => (
@@ -175,7 +245,7 @@ export default function TabTasks({ projectId }) {
               {byCol[col.id].map(task => {
                 const isEditing = editingId === task.id;
                 return (
-                  <div key={task.id} className="bg-white rounded-lg shadow-sm p-3 text-xs border border-slate-100">
+                  <div key={task.id} className={`bg-white rounded-lg shadow-sm p-3 text-xs border ${selectedIds.has(task.id) ? 'border-amber-400 bg-amber-50/30' : 'border-slate-100'}`}>
                     {isEditing ? (
                       <div className="space-y-1.5">
                         <input value={editForm.title} onChange={e => setEditForm(f => ({ ...f, title: e.target.value }))} className={inp} placeholder="Title" />
@@ -193,7 +263,14 @@ export default function TabTasks({ projectId }) {
                     ) : (
                       <>
                         <div className="flex items-start justify-between gap-1 mb-1.5">
-                          <span className="font-semibold text-slate-800 leading-tight">{task.title}</span>
+                          <div className="flex items-start gap-1.5 flex-1 min-w-0">
+                            <button onClick={() => toggleSelect(task.id)} className="mt-0.5 shrink-0">
+                              <div className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center transition-colors ${selectedIds.has(task.id) ? 'bg-amber-400 border-amber-400' : 'border-slate-300 hover:border-amber-400'}`}>
+                                {selectedIds.has(task.id) && <Check className="w-2 h-2 text-slate-900" />}
+                              </div>
+                            </button>
+                            <span className="font-semibold text-slate-800 leading-tight">{task.title}</span>
+                          </div>
                           <div className="flex gap-0.5 shrink-0">
                             <button onClick={() => startEdit(task)} className="p-0.5 text-slate-300 hover:text-slate-600 rounded"><Pencil className="w-3 h-3" /></button>
                             <button onClick={() => deleteTask(task.id)} className="p-0.5 text-slate-300 hover:text-red-500 rounded"><Trash2 className="w-3 h-3" /></button>
