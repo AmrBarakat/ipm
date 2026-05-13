@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
 import { formatDate } from '@/lib/constants';
-import { ChevronLeft, ChevronRight, Flag, ZoomIn, ZoomOut, Calendar, AlertTriangle, Layers, Check, X, RefreshCw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Flag, ZoomIn, ZoomOut, Calendar, AlertTriangle, Layers, Check, X, RefreshCw, Maximize2, Minimize2 } from 'lucide-react';
 import GanttExportButton from '@/components/project-detail/GanttExportButton';
 
 const MILESTONE_STATUS_COLORS = {
@@ -48,6 +48,7 @@ export default function TabGantt({ projectId, project }) {
   const [tooltip, setTooltip] = useState(null);
   const [showDeps, setShowDeps] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
 
   // Pending changes: Map of id -> { planned_start, planned_end, name, wbs_code }
   const [pendingChanges, setPendingChanges] = useState(new Map());
@@ -370,7 +371,7 @@ export default function TabGantt({ projectId, project }) {
   const ROW_H = 36;
   const SECTION_H = 28;
 
-  return (
+  const inner = (
     <div className="space-y-4">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -424,6 +425,11 @@ export default function TabGantt({ projectId, project }) {
             wbsImpact={wbsImpact}
             chartContainerRef={chartContainerRef}
           />
+          <button onClick={() => setFullscreen(v => !v)}
+            className="p-1.5 border border-slate-200 rounded hover:bg-slate-100 text-slate-600"
+            title={fullscreen ? 'Exit fullscreen' : 'Expand fullscreen'}>
+            {fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+          </button>
         </div>
       </div>
 
@@ -471,7 +477,8 @@ export default function TabGantt({ projectId, project }) {
       </div>
 
       {/* Chart */}
-      <div ref={chartContainerRef} className="bg-white rounded-lg shadow-sm overflow-hidden border border-slate-200">
+      <div className="overflow-x-auto">
+      <div ref={chartContainerRef} className="bg-white rounded-lg shadow-sm overflow-hidden border border-slate-200" style={{ minWidth: 700 }}>
         {/* Header */}
         <div className="flex border-b border-slate-200 bg-slate-50">
           <div className="w-52 shrink-0 px-4 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wide border-r border-slate-200">Item</div>
@@ -666,6 +673,7 @@ export default function TabGantt({ projectId, project }) {
           </div>
         )}
       </div>
+      </div>{/* end overflow-x-auto */}
 
       {/* Tooltip */}
       {tooltip && (
@@ -684,4 +692,23 @@ export default function TabGantt({ projectId, project }) {
       )}
     </div>
   );
+
+  if (fullscreen) {
+    return (
+      <div className="fixed inset-0 z-50 bg-white flex flex-col">
+        <div className="flex items-center justify-between px-4 py-2 border-b border-slate-200 bg-slate-50 shrink-0">
+          <span className="font-semibold text-slate-700 text-sm">Gantt Chart — {project?.name}</span>
+          <button onClick={() => setFullscreen(false)}
+            className="p-1.5 hover:bg-slate-200 rounded text-slate-600" title="Exit fullscreen">
+            <Minimize2 className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="flex-1 overflow-auto p-4">
+          {inner}
+        </div>
+      </div>
+    );
+  }
+
+  return inner;
 }
