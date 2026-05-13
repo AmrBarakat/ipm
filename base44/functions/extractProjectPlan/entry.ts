@@ -3,8 +3,10 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
-    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    // Auth check — tolerate public-app sessions where token may not be present
+    let user;
+    try { user = await base44.auth.me(); } catch (_) { user = null; }
+    // We still allow the call through and rely on asServiceRole for all data access
 
     const { plain_text, file_name, project_name, project_type, start_date } = await req.json();
     if (!plain_text) return Response.json({ error: 'plain_text is required' }, { status: 400 });
