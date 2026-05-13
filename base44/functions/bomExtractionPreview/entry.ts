@@ -231,27 +231,38 @@ Deno.serve(async (req) => {
       else if (_curPanel) { panelLineSet.add(t); }
     }
 
-    Object.entries(panelGroups).forEach(([sectionName, itemLines]) => {
+    // Detect header row from plain_text to build a column-name → index map.
+    // This makes parsing robust regardless of exact column order or count.
+    const headerRow = plain_text.split('\n').find(l => {
+      const u = l.toUpperCase();
+      return (u.includes('DESCRIPTION') || u.includes('DESC')) && (u.includes('QTY') || u.includes('QUANTITY'));
+    });
+    const headerCols = headerRow ? headerRow.split(',').map(c => c.trim().toUpperCase()) : [];
+    function hIdx(...candidates) {
+      for (const c of candidates) {
+        const i = headerCols.findIndex(h => h.includes(c.toUpperCase()));
+        if (i >= 0) return i;
+      }
+      return -1;
+    }
+    // Column index lookups — fallback to known fixed indices if header not found
+    const iDesc    = hIdx('DESCRIPTION', 'DESC')                          !== -1 ? hIdx('DESCRIPTION', 'DESC')                         : 1;
+    const iQty     = hIdx('T.QTY', 'TQTY', 'TOTAL QTY', 'QTY', 'QUANTITY') !== -1 ? hIdx('T.QTY', 'TQTY', 'TOTAL QTY', 'QTY', 'QUANTITY') : 3;
+    const iUCost   = hIdx('UNIT PRICE EQUIPMENT', 'UNIT COST', 'UNIT PRICE') !== -1 ? hIdx('UNIT PRICE EQUIPMENT', 'UNIT COST', 'UNIT PRICE') : 6;
+    const iTCost   = hIdx('TOTAL EQUIPMENT', 'TOTAL COST', 'EXTENDED COST') !== -1 ? hIdx('TOTAL EQUIPMENT', 'TOTAL COST', 'EXTENDED COST') : 9;
+    const iUSell   = hIdx('LIST PRICE SAR', 'LIST PRICE', 'UNIT SELLING', 'SELLING PRICE') !== -1 ? hIdx('LIST PRICE SAR', 'LIST PRICE', 'UNIT SELLING', 'SELLING PRICE') : 14;
+    const iTSell   = hIdx('CUSTOMER TOTAL SAR', 'CUSTOMER TOTAL', 'TOTAL SELLING') !== -1 ? hIdx('CUSTOMER TOTAL SAR', 'CUSTOMER TOTAL', 'TOTAL SELLING') : 16;
 
-      // Parse each item line using explicit column indices matching real BOM file structure:
-      // col[0]=No, col[1]=Description, col[2]=Unit, col[3]=T.QTY,
-      // col[4]=Unit Weight, col[5]=Total Weight,
-      // col[6]=Unit Price Equipment SAR, col[7]=Unit Price Services SAR, col[8]=Unit Price SAR,
-      // col[9]=Total Equipment SAR, col[10]=Total Services SAR, col[11]=Total SAR,
-      // col[12]=Customer Discount, col[13]=List Price USD, col[14]=List Price SAR,
-      // col[15]=Customer Total USD, col[16]=Customer Total SAR
+    Object.entries(panelGroups).forEach(([sectionName, itemLines]) => {
       const members = itemLines.map(line => {
         const cols = line.split(',').map(c => c.trim());
-        const description = cleanText(cols[1] || cols[0] || '');
-        const qty = toNumber(cols[3], null) || toNumber(cols[2], 1) || 1; // T.QTY at col[3]
+        const description = cleanText(cols[iDesc] || cols[0] || '');
+        const qty = toNumber(cols[iQty], null) || 1;
 
-        const unitCost = toNumber(cols[6], null);                   // Unit Price Equipment SAR
-        const totalCost = toNumber(cols[9], null)                   // Total Equipment SAR
-          ?? (unitCost != null ? unitCost * qty : null);
-
-        const unitSell = toNumber(cols[14], null);                  // List Price SAR
-        const totalSell = toNumber(cols[16], null)                  // Customer Total SAR
-          ?? (unitSell != null ? unitSell * qty : null);
+        const unitCost  = toNumber(cols[iUCost], null);
+        const totalCost = toNumber(cols[iTCost], null) ?? (unitCost != null ? unitCost * qty : null);
+        const unitSell  = toNumber(cols[iUSell], null);
+        const totalSell = toNumber(cols[iTSell], null) ?? (unitSell != null ? unitSell * qty : null);
 
         return { description, qty, unit_cost_sar: unitCost, total_cost_sar: totalCost, unit_selling_sar: unitSell, total_selling_sar: totalSell };
       });
