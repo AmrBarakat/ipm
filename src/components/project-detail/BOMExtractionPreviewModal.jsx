@@ -1,9 +1,9 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
 import * as XLSX from 'xlsx';
 import {
   X, Loader2, CheckCircle2, FileSearch, AlertTriangle,
-  ChevronDown, ChevronUp, Check, Pencil, Layers, FileText, Settings
+  ChevronDown, ChevronUp, Check, Pencil, Layers, FileText, Settings, GripVertical
 } from 'lucide-react';
 import { BOM_CATEGORY_LABELS } from '@/lib/constants';
 import BOMTemplateEditor from '@/components/bom/BOMTemplateEditor';
@@ -55,6 +55,11 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
   // Bulk edit state for preview
   const [bulkCategory, setBulkCategory] = useState('');
   const [bulkSupplier, setBulkSupplier] = useState('');
+  // Expanded panel rows
+  const [expandedPanels, setExpandedPanels] = useState(new Set());
+  // Drag state for child item re-assignment
+  const dragChildRef = useRef(null); // { fromPanelId, childId }
+  const [dragOverPanel, setDragOverPanel] = useState(null);
 
   // Load default template on mount
   useEffect(() => {
@@ -88,6 +93,77 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
     }));
     setBulkCategory('');
     setBulkSupplier('');
+  }
+
+  function togglePanelExpand(panelId) {
+    setExpandedPanels(prev => {
+      const n = new Set(prev);
+      n.has(panelId) ? n.delete(panelId) : n.add(panelId);
+      return n;
+    });
+  }
+
+  // Recalculate panel aggregate totals from its current child_items
+  function recalcPanel(panel) {
+    const children = panel.child_items || [];
+    const totalCost = children.reduce((s, c) => s + (Number(c.total_cost_sar) || 0), 0);
+    const totalSell = children.reduce((s, c) => s + (Number(c.total_selling_sar) || 0), 0);
+    const gp = totalSell > 0 ? totalSell - totalCost : null;
+    const margin = gp != null && totalSell > 0 ? gp / totalSell : null;
+    return {
+      ...panel,
+      unit_cost_sar: totalCost || null,
+      total_cost_sar: totalCost || null,
+      unit_selling_sar: totalSell || null,
+      total_selling_sar: totalSell || null,
+      gross_profit: gp,
+      margin_pct: margin,
+      panel_item_count: children.length,
+      child_items: children,
+    };
+  }
+
+  // Drag handlers for child item re-assignment between panels
+  function onChildDragStart(fromPanelId, childId) {
+    dragChildRef.current = { fromPanelId, childId };
+  }
+
+  function onPanelDragOver(e, toPanelId) {
+    if (!dragChildRef.current || dragChildRef.current.fromPanelId === toPanelId) return;
+    e.preventDefault();
+    setDragOverPanel(toPanelId);
+  }
+
+  function onPanelDrop(e, toPanelId) {
+    e.preventDefault();
+    setDragOverPanel(null);
+    const drag = dragChildRef.current;
+    dragChildRef.current = null;
+    if (!drag || drag.fromPanelId === toPanelId) return;
+
+    setItems(prev => {
+      return prev.map(item => {
+        if (!item.is_panel_aggregate) return item;
+        if (item.preview_id === drag.fromPanelId) {
+          // Remove child from source panel
+          const updated = { ...item, child_items: (item.child_items || []).filter(c => c.child_id !== drag.childId) };
+          return recalcPanel(updated);
+        }
+        if (item.preview_id === toPanelId) {
+          // Find child in items state (source panel)
+          const sourcePanel = prev.find(p => p.preview_id === drag.fromPanelId);
+          const child = (sourcePanel?.child_items || []).find(c => c.child_id === drag.childId);
+          if (!child) return item;
+          const updated = { ...item, child_items: [...(item.child_items || []), child] };
+          return recalcPanel(updated);
+        }
+        return item;
+      });
+    });
+  }
+
+  function onPanelDragLeave() {
+    setDragOverPanel(null);
   }
 
   async function runPreview() {
@@ -318,15 +394,22 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
                       {displayItems.map((item, i) => {
                         const isSelected = selectedIds.has(item.preview_id);
                         const isPanelAgg = item.is_panel_aggregate;
+                        const isExpanded = expandedPanels.has(item.preview_id);
+                        const isDragTarget = dragOverPanel === item.preview_id;
                         return (
+                          <>
                           <tr
                             key={item.preview_id}
                             className={`border-t border-slate-100 transition ${
+                              isPanelAgg && isDragTarget ? 'bg-orange-200 ring-2 ring-orange-400' :
                               isPanelAgg ? 'bg-orange-50' :
                               isSelected ? 'bg-amber-50' : i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'
                             } hover:bg-amber-50/60`}
+                            onDragOver={isPanelAgg ? e => onPanelDragOver(e, item.preview_id) : undefined}
+                            onDrop={isPanelAgg ? e => onPanelDrop(e, item.preview_id) : undefined}
+                            onDragLeave={isPanelAgg ? onPanelDragLeave : undefined}
                           >
-                            {/* Checkbox — clicking only on this selects */}
+                            {/* Checkbox */}
                             <td className="px-3 py-2 w-8">
                               <button onClick={() => toggleItem(item.preview_id)} className="flex items-center justify-center">
                                 <div className={`w-4 h-4 rounded border-2 flex items-center justify-center mx-auto ${isSelected ? 'bg-amber-400 border-amber-400' : 'border-slate-300'}`}>
@@ -337,11 +420,17 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
                             <td className="px-3 py-2 font-mono text-slate-500 whitespace-nowrap">{item.part_no || '—'}</td>
                             <td className="px-3 py-2 text-slate-800 max-w-[200px]">
                               <div className="flex items-center gap-1.5">
-                                {isPanelAgg && <Layers className="w-3 h-3 text-orange-500 shrink-0" title={`Aggregated ${item.panel_item_count} items`} />}
+                                {isPanelAgg && (
+                                  <button onClick={() => togglePanelExpand(item.preview_id)}
+                                    className="shrink-0 p-0.5 hover:bg-orange-200 rounded text-orange-600">
+                                    {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                                  </button>
+                                )}
+                                {isPanelAgg && <Layers className="w-3 h-3 text-orange-500 shrink-0" />}
                                 <div className="truncate font-medium">{item.description}</div>
                               </div>
                               {item.section && !isPanelAgg && <div className="text-slate-400 text-[10px] truncate">📁 {item.section}</div>}
-                              {isPanelAgg && <div className="text-orange-600 text-[10px] truncate">📦 {item.panel_item_count} items aggregated</div>}
+                              {isPanelAgg && <div className="text-orange-600 text-[10px] truncate">📦 {item.panel_item_count} items · click to expand</div>}
                               {item.review_notes && <div className="text-amber-600 text-[10px] truncate">⚠ {item.review_notes}</div>}
                             </td>
 
@@ -389,6 +478,52 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
                               )}
                             </td>
                           </tr>
+
+                          {/* Expandable child items sub-table */}
+                          {isPanelAgg && isExpanded && (item.child_items || []).length > 0 && (
+                            <tr key={`${item.preview_id}_children`} className="border-t border-orange-200">
+                              <td colSpan={12} className="p-0 bg-orange-50/60">
+                                <div className="border-l-4 border-orange-300 ml-8 mr-2 my-1 rounded overflow-hidden">
+                                  <table className="w-full text-xs">
+                                    <thead className="bg-orange-100 text-orange-800">
+                                      <tr>
+                                        <th className="px-3 py-1.5 w-6"></th>
+                                        <th className="px-3 py-1.5 text-left font-semibold">Description</th>
+                                        <th className="px-3 py-1.5 text-right font-semibold">Qty</th>
+                                        <th className="px-3 py-1.5 text-right font-semibold">Unit Cost SAR</th>
+                                        <th className="px-3 py-1.5 text-right font-semibold">Total Cost SAR</th>
+                                        <th className="px-3 py-1.5 text-right font-semibold">Unit Sell SAR</th>
+                                        <th className="px-3 py-1.5 text-right font-semibold">Total Sell SAR</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {(item.child_items || []).map(child => (
+                                        <tr key={child.child_id}
+                                          draggable
+                                          onDragStart={() => onChildDragStart(item.preview_id, child.child_id)}
+                                          className="border-t border-orange-100 hover:bg-orange-100/60 cursor-grab active:cursor-grabbing"
+                                        >
+                                          <td className="px-2 py-1.5 text-orange-400">
+                                            <GripVertical className="w-3 h-3" />
+                                          </td>
+                                          <td className="px-3 py-1.5 text-slate-700 font-medium">{child.description || '—'}</td>
+                                          <td className="px-3 py-1.5 text-right text-slate-600">{child.qty}</td>
+                                          <td className="px-3 py-1.5 text-right text-slate-600">{money(child.unit_cost_sar)}</td>
+                                          <td className="px-3 py-1.5 text-right font-semibold text-slate-700">{money(child.total_cost_sar)}</td>
+                                          <td className="px-3 py-1.5 text-right text-slate-600">{money(child.unit_selling_sar)}</td>
+                                          <td className="px-3 py-1.5 text-right text-slate-600">{money(child.total_selling_sar)}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                  <div className="px-3 py-1.5 text-[10px] text-orange-500 italic">
+                                    Drag any row above and drop it onto another panel row to re-assign it.
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                          </>
                         );
                       })}
                     </tbody>
