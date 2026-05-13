@@ -154,7 +154,7 @@ export default function ProjectPlanExtractModal({ document, projectId, project, 
 
   async function applySelected() {
     setStep('applying');
-    let msCreated = 0, wbsCreated = 0;
+    let msCreated = 0, wbsCreated = 0, delivCreated = 0;
 
     const msTitleToId = {};
 
@@ -227,7 +227,47 @@ export default function ProjectPlanExtractModal({ document, projectId, project, 
       }
     }
 
-    setApplyResult({ msCreated, wbsCreated });
+    // Create deliverables from WBS milestones and key tasks
+    const deliverablesToCreate = [];
+    // One deliverable per created milestone
+    for (const [title, msId] of Object.entries(msTitleToId)) {
+      const ms = selectedMs.find(m => m.title === title);
+      deliverablesToCreate.push({
+        project_id: projectId,
+        name: title,
+        description: ms?.description || '',
+        type: 'document',
+        status: 'pending',
+        quantity: 1,
+        unit: 'pc',
+        milestone_id: msId,
+        planned_delivery_date: ms?.planned_date || undefined,
+      });
+    }
+    // Deliverables from WBS items that are milestones (task_mode === 'milestone') but not already covered
+    const coveredTitles = new Set(Object.keys(msTitleToId).map(t => t.toUpperCase()));
+    for (const w of selectedWBS) {
+      if (w.task_mode === 'milestone' && w.name && !coveredTitles.has(w.name.toUpperCase())) {
+        const linkedMsId = wbsCodeToId[w.wbs_code] ? undefined : undefined; // milestone_id resolved in second pass
+        deliverablesToCreate.push({
+          project_id: projectId,
+          name: w.name,
+          description: [w.deliverable, w.remarks].filter(Boolean).join(' | ') || '',
+          type: 'document',
+          status: 'pending',
+          quantity: 1,
+          unit: 'pc',
+          planned_delivery_date: w.planned_end || undefined,
+        });
+        coveredTitles.add(w.name.toUpperCase());
+      }
+    }
+    if (deliverablesToCreate.length > 0) {
+      await base44.entities.Deliverable.bulkCreate(deliverablesToCreate);
+      delivCreated = deliverablesToCreate.length;
+    }
+
+    setApplyResult({ msCreated, wbsCreated, delivCreated });
     setStep('done');
   }
 
@@ -459,6 +499,7 @@ export default function ProjectPlanExtractModal({ document, projectId, project, 
               <div className="text-sm text-slate-500 space-y-1">
                 <p>🏁 {applyResult.msCreated} milestone{applyResult.msCreated !== 1 ? 's' : ''} created</p>
                 <p>🗂 {applyResult.wbsCreated} WBS item{applyResult.wbsCreated !== 1 ? 's' : ''} created</p>
+                {applyResult.delivCreated > 0 && <p>📦 {applyResult.delivCreated} deliverable{applyResult.delivCreated !== 1 ? 's' : ''} created</p>}
               </div>
             </div>
           )}

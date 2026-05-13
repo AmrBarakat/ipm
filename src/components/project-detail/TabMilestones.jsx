@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
 import { formatDate } from '@/lib/constants';
-import { Plus, Flag, Pencil, Trash2, Save, X, Layers } from 'lucide-react';
+import { Plus, Flag, Pencil, Trash2, Save, X, Layers, Check } from 'lucide-react';
 import PanelWrapper from '@/components/ui/PanelWrapper';
 
 const STATUS_COLORS = {
@@ -47,6 +47,9 @@ export default function TabMilestones({ projectId }) {
   const [form, setForm] = useState({ title: '', planned_date: '', weight: '' });
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkField, setBulkField] = useState('');
+  const [bulkValue, setBulkValue] = useState('');
 
   useEffect(() => { load(); }, [projectId]);
 
@@ -92,6 +95,25 @@ export default function TabMilestones({ projectId }) {
     load();
   }
 
+  function toggleSelect(id) {
+    setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+  function toggleSelectAll() {
+    setSelectedIds(milestones.every(m => selectedIds.has(m.id)) ? new Set() : new Set(milestones.map(m => m.id)));
+  }
+  async function bulkDelete() {
+    if (!confirm(`Delete ${selectedIds.size} milestones?`)) return;
+    await Promise.all([...selectedIds].map(id => base44.entities.Milestone.delete(id)));
+    setSelectedIds(new Set()); setBulkField(''); setBulkValue('');
+    load();
+  }
+  async function applyBulkEdit() {
+    if (!bulkField || !bulkValue) return;
+    await Promise.all([...selectedIds].map(id => base44.entities.Milestone.update(id, { [bulkField]: bulkValue })));
+    setBulkField(''); setBulkValue(''); setSelectedIds(new Set());
+    load();
+  }
+
   if (loading) return <Spinner />;
 
   return (
@@ -102,6 +124,46 @@ export default function TabMilestones({ projectId }) {
           <Plus className="w-4 h-4" /> Add Milestone
         </button>
       </div>
+
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex flex-wrap items-center gap-3 bg-slate-800 text-white rounded-lg px-4 py-2.5 text-sm mb-4">
+          <span className="font-semibold text-amber-400">{selectedIds.size} selected</span>
+          <span className="text-slate-400">·</span>
+          <span className="text-slate-300 text-xs">Bulk edit:</span>
+          <select value={bulkField} onChange={e => { setBulkField(e.target.value); setBulkValue(''); }}
+            className="text-xs bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white focus:outline-none focus:border-amber-400">
+            <option value="">Field…</option>
+            <option value="status">Status</option>
+            <option value="planned_date">Planned Date</option>
+          </select>
+          {bulkField === 'status' && (
+            <select value={bulkValue} onChange={e => setBulkValue(e.target.value)}
+              className="text-xs bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white focus:outline-none focus:border-amber-400">
+              <option value="">Value…</option>
+              {['pending','in_progress','completed','overdue'].map(s => <option key={s} value={s}>{s.replace(/_/g,' ')}</option>)}
+            </select>
+          )}
+          {bulkField === 'planned_date' && (
+            <input type="date" value={bulkValue} onChange={e => setBulkValue(e.target.value)}
+              className="text-xs bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white focus:outline-none focus:border-amber-400" />
+          )}
+          {bulkField && bulkValue && (
+            <button onClick={applyBulkEdit}
+              className="flex items-center gap-1 px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold text-xs rounded">
+              <Save className="w-3 h-3" /> Apply
+            </button>
+          )}
+          <button onClick={bulkDelete}
+            className="flex items-center gap-1 px-3 py-1 bg-red-600 hover:bg-red-500 text-white font-semibold text-xs rounded ml-auto">
+            <Trash2 className="w-3.5 h-3.5" /> Delete {selectedIds.size}
+          </button>
+          <button onClick={() => { setSelectedIds(new Set()); setBulkField(''); setBulkValue(''); }}
+            className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-white">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {adding && (
         <form onSubmit={create} className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4 grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -127,15 +189,33 @@ export default function TabMilestones({ projectId }) {
           { key: 'weight', label: 'Weight %' }, { key: 'progress', label: 'Progress %' },
         ]}>
           <div className="space-y-2">
+            {/* Select all */}
+            {milestones.length > 0 && (
+              <div className="flex items-center gap-2 px-2 py-1">
+                <button onClick={toggleSelectAll} className="flex items-center gap-2 text-xs text-slate-500 hover:text-slate-700">
+                  <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${milestones.every(m => selectedIds.has(m.id)) ? 'bg-amber-400 border-amber-400' : 'border-slate-300'}`}>
+                    {milestones.every(m => selectedIds.has(m.id)) && <Check className="w-2.5 h-2.5 text-slate-900" />}
+                  </div>
+                  Select all
+                </button>
+              </div>
+            )}
             {milestones.map(m => {
               const isEditing = editingId === m.id;
               const wbsProgress = computeMilestoneProgress(m.id, wbsItems);
               const displayProgress = wbsProgress !== null ? wbsProgress : (m.progress || 0);
               const linkedCount = wbsItems.filter(i => i.milestone_id === m.id).length;
+              const isSelected = selectedIds.has(m.id);
 
               return (
-                <div key={m.id} className="bg-white rounded-lg shadow-sm px-4 py-3 flex flex-col gap-2">
+                <div key={m.id} className={`bg-white rounded-lg shadow-sm px-4 py-3 flex flex-col gap-2 border ${isSelected ? 'border-amber-300 bg-amber-50/30' : 'border-transparent'}`}>
                   <div className="flex flex-wrap items-center gap-3">
+                    {/* Checkbox */}
+                    <button onClick={() => toggleSelect(m.id)} className="shrink-0">
+                      <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${isSelected ? 'bg-amber-400 border-amber-400' : 'border-slate-300 hover:border-amber-400'}`}>
+                        {isSelected && <Check className="w-2.5 h-2.5 text-slate-900" />}
+                      </div>
+                    </button>
                     <Flag className="w-4 h-4 text-amber-500 shrink-0" />
                     <div className="flex-1 min-w-0">
                       {isEditing ? (

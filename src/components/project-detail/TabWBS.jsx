@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { base44 } from '@/api/base44Client';
 import { formatDate } from '@/lib/constants';
-import { Plus, ChevronRight, ChevronDown, Trash2, Pencil, Save, X, Layers, AlertTriangle, Link, Wand2, BookOpen } from 'lucide-react';
+import { Plus, ChevronRight, ChevronDown, Trash2, Pencil, Save, X, Layers, AlertTriangle, Link, Wand2, BookOpen, Check } from 'lucide-react';
 import PanelWrapper from '@/components/ui/PanelWrapper';
 import ScheduleAssistantModal from './ScheduleAssistantModal';
 import ProjectPlanTemplateModal from './ProjectPlanTemplateModal';
@@ -66,6 +66,9 @@ export default function TabWBS({ projectId, project, onProgressChange }) {
   const [editForm, setEditForm] = useState({});
   const [showScheduleAssistant, setShowScheduleAssistant] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkField, setBulkField] = useState('');
+  const [bulkValue, setBulkValue] = useState('');
 
   function emptyForm() {
     return { wbs_code: '', name: '', assignee: '', description: '',
@@ -242,6 +245,29 @@ export default function TabWBS({ projectId, project, onProgressChange }) {
     setLoading(false);
   }
 
+  function toggleSelectItem(id) {
+    setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+  function toggleSelectAll() {
+    setSelectedIds(items.every(i => selectedIds.has(i.id)) ? new Set() : new Set(items.map(i => i.id)));
+  }
+  async function bulkDeleteItems() {
+    if (!confirm(`Delete ${selectedIds.size} WBS items and their children?`)) return;
+    const toDelete = new Set();
+    [...selectedIds].forEach(id => { toDelete.add(id); getDescendants(id).forEach(d => toDelete.add(d)); });
+    await Promise.all([...toDelete].map(id => base44.entities.WBSItem.delete(id)));
+    setSelectedIds(new Set()); setBulkField(''); setBulkValue('');
+    const updated = await base44.entities.WBSItem.filter({ project_id: projectId }, 'wbs_code', 500);
+    setItems(updated);
+  }
+  async function applyBulkEdit() {
+    if (!bulkField || !bulkValue) return;
+    const value = bulkField === 'weight' ? Number(bulkValue) : bulkValue;
+    await Promise.all([...selectedIds].map(id => base44.entities.WBSItem.update(id, { [bulkField]: value })));
+    setBulkField(''); setBulkValue(''); setSelectedIds(new Set());
+    load();
+  }
+
   function togglePred(form, setForm, predId) {
     setForm(f => {
       const ids = f.predecessor_ids || [];
@@ -262,9 +288,15 @@ export default function TabWBS({ projectId, project, onProgressChange }) {
     return (
       <div key={item.id}>
         <div
-          className={`flex items-start gap-1.5 px-2 py-2 border-b border-slate-100 hover:bg-slate-50 ${dep.delayed ? 'bg-red-50' : depth === 0 ? 'bg-slate-50/60' : 'bg-white'}`}
+          className={`flex items-start gap-1.5 px-2 py-2 border-b border-slate-100 hover:bg-slate-50 ${selectedIds.has(item.id) ? 'bg-amber-50/50' : dep.delayed ? 'bg-red-50' : depth === 0 ? 'bg-slate-50/60' : 'bg-white'}`}
           style={{ paddingLeft: `${8 + depth * 18}px` }}
         >
+          {/* Checkbox */}
+          <button onClick={() => toggleSelectItem(item.id)} className="mt-0.5 shrink-0">
+            <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${selectedIds.has(item.id) ? 'bg-amber-400 border-amber-400' : 'border-slate-300 hover:border-amber-400'}`}>
+              {selectedIds.has(item.id) && <Check className="w-2.5 h-2.5 text-slate-900" />}
+            </div>
+          </button>
           {/* Expand */}
           <button onClick={() => hasChildren && toggleExpand(item.id)}
             className={`mt-0.5 p-0.5 rounded shrink-0 ${hasChildren ? 'text-slate-500 hover:text-slate-800 cursor-pointer' : 'opacity-0 pointer-events-none'}`}>
@@ -460,6 +492,59 @@ export default function TabWBS({ projectId, project, onProgressChange }) {
         </div>
       </div>
 
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex flex-wrap items-center gap-3 bg-slate-800 text-white rounded-lg px-4 py-2.5 text-sm">
+          <span className="font-semibold text-amber-400">{selectedIds.size} selected</span>
+          <span className="text-slate-400">·</span>
+          <span className="text-slate-300 text-xs">Bulk edit:</span>
+          <select value={bulkField} onChange={e => { setBulkField(e.target.value); setBulkValue(''); }}
+            className="text-xs bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white focus:outline-none focus:border-amber-400">
+            <option value="">Field…</option>
+            <option value="status">Status</option>
+            <option value="assignee">Assignee</option>
+            <option value="milestone_id">Milestone</option>
+            <option value="weight">Weight %</option>
+          </select>
+          {bulkField === 'status' && (
+            <select value={bulkValue} onChange={e => setBulkValue(e.target.value)}
+              className="text-xs bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white focus:outline-none focus:border-amber-400">
+              <option value="">Value…</option>
+              {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s.replace(/_/g,' ')}</option>)}
+            </select>
+          )}
+          {bulkField === 'assignee' && (
+            <input value={bulkValue} onChange={e => setBulkValue(e.target.value)} placeholder="Assignee name"
+              className="text-xs bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white placeholder-slate-400 focus:outline-none focus:border-amber-400 w-36" />
+          )}
+          {bulkField === 'milestone_id' && (
+            <select value={bulkValue} onChange={e => setBulkValue(e.target.value)}
+              className="text-xs bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white focus:outline-none focus:border-amber-400">
+              <option value="">Value…</option>
+              {milestones.map(m => <option key={m.id} value={m.id}>{m.title}</option>)}
+            </select>
+          )}
+          {bulkField === 'weight' && (
+            <input type="number" min="0" max="100" value={bulkValue} onChange={e => setBulkValue(e.target.value)} placeholder="0–100"
+              className="text-xs bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white placeholder-slate-400 focus:outline-none focus:border-amber-400 w-20" />
+          )}
+          {bulkField && bulkValue && (
+            <button onClick={applyBulkEdit}
+              className="flex items-center gap-1 px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold text-xs rounded">
+              <Save className="w-3 h-3" /> Apply
+            </button>
+          )}
+          <button onClick={bulkDeleteItems}
+            className="flex items-center gap-1 px-3 py-1 bg-red-600 hover:bg-red-500 text-white font-semibold text-xs rounded ml-auto">
+            <Trash2 className="w-3.5 h-3.5" /> Delete {selectedIds.size}
+          </button>
+          <button onClick={() => { setSelectedIds(new Set()); setBulkField(''); setBulkValue(''); }}
+            className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-white">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {adding === 'root' && (
         <AddForm depth={0} form={form} setForm={setForm} milestones={milestones}
           otherItems={items} onSubmit={createItem} onCancel={() => setAdding(null)} />
@@ -496,6 +581,11 @@ export default function TabWBS({ projectId, project, onProgressChange }) {
         >
           <div className="bg-white rounded-lg shadow-sm overflow-hidden border border-slate-200">
             <div className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wide border-b border-slate-200">
+              <button onClick={toggleSelectAll} className="shrink-0">
+                <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${items.length > 0 && items.every(i => selectedIds.has(i.id)) ? 'bg-amber-400 border-amber-400' : 'border-slate-400'}`}>
+                  {items.length > 0 && items.every(i => selectedIds.has(i.id)) && <Check className="w-2.5 h-2.5 text-slate-900" />}
+                </div>
+              </button>
               <span className="w-4" /><span className="w-14">Code</span>
               <span className="flex-1">Name / Schedule / Cost</span>
               <span className="w-28 text-center">Status</span>
