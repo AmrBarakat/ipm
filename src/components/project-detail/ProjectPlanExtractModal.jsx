@@ -195,12 +195,35 @@ export default function ProjectPlanExtractModal({ document, projectId, project, 
       wbsCreated++;
     }
 
-    // Second pass — patch parent_id links
+    // Second pass — patch parent_id, milestone_id, and predecessor_ids links
     for (const w of selectedWBS) {
+      const patches = {};
+
+      // Link parent
       if (w.parent_code && wbsCodeToId[w.parent_code] && wbsCodeToId[w.wbs_code]) {
-        await base44.entities.WBSItem.update(wbsCodeToId[w.wbs_code], {
-          parent_id: wbsCodeToId[w.parent_code],
-        });
+        patches.parent_id = wbsCodeToId[w.parent_code];
+      }
+
+      // Link milestone: match by exact title or case-insensitive prefix
+      if (w.milestone_title || w.ev_method === '0/100') {
+        const targetTitle = (w.milestone_title || '').trim().toUpperCase();
+        const matched = Object.entries(msTitleToId).find(([title]) =>
+          title.toUpperCase() === targetTitle ||
+          title.toUpperCase().includes(targetTitle) ||
+          targetTitle.includes(title.toUpperCase())
+        );
+        if (matched) patches.milestone_id = matched[1];
+      }
+
+      // Link predecessors: map wbs_code strings to actual IDs
+      if (w.predecessor) {
+        const predCodes = String(w.predecessor).split(/[,;]+/).map(s => s.trim()).filter(Boolean);
+        const predIds = predCodes.map(code => wbsCodeToId[code]).filter(Boolean);
+        if (predIds.length > 0) patches.predecessor_ids = predIds;
+      }
+
+      if (Object.keys(patches).length > 0 && wbsCodeToId[w.wbs_code]) {
+        await base44.entities.WBSItem.update(wbsCodeToId[w.wbs_code], patches);
       }
     }
 

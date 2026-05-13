@@ -332,21 +332,27 @@ export default function TabWBS({ projectId, project, onProgressChange }) {
                     {milestones.map(m => <option key={m.id} value={m.id}>{m.title}</option>)}
                   </select>
                 </div>
-                {/* Predecessors */}
+                {/* Predecessors — multi-select dropdown sorted by wbs_code */}
                 {otherItems.length > 0 && (
                   <div>
-                    <p className="text-xs font-semibold text-slate-500 mb-1">Predecessors (must finish before this starts):</p>
-                    <div className="flex flex-wrap gap-2">
-                      {otherItems.map(oi => (
-                        <label key={oi.id} className="flex items-center gap-1 text-xs cursor-pointer">
-                          <input type="checkbox"
-                            checked={(editForm.predecessor_ids || []).includes(oi.id)}
-                            onChange={() => togglePred(editForm, setEditForm, oi.id)}
-                            className="accent-amber-500" />
-                          <span className="text-slate-600">{oi.wbs_code} {oi.name}</span>
-                        </label>
+                    <label className="text-xs font-semibold text-slate-500 block mb-1">Predecessors (must finish before this starts):</label>
+                    <select
+                      multiple
+                      size={Math.min(6, otherItems.length)}
+                      value={editForm.predecessor_ids || []}
+                      onChange={e => {
+                        const selected = Array.from(e.target.selectedOptions).map(o => o.value);
+                        setEditForm(f => ({ ...f, predecessor_ids: selected }));
+                      }}
+                      className="w-full border border-slate-200 rounded text-xs focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white"
+                    >
+                      {[...otherItems].sort((a, b) => a.wbs_code.localeCompare(b.wbs_code, undefined, { numeric: true })).map(oi => (
+                        <option key={oi.id} value={oi.id} className="px-2 py-1">
+                          {oi.wbs_code} — {oi.name}
+                        </option>
                       ))}
-                    </div>
+                    </select>
+                    <p className="text-xs text-slate-400 mt-0.5">Hold Ctrl / Cmd to select multiple</p>
                   </div>
                 )}
               </div>
@@ -548,21 +554,22 @@ function AddForm({ depth, form, setForm, milestones, otherItems, onSubmit, onCan
       </select>
       {otherItems.length > 0 && (
         <div className="col-span-2 md:col-span-4">
-          <p className="text-xs font-semibold text-slate-500 mb-1">Predecessors:</p>
-          <div className="flex flex-wrap gap-2">
-            {otherItems.map(oi => (
-              <label key={oi.id} className="flex items-center gap-1 text-xs cursor-pointer">
-                <input type="checkbox"
-                  checked={(form.predecessor_ids || []).includes(oi.id)}
-                  onChange={() => setForm(f => {
-                    const ids = f.predecessor_ids || [];
-                    return { ...f, predecessor_ids: ids.includes(oi.id) ? ids.filter(x => x !== oi.id) : [...ids, oi.id] };
-                  })}
-                  className="accent-amber-500" />
-                <span className="text-slate-600">{oi.wbs_code} {oi.name}</span>
-              </label>
+          <label className="text-xs font-semibold text-slate-500 block mb-1">Predecessors:</label>
+          <select
+            multiple
+            size={Math.min(5, otherItems.length)}
+            value={form.predecessor_ids || []}
+            onChange={e => {
+              const selected = Array.from(e.target.selectedOptions).map(o => o.value);
+              setForm(f => ({ ...f, predecessor_ids: selected }));
+            }}
+            className="w-full border border-slate-200 rounded text-xs focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white"
+          >
+            {[...otherItems].sort((a, b) => a.wbs_code.localeCompare(b.wbs_code, undefined, { numeric: true })).map(oi => (
+              <option key={oi.id} value={oi.id}>{oi.wbs_code} — {oi.name}</option>
             ))}
-          </div>
+          </select>
+          <p className="text-xs text-slate-400 mt-0.5">Hold Ctrl / Cmd to select multiple</p>
         </div>
       )}
       <div className="col-span-2 md:col-span-4 flex gap-2">
