@@ -1,3 +1,7 @@
+/**
+ * BOM Import — converts selected preview items into BOMItem records
+ * Spec: BOM_Base44_Complete_Specification_v2.md — Part K (schema) + Part O (workflow fields)
+ */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 function toNumber(value, fallback = 0) {
@@ -9,42 +13,87 @@ function toNumber(value, fallback = 0) {
 function toDateOrUndefined(value) {
   const text = String(value ?? '').trim();
   if (!text) return undefined;
-  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : undefined;
+  // Accept ISO date or mm/dd/yyyy
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(text)) {
+    const [m, d, y] = text.split('/');
+    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  }
+  return undefined;
 }
 
-function mapPreviewItemToBOMItem(item, projectId, documentId) {
-  const qty = toNumber(item.qty, 1);
-  const unitCost = toNumber(item.unit_cost_sar ?? item.planned_cost_price ?? item.cost_price, 0);
-  const unitSelling = toNumber(item.unit_selling_sar ?? item.selling_price, 0);
+// Map category values from new spec to BOMItem entity enum
+function normalizeCategory(cat) {
+  const MAP = {
+    'drive_vfd':        'drive',
+    'sensor_instrument':'sensor',
+    'panel_enclosure':  'panel',
+    'cable_wiring':     'cable',
+    'network_comms':    'network',
+    'software_license': 'software',
+    'service_labor':    'service',
+    'it_hardware':      'IT-HW',
+    // pass-through
+    'plc': 'plc', 'hmi': 'hmi', 'meter': 'meter', 'other': 'other',
+    // legacy values already valid
+    'drive': 'drive', 'sensor': 'sensor', 'panel': 'panel',
+    'cable': 'cable', 'network': 'network', 'software': 'software',
+    'service': 'service',
+  };
+  return MAP[cat] || 'other';
+}
+
+function normalizeOrderStatus(val) {
+  const v = String(val || '').toLowerCase();
+  if (v.includes('ordered') || v === 'ordered') return 'ordered';
+  return 'not_ordered';
+}
+
+function normalizeDeliveryStatus(val) {
+  const v = String(val || '').toLowerCase();
+  if (v.includes('received') || v.includes('delivered')) return 'received';
+  if (v.includes('partial')) return 'partially_received';
+  return 'pending';
+}
+
+function mapItemToBOMRecord(item, projectId, documentId) {
+  const qty       = toNumber(item.qty, 1) || 1;
+  const unitCost  = toNumber(item.unit_cost_sar ?? item.planned_cost_price ?? item.cost_price, 0);
+  const unitSell  = toNumber(item.unit_selling_sar ?? item.selling_price, 0);
+  const actualCost= toNumber(item.actual_cost_sar ?? item.unit_cost_sar, unitCost);
+  const stockQty  = toNumber(item.stock ?? item.stock_qty, 0);
+
+  const notesParts = [
+    item.section ? `Section: ${item.section}` : '',
+    item.worksheet ? `Sheet: ${item.worksheet}` : '',
+    item.notes || '',
+    item.review_notes ? `Review: ${item.review_notes}` : '',
+    item.confidence_score != null ? `Confidence: ${item.confidence_score}%` : '',
+  ].filter(Boolean);
 
   return {
-    project_id: projectId,
-    source_document_id: documentId || '',
-    item_code: item.part_no || item.item_code || '',
-    description: item.description || item.part_no || 'Imported BOM item',
-    category: item.category || 'other',
-    manufacturer: item.manufacturer || item.vendor || '',
-    manufacturer_part_number: item.part_no || '',
-    supplier: item.supplier || item.vendor || '',
-    quantity: qty,
-    stock_qty: toNumber(item.stock_qty, 0),
-    unit: item.unit || 'pcs',
-    planned_cost_price: unitCost,
-    actual_cost_price: toNumber(item.actual_cost_price, unitCost),
-    cost_price: unitCost,
-    selling_price: unitSelling,
-    currency: 'SAR',
-    stock_status: toNumber(item.stock_qty, 0) > 0 ? 'stock' : 'non_stock',
-    order_status: 'not_ordered',
-    ordered: false,
-    delivery_status: 'pending',
-    expected_delivery_date: toDateOrUndefined(item.expected_delivery_date),
-    notes: [
-      item.section ? `Section: ${item.section}` : '',
-      item.notes || '',
-      item.review_notes ? `Review note: ${item.review_notes}` : '',
-      item.confidence_score !== undefined ? `Confidence: ${item.confidence_score}%` : '',
-    ].filter(Boolean).join(' | '),
+    project_id:               projectId,
+    source_document_id:       documentId || '',
+    item_code:                item.part_no || item.item_code || '',
+    description:              item.description || item.part_no || 'Imported BOM item',
+    category:                 normalizeCategory(item.category),
+    manufacturer:             item.manufacturer || '',
+    manufacturer_part_number: item.part_no || item.manufacturer_part_number || '',
+    supplier:                 item.supplier || '',
+    quantity:                 qty,
+    stock_qty:                stockQty,
+    unit:                     item.unit || 'pcs',
+    planned_cost_price:       unitCost,
+    actual_cost_price:        actualCost,
+    cost_price:               unitCost,
+    selling_price:            unitSell,
+    currency:                 item.currency || 'SAR',
+    stock_status:             stockQty > 0 ? 'stock' : 'non_stock',
+    order_status:             normalizeOrderStatus(item.order_status),
+    ordered:                  normalizeOrderStatus(item.order_status) === 'ordered',
+    delivery_status:          normalizeDeliveryStatus(item.delivery_status),
+    expected_delivery_date:   toDateOrUndefined(item.expected_delivery_date),
+    notes:                    notesParts.join(' | '),
   };
 }
 
@@ -59,9 +108,37 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'project_id and selected_items are required' }, { status: 400 });
     }
 
-    const rows = selected_items
-      .filter(item => item && (item.description || item.part_no || item.item_code))
-      .map(item => mapPreviewItemToBOMItem(item, project_id, document_id));
+    const rows = [];
+
+    for (const item of selected_items) {
+      if (!item) continue;
+
+      if (item.is_panel_aggregate) {
+        // Panel aggregate: create one BOMItem for the panel summary
+        if (item.description || item.part_no || item.item_code) {
+          rows.push(mapItemToBOMRecord(item, project_id, document_id));
+        }
+        // Also create individual child BOMItems if children are attached
+        if (Array.isArray(item.children) && item.children.length > 0) {
+          for (const child of item.children) {
+            if (!child || (!child.description && !child.part_no)) continue;
+            rows.push(mapItemToBOMRecord({
+              ...child,
+              section: item.description || item.section,
+              worksheet: item.worksheet || '',
+              order_status: item.order_status,
+              delivery_status: item.delivery_status,
+              expected_delivery_date: item.expected_delivery_date,
+              currency: item.currency || 'SAR',
+            }, project_id, document_id));
+          }
+        }
+      } else {
+        if (item.description || item.part_no || item.item_code) {
+          rows.push(mapItemToBOMRecord(item, project_id, document_id));
+        }
+      }
+    }
 
     if (!rows.length) {
       return Response.json({ created: 0, items: [] });
