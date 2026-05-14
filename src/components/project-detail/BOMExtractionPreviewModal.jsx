@@ -198,12 +198,14 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
   }
 
   // ── Inline edit ────────────────────────────────────────────────────────────
-  function updateItemField(previewId, field, value) {
+  function updateItemField(previewId, fields, value) {
+    // Accept either a single field string or an object of {field: value} pairs
+    const updates = typeof fields === 'string' ? { [fields]: value } : fields;
     setItems(prev => prev.map(i => {
       if (i.preview_id !== previewId) return i;
-      const updated = { ...i, [field]: value };
+      const updated = { ...i, ...updates };
       // Recompute order_qty when qty or stock changes
-      if (field === 'qty' || field === 'stock') {
+      if ('qty' in updates || 'stock' in updates) {
         updated.order_qty = Math.max(0, (Number(updated.qty) || 0) - (Number(updated.stock) || 0));
       }
       return updated;
@@ -544,10 +546,10 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
 
               {/* ── Main table — grouped by category (L3 section headers) ── */}
               <div className="border border-slate-200 rounded-lg overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs min-w-[1200px]">
-                    {/* L1. Column headers */}
-                    <thead className="bg-slate-800 text-white sticky top-0 z-10">
+                <div className="overflow-auto max-h-[55vh]">
+                  <table className="w-full text-xs min-w-[1400px]">
+                    {/* L1. Column headers — sticky within the scrollable container */}
+                    <thead className="bg-slate-800 text-white sticky top-0 z-20">
                       <tr>
                         <th className="px-3 py-2.5 w-8">
                           <button onClick={toggleAll} className="flex items-center justify-center">
@@ -557,15 +559,18 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
                           </button>
                         </th>
                         <th className="px-3 py-2.5 w-6"></th>{/* expand arrow for panels */}
-                        <th className="px-3 py-2.5 text-left font-semibold">DESCRIPTION / PART NO.</th>
+                        <th className="px-3 py-2.5 text-left font-semibold min-w-[160px]">DESCRIPTION</th>
+                        <th className="px-3 py-2.5 text-left font-semibold min-w-[110px]">PART NO.</th>
+                        <th className="px-3 py-2.5 text-left font-semibold min-w-[110px]">MANUFACTURER</th>
                         <th className="px-3 py-2.5 text-left font-semibold w-36">CATEGORY</th>
                         <th className="px-3 py-2.5 text-left font-semibold w-32">SUPPLIER</th>
-                        <th className="px-3 py-2.5 text-right font-semibold w-14">QTY</th>
-                        <th className="px-3 py-2.5 text-right font-semibold w-14">STOCK</th>
-                        <th className="px-3 py-2.5 text-right font-semibold w-16">ORDER QTY</th>
-                        <th className="px-3 py-2.5 text-right font-semibold w-32">PLANNED COST</th>
-                        <th className="px-3 py-2.5 text-right font-semibold w-32">ACTUAL COST</th>
-                        <th className="px-3 py-2.5 text-right font-semibold w-32">SELL VALUE</th>
+                        <th className="px-3 py-2.5 text-right font-semibold w-20">QTY</th>
+                        <th className="px-3 py-2.5 text-right font-semibold w-20">STOCK</th>
+                        <th className="px-3 py-2.5 text-right font-semibold w-20">ORDER QTY</th>
+                        <th className="px-3 py-2.5 text-right font-semibold w-32">UNIT COST</th>
+                        <th className="px-3 py-2.5 text-right font-semibold w-32">TOTAL COST</th>
+                        <th className="px-3 py-2.5 text-right font-semibold w-32">UNIT SELL</th>
+                        <th className="px-3 py-2.5 text-right font-semibold w-32">TOTAL SELL</th>
                         <th className="px-3 py-2.5 text-center font-semibold w-28">ORDER</th>
                         <th className="px-3 py-2.5 text-center font-semibold w-28">DELIVERY</th>
                         <th className="px-3 py-2.5 text-center font-semibold w-24">EXP. DELIVERY</th>
@@ -584,7 +589,7 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
                         return [
                           // L3 Section header bar
                           <tr key={`hdr_${cat}`} className="bg-slate-100 border-t-2 border-slate-300">
-                            <td colSpan={16} className="px-4 py-2">
+                            <td colSpan={18} className="px-4 py-2">
                               <div className="flex items-center gap-4 flex-wrap">
                                 <span className="font-bold text-slate-700 text-xs uppercase tracking-wide">
                                   {ALL_CATEGORIES[cat] || cat} · {catItems.length} items
@@ -652,27 +657,38 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
                                   ) : null}
                                 </td>
 
-                                {/* Description / Part No */}
-                                <td className="px-3 py-2 max-w-[220px]">
+                                {/* Description */}
+                                <td className="px-2 py-1.5">
                                   <div className="flex items-center gap-1.5">
                                     {isPanelAgg && <Layers className="w-3 h-3 text-orange-500 shrink-0" />}
-                                    <div>
+                                    <div className="min-w-0 w-full">
                                       <input
                                         value={item.description}
                                         onChange={e => updateItemField(item.preview_id, 'description', e.target.value)}
-                                        className="font-medium text-slate-800 bg-transparent border-none outline-none w-full focus:bg-white focus:border-b focus:border-amber-400 truncate"
+                                        className={INP + ' font-medium'}
                                       />
-                                      {item.part_no && (
-                                        <div className="text-[10px] text-slate-400 font-mono truncate">{item.part_no}</div>
-                                      )}
                                       {item.review_notes && (
-                                        <div className="text-[10px] text-amber-600 truncate">⚠ {item.review_notes}</div>
+                                        <div className="text-[10px] text-amber-600 truncate mt-0.5">⚠ {item.review_notes}</div>
                                       )}
                                       {isPanelAgg && (
-                                        <div className="text-[10px] text-orange-600">{children.length} items · click ▶ to expand</div>
+                                        <div className="text-[10px] text-orange-600 mt-0.5">{children.length} items · click ▶ to expand</div>
                                       )}
                                     </div>
                                   </div>
+                                </td>
+
+                                {/* Part No */}
+                                <td className="px-2 py-1.5">
+                                  <input value={item.part_no || ''} placeholder="Part no."
+                                    onChange={e => updateItemField(item.preview_id, 'part_no', e.target.value)}
+                                    className={INP + ' font-mono'} />
+                                </td>
+
+                                {/* Manufacturer */}
+                                <td className="px-2 py-1.5">
+                                  <input value={item.manufacturer || ''} placeholder="Manufacturer"
+                                    onChange={e => updateItemField(item.preview_id, 'manufacturer', e.target.value)}
+                                    className={INP} />
                                 </td>
 
                                 {/* Category */}
@@ -697,38 +713,71 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
                                 <td className="px-2 py-1.5">
                                   <input type="number" min="0" value={item.qty}
                                     onChange={e => updateItemField(item.preview_id, 'qty', Number(e.target.value))}
-                                    className={INP + ' text-right'} />
+                                    className={INP + ' text-right w-20'} />
                                 </td>
 
                                 {/* STOCK */}
                                 <td className="px-2 py-1.5">
                                   <input type="number" min="0" value={item.stock ?? 0}
                                     onChange={e => updateItemField(item.preview_id, 'stock', Number(e.target.value))}
-                                    className={INP + ' text-right'} />
+                                    className={INP + ' text-right w-20'} />
                                 </td>
 
-                                {/* ORDER QTY — orange if > 0 (L1) */}
-                                <td className="px-3 py-2 text-right">
+                                {/* ORDER QTY — orange if > 0 */}
+                                <td className="px-3 py-2 text-right w-20">
                                   <span className={`font-semibold ${orderQty > 0 ? 'text-orange-600' : 'text-slate-400'}`}>
                                     {orderQty}
                                   </span>
                                 </td>
 
-                                {/* PLANNED COST — dual line (L2) */}
-                                <td className="px-3 py-2">
-                                  <DualCostCell unit={item.unit_cost_sar} total={item.total_cost_sar} />
-                                </td>
-
-                                {/* ACTUAL COST — editable */}
+                                {/* UNIT COST — editable; auto-computes total */}
                                 <td className="px-2 py-1.5">
-                                  <input type="number" min="0" value={item.actual_cost_sar ?? item.unit_cost_sar ?? 0}
-                                    onChange={e => updateItemField(item.preview_id, 'actual_cost_sar', Number(e.target.value))}
+                                  <input type="number" min="0" step="0.01"
+                                    value={item.unit_cost_sar ?? ''}
+                                    placeholder="0"
+                                    onChange={e => {
+                                      const v = e.target.value === '' ? null : Number(e.target.value);
+                                      const qty = Number(item.qty) || 1;
+                                      updateItemField(item.preview_id, { unit_cost_sar: v, total_cost_sar: v != null ? v * qty : null, actual_cost_sar: v != null ? v * qty : null });
+                                    }}
                                     className={INP + ' text-right'} />
                                 </td>
 
-                                {/* SELL VALUE — dual line (L2) */}
-                                <td className="px-3 py-2">
-                                  <DualCostCell unit={item.unit_selling_sar} total={item.total_selling_sar} />
+                                {/* TOTAL COST — editable */}
+                                <td className="px-2 py-1.5">
+                                  <input type="number" min="0" step="0.01"
+                                    value={item.total_cost_sar ?? ''}
+                                    placeholder="0"
+                                    onChange={e => {
+                                      const v = e.target.value === '' ? null : Number(e.target.value);
+                                      updateItemField(item.preview_id, { total_cost_sar: v, actual_cost_sar: v });
+                                    }}
+                                    className={INP + ' text-right font-semibold'} />
+                                </td>
+
+                                {/* UNIT SELL — editable; auto-computes total */}
+                                <td className="px-2 py-1.5">
+                                  <input type="number" min="0" step="0.01"
+                                    value={item.unit_selling_sar ?? ''}
+                                    placeholder="0"
+                                    onChange={e => {
+                                      const v = e.target.value === '' ? null : Number(e.target.value);
+                                      const qty = Number(item.qty) || 1;
+                                      updateItemField(item.preview_id, { unit_selling_sar: v, total_selling_sar: v != null ? v * qty : null });
+                                    }}
+                                    className={INP + ' text-right'} />
+                                </td>
+
+                                {/* TOTAL SELL — editable */}
+                                <td className="px-2 py-1.5">
+                                  <input type="number" min="0" step="0.01"
+                                    value={item.total_selling_sar ?? ''}
+                                    placeholder="0"
+                                    onChange={e => {
+                                      const v = e.target.value === '' ? null : Number(e.target.value);
+                                      updateItemField(item.preview_id, { total_selling_sar: v });
+                                    }}
+                                    className={INP + ' text-right font-semibold text-emerald-700'} />
                                 </td>
 
                                 {/* ORDER STATUS */}
@@ -779,8 +828,8 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
 
                               // M2. Expanded children sub-table
                               isExpanded && isPanelAgg && children.length > 0 && (
-                                <tr key={`${item.preview_id}_children`}>
-                                  <td colSpan={16} className="p-0">
+                               <tr key={`${item.preview_id}_children`}>
+                                 <td colSpan={18} className="p-0">
                                     <div className="bg-orange-50/60 border-t border-orange-100 pl-6">
                                       <table className="w-full text-xs">
                                         <thead className="bg-orange-100 text-orange-800">
@@ -833,31 +882,36 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
 
                           // L5. Subtotal row
                           <tr key={`sub_${cat}`} className="border-t border-slate-200 bg-slate-50">
-                            <td colSpan={7} className="px-4 py-1.5 text-xs text-slate-500 font-semibold">
+                            <td colSpan={9} className="px-4 py-1.5 text-xs text-slate-500 font-semibold">
                               Subtotal ({catItems.length})
                             </td>
-                            <td colSpan={2} className="px-3 py-1.5 text-right text-xs font-semibold text-slate-700">{fmtSAR(catCost)}</td>
-                            <td className="px-3 py-1.5 text-right text-xs font-semibold text-slate-700">{fmtSAR(catActual)}</td>
-                            <td colSpan={6} className="px-3 py-1.5 text-right text-xs font-semibold text-emerald-700">{fmtSAR(catSell)}</td>
+                            <td className="px-3 py-1.5 text-right text-xs font-semibold text-slate-700">{fmtSAR(catCost)}</td>
+                            <td className="px-3 py-1.5"></td>
+                            <td className="px-3 py-1.5 text-right text-xs font-semibold text-emerald-700">{fmtSAR(catSell)}</td>
+                            <td colSpan={6}></td>
                           </tr>,
                         ];
                       })}
 
-                      {/* L5. Grand Total */}
-                      {items.length > 0 && (
-                        <tr className="border-t-2 border-slate-400 bg-slate-800 text-white">
-                          <td colSpan={7} className="px-4 py-2 text-sm font-bold">GRAND TOTAL</td>
-                          <td colSpan={2} className="px-3 py-2 text-right font-bold text-amber-300">
-                            {fmtSAR(items.reduce((s, i) => s + (Number(i.total_cost_sar) || 0), 0))}
-                          </td>
-                          <td className="px-3 py-2 text-right font-bold text-amber-300">
-                            {fmtSAR(items.reduce((s, i) => s + (Number(i.actual_cost_sar) || 0), 0))}
-                          </td>
-                          <td colSpan={6} className="px-3 py-2 text-right font-bold text-emerald-300">
-                            {fmtSAR(items.reduce((s, i) => s + (Number(i.total_selling_sar) || 0), 0))}
-                          </td>
-                        </tr>
-                      )}
+                      {/* Grand Total — panel aggregates already include their children, so sum top-level only */}
+                      {items.length > 0 && (() => {
+                        const grandCost = items.reduce((s, i) => s + (Number(i.total_cost_sar) || 0), 0);
+                        const grandSell = items.reduce((s, i) => s + (Number(i.total_selling_sar) || 0), 0);
+                        const grandGP   = grandSell > 0 ? grandSell - grandCost : 0;
+                        const grandGM   = grandSell > 0 ? ((grandGP / grandSell) * 100).toFixed(1) : null;
+                        return (
+                          <tr className="border-t-2 border-slate-400 bg-slate-800 text-white">
+                            <td colSpan={9} className="px-4 py-2 text-sm font-bold">GRAND TOTAL · {items.length} line items</td>
+                            <td className="px-3 py-2 text-right font-bold text-amber-300">{fmtSAR(grandCost)}</td>
+                            <td className="px-3 py-2"></td>
+                            <td className="px-3 py-2 text-right font-bold text-emerald-300">{fmtSAR(grandSell)}</td>
+                            <td colSpan={2} className="px-3 py-2 text-right font-bold text-emerald-300">
+                              {grandGM != null ? `${grandGM}% GM` : '—'}
+                            </td>
+                            <td colSpan={4}></td>
+                          </tr>
+                        );
+                      })()}
                     </tbody>
                   </table>
                 </div>
