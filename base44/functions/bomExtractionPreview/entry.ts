@@ -351,9 +351,17 @@ Deno.serve(async (req) => {
       const key = `${item.part_no.toLowerCase().trim()}||${item.description.toLowerCase().trim()}`;
       if (dedupMap.has(key)) {
         const existing = dedupMap.get(key);
-        const newQty = existing.qty + item.qty;
-        const newTotalCost = (existing.total_cost_sar ?? 0) + (item.total_cost_sar ?? 0) || null;
-        const newTotalSell = (existing.total_selling_sar ?? 0) + (item.total_selling_sar ?? 0) || null;
+        // If the quantities are identical, this is likely a chunk-overlap duplicate — keep the existing (don't sum).
+        // Only sum if the quantities genuinely differ, indicating separate line items.
+        const sameQty = existing.qty === item.qty;
+        const newQty = sameQty ? existing.qty : existing.qty + item.qty;
+        // For costs, use the larger total (chunk overlap would repeat the same total, so max is safer than sum)
+        const newTotalCost = sameQty
+          ? (existing.total_cost_sar ?? item.total_cost_sar)
+          : ((existing.total_cost_sar ?? 0) + (item.total_cost_sar ?? 0)) || null;
+        const newTotalSell = sameQty
+          ? (existing.total_selling_sar ?? item.total_selling_sar)
+          : ((existing.total_selling_sar ?? 0) + (item.total_selling_sar ?? 0)) || null;
         const grossProfit = (newTotalSell != null && newTotalCost != null) ? newTotalSell - newTotalCost : null;
         const marginPct = (grossProfit != null && newTotalSell > 0) ? grossProfit / newTotalSell : null;
         dedupMap.set(key, {
