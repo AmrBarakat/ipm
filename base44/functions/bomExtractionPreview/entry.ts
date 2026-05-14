@@ -346,42 +346,17 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Dedup: keep the FIRST occurrence of each unique part_no+description.
+    // BOM files often have a summary sheet that repeats the same rows as the detail sheet,
+    // or the LLM re-extracts items from chunk-boundary overlap. In both cases, the correct
+    // quantity is already on the first (detail) row — summing would double/triple it.
     const dedupMap = new Map();
     for (const item of normalizedItems) {
       const key = `${item.part_no.toLowerCase().trim()}||${item.description.toLowerCase().trim()}`;
-      if (dedupMap.has(key)) {
-        const existing = dedupMap.get(key);
-        // Determine if this is a true duplicate (chunk overlap) vs genuinely separate line items.
-        // A true duplicate has matching qty AND matching total cost (same row extracted twice).
-        // If costs also match, it's definitely a re-extraction — skip it entirely.
-        const sameQty = existing.qty === item.qty;
-        const sameTotalCost = existing.total_cost_sar != null && item.total_cost_sar != null
-          ? Math.abs(existing.total_cost_sar - item.total_cost_sar) < 0.01
-          : existing.total_cost_sar == null && item.total_cost_sar == null;
-        const isTrueDuplicate = sameQty && sameTotalCost;
-
-        if (isTrueDuplicate) continue; // skip — already have this item
-
-        // Genuinely separate line items: sum qtys and totals
-        const newQty = existing.qty + item.qty;
-        const newTotalCost = ((existing.total_cost_sar ?? 0) + (item.total_cost_sar ?? 0)) || null;
-        const newTotalSell = ((existing.total_selling_sar ?? 0) + (item.total_selling_sar ?? 0)) || null;
-        // Recalculate unit cost from new totals
-        const newUnitCost = newTotalCost != null ? newTotalCost / newQty : (existing.unit_cost_sar ?? item.unit_cost_sar);
-        const grossProfit = (newTotalSell != null && newTotalCost != null) ? newTotalSell - newTotalCost : null;
-        const marginPct = (grossProfit != null && newTotalSell > 0) ? grossProfit / newTotalSell : null;
-        dedupMap.set(key, {
-          ...existing,
-          qty: newQty,
-          unit_cost_sar: newUnitCost,
-          total_cost_sar: newTotalCost,
-          total_selling_sar: newTotalSell,
-          gross_profit: grossProfit,
-          margin_pct: marginPct,
-        });
-      } else {
+      if (!dedupMap.has(key)) {
         dedupMap.set(key, item);
       }
+      // If key already exists, skip — the first occurrence is the authoritative one.
     }
     const deduplicatedItems = [...dedupMap.values()].map((item, index) => ({
       ...item,
