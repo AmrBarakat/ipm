@@ -56,12 +56,6 @@ function computeConfidence(item) {
   return Math.max(0, Math.min(100, score));
 }
 
-// Normalize panel section names: collapse extra whitespace only.
-// Keep location qualifiers (Outdoor, Indoor, etc.) so different panels stay separate.
-function normalizePanelKey(rawName) {
-  return rawName.replace(/\s+/g, ' ').trim();
-}
-
 // Detect panel sections in raw CSV text and pre-aggregate them before sending to LLM.
 // A "Panel" header = a line that contains "panel" (case-insensitive) but does NOT start with a number.
 // Its items = all consecutive lines that start with a serial number (digits), until the next non-serial line.
@@ -80,9 +74,8 @@ function preAggregatePanels(text, panelKeyword = 'Panel') {
     const isSerial = SERIAL_LINE.test(trimmed);
 
     if (!isSerial && PANEL_HEADER.test(trimmed)) {
-      // This is a new Panel header — normalize key to merge variants (e.g. Outdoor/Indoor)
-      const normalizedKey = normalizePanelKey(trimmed);
-      currentPanel = normalizedKey;
+      // This is a new Panel header
+      currentPanel = trimmed;
       if (!panelGroups[currentPanel]) panelGroups[currentPanel] = [];
     } else if (!isSerial) {
       // A non-serial, non-panel line ends any active panel group
@@ -214,56 +207,25 @@ Deno.serve(async (req) => {
     const panelGroups = preAggregatePanels(plain_text, tplPanelKeyword);
     const panelPreviewItems = [];
 
-    // Build a set of trimmed lines to exclude from LLM batches.
-    // We must store the normalized section name AND every raw item line (already trimmed).
-    // Also store the original raw lines from the source text to ensure the filter catches them.
+    // Build a set of line prefixes to exclude from LLM batches
     const panelLineSet = new Set();
-    // First pass: collect all raw lines that belong to panels from the original text
-    const rawLines = plain_text.split('\n');
-    let _curPanel = null;
-    const SERIAL_RE = /^\s*\d+[\s,]/;
-    const PANEL_RE = new RegExp(tplPanelKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-    for (const rawLine of rawLines) {
-      const t = rawLine.trim();
-      if (!t) continue;
-      if (!SERIAL_RE.test(t) && PANEL_RE.test(t)) { _curPanel = t; panelLineSet.add(t); }
-      else if (!SERIAL_RE.test(t)) { _curPanel = null; }
-      else if (_curPanel) { panelLineSet.add(t); }
-    }
-
-    // Detect header row from plain_text to build a column-name → index map.
-    // This makes parsing robust regardless of exact column order or count.
-    const headerRow = plain_text.split('\n').find(l => {
-      const u = l.toUpperCase();
-      return (u.includes('DESCRIPTION') || u.includes('DESC')) && (u.includes('QTY') || u.includes('QUANTITY'));
-    });
-    const headerCols = headerRow ? headerRow.split(',').map(c => c.trim().toUpperCase()) : [];
-    function hIdx(...candidates) {
-      for (const c of candidates) {
-        const i = headerCols.findIndex(h => h.includes(c.toUpperCase()));
-        if (i >= 0) return i;
-      }
-      return -1;
-    }
-    // Column index lookups — fallback to known fixed indices if header not found
-    const iDesc    = hIdx('DESCRIPTION', 'DESC')                          !== -1 ? hIdx('DESCRIPTION', 'DESC')                         : 1;
-    const iQty     = hIdx('T.QTY', 'TQTY', 'TOTAL QTY', 'QTY', 'QUANTITY') !== -1 ? hIdx('T.QTY', 'TQTY', 'TOTAL QTY', 'QTY', 'QUANTITY') : 3;
-    const iUCost   = hIdx('UNIT PRICE EQUIPMENT', 'UNIT COST', 'UNIT PRICE') !== -1 ? hIdx('UNIT PRICE EQUIPMENT', 'UNIT COST', 'UNIT PRICE') : 6;
-    const iTCost   = hIdx('TOTAL EQUIPMENT', 'TOTAL COST', 'EXTENDED COST') !== -1 ? hIdx('TOTAL EQUIPMENT', 'TOTAL COST', 'EXTENDED COST') : 9;
-    const iUSell   = hIdx('LIST PRICE SAR', 'LIST PRICE', 'UNIT SELLING', 'SELLING PRICE') !== -1 ? hIdx('LIST PRICE SAR', 'LIST PRICE', 'UNIT SELLING', 'SELLING PRICE') : 14;
-    const iTSell   = hIdx('CUSTOMER TOTAL SAR', 'CUSTOMER TOTAL', 'TOTAL SELLING') !== -1 ? hIdx('CUSTOMER TOTAL SAR', 'CUSTOMER TOTAL', 'TOTAL SELLING') : 16;
-
     Object.entries(panelGroups).forEach(([sectionName, itemLines]) => {
+      panelLineSet.add(sectionName);
+      itemLines.forEach(l => panelLineSet.add(l));
+
+      // Parse each item line: try to extract numbers from CSV fields
+      // Format expected: serial, description, ..., unit_cost, total_cost, unit_sell, total_sell
       const members = itemLines.map(line => {
         const cols = line.split(',').map(c => c.trim());
-        const description = cleanText(cols[iDesc] || cols[0] || '');
-        const qty = toNumber(cols[iQty], null) || 1;
-
-        const unitCost  = toNumber(cols[iUCost], null);
-        const totalCost = toNumber(cols[iTCost], null) ?? (unitCost != null ? unitCost * qty : null);
-        const unitSell  = toNumber(cols[iUSell], null);
-        const totalSell = toNumber(cols[iTSell], null) ?? (unitSell != null ? unitSell * qty : null);
-
+        // serial is cols[0], description is cols[1]
+        const description = cleanText(cols[1] || cols[0] || '');
+        const qty = toNumber(cols[2], 1) || 1;
+        // Try to find cost/selling from later columns
+        const nums = cols.slice(3).map(c => toNumber(c, null)).filter(n => n !== null && n > 0);
+        const unitCost = nums[0] ?? null;
+        const totalCost = nums[1] ?? (unitCost != null ? unitCost * qty : null);
+        const unitSell = nums[2] ?? null;
+        const totalSell = nums[3] ?? (unitSell != null ? unitSell * qty : null);
         return { description, qty, unit_cost_sar: unitCost, total_cost_sar: totalCost, unit_selling_sar: unitSell, total_selling_sar: totalSell };
       });
 
@@ -296,15 +258,6 @@ Deno.serve(async (req) => {
         review_required: false,
         is_panel_aggregate: true,
         panel_item_count: members.length,
-        child_items: members.map((m, idx) => ({
-          child_id: `${sectionName.replace(/\s+/g,'_').slice(0,30)}_child_${idx}`,
-          description: m.description,
-          qty: m.qty,
-          unit_cost_sar: m.unit_cost_sar,
-          total_cost_sar: m.total_cost_sar,
-          unit_selling_sar: m.unit_selling_sar,
-          total_selling_sar: m.total_selling_sar,
-        })),
       });
     });
 
@@ -328,11 +281,7 @@ Deno.serve(async (req) => {
           model: 'gpt_5_4',
           prompt: PROMPT_TEMPLATE(idx, chunks.length, file_name, chunkText, tplExtraInstructions, colHintsStr),
           response_json_schema: ITEM_SCHEMA,
-        }).then(r => {
-            // SDK returns data directly (not wrapped in .response)
-            const d = r?.items ? r : (r?.response ?? r);
-            return Array.isArray(d?.items) ? d.items : [];
-          })
+        }).then(r => (r?.response || r)?.items || [])
          .catch(() => [])
       )
     );
