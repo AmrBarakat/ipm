@@ -18,6 +18,7 @@ import TabNotes from '@/components/project-detail/TabNotes';
 import TabRisks from '@/components/project-detail/TabRisks';
 import TabVendors from '@/components/project-detail/TabVendors';
 import TabDeliverables from '@/components/project-detail/TabDeliverables';
+import TabBOMReconciliation from '@/components/project-detail/TabBOMReconciliation';
 
 const TABS = [
   { id: 'overview',      label: 'Overview'       },
@@ -32,6 +33,7 @@ const TABS = [
   { id: 'notes',         label: 'Notes'          },
   { id: 'risks',         label: 'Risks'          },
   { id: 'vendors',       label: 'Vendors & POs'  },
+  { id: 'bom_reconcile', label: 'BOM Reconcile' },
 ];
 
 export default function ProjectDetail() {
@@ -173,6 +175,7 @@ export default function ProjectDetail() {
             {activeTab === 'risks'      && <TabRisks      projectId={id} />}
             {activeTab === 'deliverables' && <TabDeliverables projectId={id} />}
             {activeTab === 'vendors'    && <TabVendors    projectId={id} project={project} />}
+            {activeTab === 'bom_reconcile' && <TabBOMReconciliation projectId={id} />}
           </div>
         </>
       )}
