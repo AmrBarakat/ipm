@@ -82,6 +82,7 @@ function fmtSAR(val) {
 }
 
 const INP = 'border border-slate-200 rounded px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-amber-400 bg-white w-full';
+const INP_NUM = 'border border-slate-200 rounded px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-amber-400 bg-white text-right w-full';
 
 // ─── Dual-line cost cell (L2) ─────────────────────────────────────────────────
 function DualCostCell({ unit, total }) {
@@ -558,24 +559,24 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
                             </div>
                           </button>
                         </th>
-                        <th className="px-3 py-2.5 w-6"></th>{/* expand arrow for panels */}
-                        <th className="px-3 py-2.5 text-left font-semibold min-w-[160px]">DESCRIPTION</th>
-                        <th className="px-3 py-2.5 text-left font-semibold min-w-[110px]">PART NO.</th>
-                        <th className="px-3 py-2.5 text-left font-semibold min-w-[110px]">MANUFACTURER</th>
-                        <th className="px-3 py-2.5 text-left font-semibold w-36">CATEGORY</th>
-                        <th className="px-3 py-2.5 text-left font-semibold w-32">SUPPLIER</th>
-                        <th className="px-3 py-2.5 text-right font-semibold w-20">QTY</th>
-                        <th className="px-3 py-2.5 text-right font-semibold w-20">STOCK</th>
-                        <th className="px-3 py-2.5 text-right font-semibold w-20">ORDER QTY</th>
-                        <th className="px-3 py-2.5 text-right font-semibold w-32">UNIT COST</th>
-                        <th className="px-3 py-2.5 text-right font-semibold w-32">TOTAL COST</th>
-                        <th className="px-3 py-2.5 text-right font-semibold w-32">UNIT SELL</th>
-                        <th className="px-3 py-2.5 text-right font-semibold w-32">TOTAL SELL</th>
-                        <th className="px-3 py-2.5 text-center font-semibold w-28">ORDER</th>
-                        <th className="px-3 py-2.5 text-center font-semibold w-28">DELIVERY</th>
-                        <th className="px-3 py-2.5 text-center font-semibold w-24">EXP. DELIVERY</th>
-                        <th className="px-3 py-2.5 text-center font-semibold w-8">GP%</th>
-                        <th className="px-3 py-2.5 w-8"></th>
+                        <th className="px-1 py-2.5 w-5"></th>{/* expand arrow for panels */}
+                        <th className="px-2 py-2.5 text-left font-semibold min-w-[180px]">DESCRIPTION</th>
+                        <th className="px-2 py-2.5 text-left font-semibold w-28">PART NO.</th>
+                        <th className="px-2 py-2.5 text-left font-semibold w-28">MANUFACTURER</th>
+                        <th className="px-2 py-2.5 text-left font-semibold w-32">CATEGORY</th>
+                        <th className="px-2 py-2.5 text-left font-semibold w-24">SUPPLIER</th>
+                        <th className="px-2 py-2.5 text-right font-semibold w-16">QTY</th>
+                        <th className="px-2 py-2.5 text-right font-semibold w-16">STOCK</th>
+                        <th className="px-2 py-2.5 text-right font-semibold w-16">ORD QTY</th>
+                        <th className="px-2 py-2.5 text-right font-semibold w-24">UNIT COST</th>
+                        <th className="px-2 py-2.5 text-right font-semibold w-24">TOTAL COST</th>
+                        <th className="px-2 py-2.5 text-right font-semibold w-24">UNIT SELL</th>
+                        <th className="px-2 py-2.5 text-right font-semibold w-24">TOTAL SELL</th>
+                        <th className="px-2 py-2.5 text-center font-semibold w-24">ORDER</th>
+                        <th className="px-2 py-2.5 text-center font-semibold w-24">DELIVERY</th>
+                        <th className="px-2 py-2.5 text-center font-semibold w-28">EXP. DELIVERY</th>
+                        <th className="px-2 py-2.5 text-center font-semibold w-10">GP%</th>
+                        <th className="px-1 py-2.5 w-7"></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -589,7 +590,7 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
                         return [
                           // L3 Section header bar
                           <tr key={`hdr_${cat}`} className="bg-slate-100 border-t-2 border-slate-300">
-                            <td colSpan={18} className="px-4 py-2">
+                            <td colSpan={19} className="px-4 py-2">
                               <div className="flex items-center gap-4 flex-wrap">
                                 <span className="font-bold text-slate-700 text-xs uppercase tracking-wide">
                                   {ALL_CATEGORIES[cat] || cat} · {catItems.length} items
@@ -710,28 +711,28 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
                                 </td>
 
                                 {/* QTY */}
-                                <td className="px-2 py-1.5">
+                                <td className="px-1 py-1.5 w-16">
                                   <input type="number" min="0" value={item.qty}
                                     onChange={e => updateItemField(item.preview_id, 'qty', Number(e.target.value))}
-                                    className={INP + ' text-right w-20'} />
+                                    className={INP_NUM} />
                                 </td>
 
                                 {/* STOCK */}
-                                <td className="px-2 py-1.5">
+                                <td className="px-1 py-1.5 w-16">
                                   <input type="number" min="0" value={item.stock ?? 0}
                                     onChange={e => updateItemField(item.preview_id, 'stock', Number(e.target.value))}
-                                    className={INP + ' text-right w-20'} />
+                                    className={INP_NUM} />
                                 </td>
 
                                 {/* ORDER QTY — orange if > 0 */}
-                                <td className="px-3 py-2 text-right w-20">
+                                <td className="px-2 py-2 text-right w-16">
                                   <span className={`font-semibold ${orderQty > 0 ? 'text-orange-600' : 'text-slate-400'}`}>
                                     {orderQty}
                                   </span>
                                 </td>
 
                                 {/* UNIT COST — editable; auto-computes total */}
-                                <td className="px-2 py-1.5">
+                                <td className="px-1 py-1.5 w-24">
                                   <input type="number" min="0" step="0.01"
                                     value={item.unit_cost_sar ?? ''}
                                     placeholder="0"
@@ -740,11 +741,11 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
                                       const qty = Number(item.qty) || 1;
                                       updateItemField(item.preview_id, { unit_cost_sar: v, total_cost_sar: v != null ? v * qty : null, actual_cost_sar: v != null ? v * qty : null });
                                     }}
-                                    className={INP + ' text-right'} />
+                                    className={INP_NUM} />
                                 </td>
 
                                 {/* TOTAL COST — editable */}
-                                <td className="px-2 py-1.5">
+                                <td className="px-1 py-1.5 w-24">
                                   <input type="number" min="0" step="0.01"
                                     value={item.total_cost_sar ?? ''}
                                     placeholder="0"
@@ -752,11 +753,11 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
                                       const v = e.target.value === '' ? null : Number(e.target.value);
                                       updateItemField(item.preview_id, { total_cost_sar: v, actual_cost_sar: v });
                                     }}
-                                    className={INP + ' text-right font-semibold'} />
+                                    className={INP_NUM + ' font-semibold'} />
                                 </td>
 
                                 {/* UNIT SELL — editable; auto-computes total */}
-                                <td className="px-2 py-1.5">
+                                <td className="px-1 py-1.5 w-24">
                                   <input type="number" min="0" step="0.01"
                                     value={item.unit_selling_sar ?? ''}
                                     placeholder="0"
@@ -765,11 +766,11 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
                                       const qty = Number(item.qty) || 1;
                                       updateItemField(item.preview_id, { unit_selling_sar: v, total_selling_sar: v != null ? v * qty : null });
                                     }}
-                                    className={INP + ' text-right'} />
+                                    className={INP_NUM} />
                                 </td>
 
                                 {/* TOTAL SELL — editable */}
-                                <td className="px-2 py-1.5">
+                                <td className="px-1 py-1.5 w-24">
                                   <input type="number" min="0" step="0.01"
                                     value={item.total_selling_sar ?? ''}
                                     placeholder="0"
@@ -777,11 +778,11 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
                                       const v = e.target.value === '' ? null : Number(e.target.value);
                                       updateItemField(item.preview_id, { total_selling_sar: v });
                                     }}
-                                    className={INP + ' text-right font-semibold text-emerald-700'} />
+                                    className={INP_NUM + ' font-semibold text-emerald-700'} />
                                 </td>
 
                                 {/* ORDER STATUS */}
-                                <td className="px-2 py-1.5">
+                                <td className="px-1 py-1.5 w-24">
                                   <select value={item.order_status || 'Not Ordered'}
                                     onChange={e => updateItemField(item.preview_id, 'order_status', e.target.value)}
                                     className={INP}>
@@ -792,7 +793,7 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
                                 </td>
 
                                 {/* DELIVERY STATUS */}
-                                <td className="px-2 py-1.5">
+                                <td className="px-1 py-1.5 w-24">
                                   <select value={item.delivery_status || 'Pending'}
                                     onChange={e => updateItemField(item.preview_id, 'delivery_status', e.target.value)}
                                     className={INP}>
@@ -804,21 +805,21 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
                                 </td>
 
                                 {/* EXPECTED DELIVERY DATE */}
-                                <td className="px-2 py-1.5">
+                                <td className="px-1 py-1.5 w-28">
                                   <input type="date" value={item.expected_delivery_date || ''}
                                     onChange={e => updateItemField(item.preview_id, 'expected_delivery_date', e.target.value)}
                                     className={INP} />
                                 </td>
 
                                 {/* GP% */}
-                                <td className="px-3 py-2 text-right">
+                                <td className="px-2 py-2 text-right w-10">
                                   <span className={`font-semibold text-[10px] ${parseFloat(marginDisplay) < 0 ? 'text-red-500' : parseFloat(marginDisplay) >= 10 ? 'text-emerald-600' : 'text-amber-600'}`}>
                                     {marginDisplay}
                                   </span>
                                 </td>
 
                                 {/* Delete */}
-                                <td className="px-2 py-1.5 text-center">
+                                <td className="px-1 py-1.5 text-center w-7">
                                   <button onClick={() => deleteItem(item.preview_id)}
                                     className="p-1 text-slate-200 hover:text-red-500 hover:bg-red-50 rounded">
                                     <Trash2 className="w-3.5 h-3.5" />
@@ -829,7 +830,7 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
                               // M2. Expanded children sub-table
                               isExpanded && isPanelAgg && children.length > 0 && (
                                <tr key={`${item.preview_id}_children`}>
-                                 <td colSpan={18} className="p-0">
+                                 <td colSpan={19} className="p-0">
                                     <div className="bg-orange-50/60 border-t border-orange-100 pl-6">
                                       <table className="w-full text-xs">
                                         <thead className="bg-orange-100 text-orange-800">
@@ -882,13 +883,13 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
 
                           // L5. Subtotal row
                           <tr key={`sub_${cat}`} className="border-t border-slate-200 bg-slate-50">
-                            <td colSpan={9} className="px-4 py-1.5 text-xs text-slate-500 font-semibold">
-                              Subtotal ({catItems.length})
-                            </td>
-                            <td className="px-3 py-1.5 text-right text-xs font-semibold text-slate-700">{fmtSAR(catCost)}</td>
-                            <td className="px-3 py-1.5"></td>
-                            <td className="px-3 py-1.5 text-right text-xs font-semibold text-emerald-700">{fmtSAR(catSell)}</td>
-                            <td colSpan={6}></td>
+                           <td colSpan={10} className="px-4 py-1.5 text-xs text-slate-500 font-semibold">
+                             Subtotal ({catItems.length})
+                           </td>
+                           <td className="px-2 py-1.5 text-right text-xs font-semibold text-slate-700">{fmtSAR(catCost)}</td>
+                           <td className="px-2 py-1.5"></td>
+                           <td className="px-2 py-1.5 text-right text-xs font-semibold text-emerald-700">{fmtSAR(catSell)}</td>
+                           <td colSpan={6}></td>
                           </tr>,
                         ];
                       })}
@@ -901,14 +902,14 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
                         const grandGM   = grandSell > 0 ? ((grandGP / grandSell) * 100).toFixed(1) : null;
                         return (
                           <tr className="border-t-2 border-slate-400 bg-slate-800 text-white">
-                            <td colSpan={9} className="px-4 py-2 text-sm font-bold">GRAND TOTAL · {items.length} line items</td>
-                            <td className="px-3 py-2 text-right font-bold text-amber-300">{fmtSAR(grandCost)}</td>
-                            <td className="px-3 py-2"></td>
-                            <td className="px-3 py-2 text-right font-bold text-emerald-300">{fmtSAR(grandSell)}</td>
-                            <td colSpan={2} className="px-3 py-2 text-right font-bold text-emerald-300">
+                            <td colSpan={10} className="px-4 py-2 text-sm font-bold">GRAND TOTAL · {items.length} line items</td>
+                            <td className="px-2 py-2 text-right font-bold text-amber-300">{fmtSAR(grandCost)}</td>
+                            <td className="px-2 py-2"></td>
+                            <td className="px-2 py-2 text-right font-bold text-emerald-300">{fmtSAR(grandSell)}</td>
+                            <td className="px-2 py-2 text-right font-bold text-emerald-300">
                               {grandGM != null ? `${grandGM}% GM` : '—'}
                             </td>
-                            <td colSpan={4}></td>
+                            <td colSpan={5}></td>
                           </tr>
                         );
                       })()}
