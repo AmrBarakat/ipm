@@ -351,22 +351,29 @@ Deno.serve(async (req) => {
       const key = `${item.part_no.toLowerCase().trim()}||${item.description.toLowerCase().trim()}`;
       if (dedupMap.has(key)) {
         const existing = dedupMap.get(key);
-        // If the quantities are identical, this is likely a chunk-overlap duplicate — keep the existing (don't sum).
-        // Only sum if the quantities genuinely differ, indicating separate line items.
+        // Determine if this is a true duplicate (chunk overlap) vs genuinely separate line items.
+        // A true duplicate has matching qty AND matching total cost (same row extracted twice).
+        // If costs also match, it's definitely a re-extraction — skip it entirely.
         const sameQty = existing.qty === item.qty;
-        const newQty = sameQty ? existing.qty : existing.qty + item.qty;
-        // For costs, use the larger total (chunk overlap would repeat the same total, so max is safer than sum)
-        const newTotalCost = sameQty
-          ? (existing.total_cost_sar ?? item.total_cost_sar)
-          : ((existing.total_cost_sar ?? 0) + (item.total_cost_sar ?? 0)) || null;
-        const newTotalSell = sameQty
-          ? (existing.total_selling_sar ?? item.total_selling_sar)
-          : ((existing.total_selling_sar ?? 0) + (item.total_selling_sar ?? 0)) || null;
+        const sameTotalCost = existing.total_cost_sar != null && item.total_cost_sar != null
+          ? Math.abs(existing.total_cost_sar - item.total_cost_sar) < 0.01
+          : existing.total_cost_sar == null && item.total_cost_sar == null;
+        const isTrueDuplicate = sameQty && sameTotalCost;
+
+        if (isTrueDuplicate) continue; // skip — already have this item
+
+        // Genuinely separate line items: sum qtys and totals
+        const newQty = existing.qty + item.qty;
+        const newTotalCost = ((existing.total_cost_sar ?? 0) + (item.total_cost_sar ?? 0)) || null;
+        const newTotalSell = ((existing.total_selling_sar ?? 0) + (item.total_selling_sar ?? 0)) || null;
+        // Recalculate unit cost from new totals
+        const newUnitCost = newTotalCost != null ? newTotalCost / newQty : (existing.unit_cost_sar ?? item.unit_cost_sar);
         const grossProfit = (newTotalSell != null && newTotalCost != null) ? newTotalSell - newTotalCost : null;
         const marginPct = (grossProfit != null && newTotalSell > 0) ? grossProfit / newTotalSell : null;
         dedupMap.set(key, {
           ...existing,
           qty: newQty,
+          unit_cost_sar: newUnitCost,
           total_cost_sar: newTotalCost,
           total_selling_sar: newTotalSell,
           gross_profit: grossProfit,
