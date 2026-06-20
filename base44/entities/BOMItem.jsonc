@@ -5,6 +5,10 @@
     "project_id": {
       "type": "string"
     },
+    "parent_id": {
+      "type": "string",
+      "description": "Self-referencing parent BOMItem ID \u2014 set for Panel/Enclosure child rows; null for top-level items"
+    },
     "source_document_id": {
       "type": "string",
       "description": "Document record that created this BOM item during automatic extraction"
@@ -24,11 +28,10 @@
         "sensor",
         "meter",
         "panel",
-        "cable",
         "network",
-        "software",
+        "software_license",
         "service",
-        "IT-HW",
+        "it_hardware",
         "other"
       ],
       "default": "other"
@@ -59,19 +62,23 @@
     },
     "planned_cost_price": {
       "type": "number",
-      "default": 0
+      "default": 0,
+      "description": "Per-unit planned cost"
     },
     "actual_cost_price": {
       "type": "number",
-      "default": 0
+      "default": 0,
+      "description": "Per-unit actual cost"
     },
     "cost_price": {
       "type": "number",
-      "default": 0
+      "default": 0,
+      "description": "Legacy: per-unit cost alias"
     },
     "selling_price": {
       "type": "number",
-      "default": 0
+      "default": 0,
+      "description": "Per-unit selling price"
     },
     "currency": {
       "type": "string",

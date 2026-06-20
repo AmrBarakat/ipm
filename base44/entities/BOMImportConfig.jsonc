@@ -1,0 +1,183 @@
+{
+  "name": "BOMImportConfig",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Config set name, e.g. 'Default', 'Oil & Gas'"
+    },
+    "is_default": {
+      "type": "boolean",
+      "default": true
+    },
+    "equipment_category_label": {
+      "type": "string",
+      "default": "Equipment",
+      "description": "Label shown for the fallback/general equipment category (maps to 'plc' enum)"
+    },
+    "default_markup_factor": {
+      "type": "number",
+      "default": 1.37,
+      "description": "Multiplier applied to cost when selling price is missing"
+    },
+    "field_synonyms": {
+      "type": "object",
+      "description": "Maps logical field name to array of header synonyms (lowercase, normalized)",
+      "default": {
+        "description": [
+          "description",
+          "item description",
+          "material description",
+          "details",
+          "name"
+        ],
+        "part_no": [
+          "part no",
+          "part number",
+          "model",
+          "p/n",
+          "material code",
+          "model number",
+          "article no",
+          "item code"
+        ],
+        "supplier": [
+          "supplier",
+          "vendor",
+          "manufacturer",
+          "make",
+          "brand",
+          "vendor equipment"
+        ],
+        "qty": [
+          "qty",
+          "quantity",
+          "t.qty",
+          "total qty",
+          "q.ty",
+          "count"
+        ],
+        "unit": [
+          "unit",
+          "uom",
+          "unit of measure",
+          "u/m"
+        ],
+        "unit_cost": [
+          "cost unit price",
+          "unit cost",
+          "cost/unit",
+          "buying price",
+          "net price tl per unit equipment",
+          "cost unit price equipment sar"
+        ],
+        "total_cost": [
+          "total cost equipment",
+          "total cost",
+          "extended cost",
+          "total cost equipment usd",
+          "total cost equipment sar"
+        ],
+        "unit_sell": [
+          "unit price equipment",
+          "selling price",
+          "list price",
+          "unit price",
+          "list price equipment sar",
+          "list price sar"
+        ],
+        "total_sell": [
+          "total equipment sar",
+          "total selling",
+          "total price",
+          "amount",
+          "total equipment"
+        ],
+        "markup_pct": [
+          "materials markup to customer",
+          "material markup",
+          "markup",
+          "markup %"
+        ],
+        "lead_time": [
+          "lead time",
+          "vendor lead time",
+          "delivery days",
+          "lead time calendar days"
+        ],
+        "warranty": [
+          "warranty",
+          "warranty period",
+          "warranty years"
+        ]
+      }
+    },
+    "networking_keywords": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [
+        "switch",
+        "router",
+        "firewall",
+        "access point",
+        "patch panel",
+        "fiber",
+        "ethernet",
+        "sfp",
+        "modem",
+        "gateway",
+        "hub",
+        "noc",
+        "8-port",
+        "16-port",
+        "managed switch"
+      ],
+      "description": "Keywords in description/part_no that classify an item as Network/Comms"
+    },
+    "software_keywords": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [
+        "license",
+        "licence",
+        "sql",
+        "scada",
+        "software",
+        "psa",
+        "reporting module",
+        "eam",
+        "historian"
+      ],
+      "description": "Keywords in description/part_no that classify an item as Software/License"
+    },
+    "panel_keyword": {
+      "type": "string",
+      "default": "panel",
+      "description": "Case-insensitive keyword; group header rows whose name ends with this are aggregated as Panel/Enclosure"
+    },
+    "aggregate_by_category": {
+      "type": "object",
+      "default": {
+        "plc": true,
+        "hmi": true,
+        "drive": true,
+        "sensor": true,
+        "meter": true,
+        "panel": false,
+        "network": true,
+        "software_license": false,
+        "service": false,
+        "it_hardware": false,
+        "other": true
+      },
+      "description": "Whether to deduplicate/sum items within this category by part_no"
+    }
+  },
+  "required": [
+    "name"
+  ]
+}

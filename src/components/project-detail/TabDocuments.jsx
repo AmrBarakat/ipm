@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import BOMExtractionPreviewModal from './BOMExtractionPreviewModal';
 import ProjectPlanExtractModal from './ProjectPlanExtractModal';
+import BomImportSkill from '@/components/bom/BomImportSkill';
 
 const CATEGORY_ICONS = {
   drawing: '📐',
@@ -44,6 +45,7 @@ export default function TabDocuments({ projectId, project }) {
   const [editForm, setEditForm] = useState({});
   const [bomPreviewDoc, setBomPreviewDoc] = useState(null);
   const [planExtractDoc, setPlanExtractDoc] = useState(null);
+  const [showBomSkill, setShowBomSkill] = useState(false);
   const [filterCategory, setFilterCategory] = useState('');
   const [collapsed, setCollapsed] = useState({});
 
@@ -140,10 +142,16 @@ export default function TabDocuments({ projectId, project }) {
           </select>
           <span className="text-xs text-slate-400">{filtered.length} document{filtered.length !== 1 ? 's' : ''}</span>
         </div>
-        <button onClick={() => { setShowForm(v => !v); setForm(EMPTY_FORM); setFile(null); }}
-          className="flex items-center gap-1 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold text-sm rounded">
-          <Upload className="w-4 h-4" /> Upload Document
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowBomSkill(true)}
+            className="flex items-center gap-1 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white font-semibold text-sm rounded">
+            <Cpu className="w-4 h-4" /> Import BOM
+          </button>
+          <button onClick={() => { setShowForm(v => !v); setForm(EMPTY_FORM); setFile(null); }}
+            className="flex items-center gap-1 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold text-sm rounded">
+            <Upload className="w-4 h-4" /> Upload Document
+          </button>
+        </div>
       </div>
 
       {/* Upload Form */}
@@ -325,6 +333,12 @@ export default function TabDocuments({ projectId, project }) {
           project={project}
           onClose={() => setPlanExtractDoc(null)}
           onApplied={() => setPlanExtractDoc(null)} />
+      )}
+      {showBomSkill && (
+        <BomImportSkill
+          projectId={projectId}
+          onClose={() => setShowBomSkill(false)}
+          onImported={() => setShowBomSkill(false)} />
       )}
     </div>
   );

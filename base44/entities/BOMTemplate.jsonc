@@ -7,12 +7,45 @@
       "description": "Template name"
     },
     "description": {
-      "type": "string",
-      "description": "Optional description"
+      "type": "string"
+    },
+    "recognition_profile": {
+      "type": "object",
+      "description": "Rich mapping profile from the BOM recognizer \u2014 supersedes column_mappings when present",
+      "properties": {
+        "sheet": {
+          "type": "string"
+        },
+        "header_row": {
+          "type": "number"
+        },
+        "data_start_row": {
+          "type": "number"
+        },
+        "header_signature": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Normalized header cell values used for template auto-matching"
+        },
+        "field_map": {
+          "type": "object"
+        },
+        "excluded_columns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "group_row_rule": {
+          "type": "string"
+        }
+      }
     },
     "column_mappings": {
       "type": "object",
-      "description": "Maps BOM fields to column names/positions in the source file",
+      "description": "Legacy simple column-name hints \u2014 used as fallback when recognition_profile is absent",
       "properties": {
         "part_no": {
           "type": "string"
@@ -47,12 +80,10 @@
       }
     },
     "default_category": {
-      "type": "string",
-      "description": "Default category to assign if not detected"
+      "type": "string"
     },
     "default_supplier": {
-      "type": "string",
-      "description": "Default supplier to apply to all items"
+      "type": "string"
     },
     "default_currency": {
       "type": "string",
@@ -60,27 +91,22 @@
     },
     "panel_keyword": {
       "type": "string",
-      "default": "Panel",
-      "description": "Keyword to detect panel section headers"
+      "default": "Panel"
     },
     "skip_rows": {
       "type": "number",
-      "default": 0,
-      "description": "Number of header rows to skip"
+      "default": 0
     },
     "aggregate_duplicates": {
       "type": "boolean",
-      "default": true,
-      "description": "Aggregate items with same part number and description"
+      "default": true
     },
     "extra_instructions": {
-      "type": "string",
-      "description": "Additional instructions for the AI extraction"
+      "type": "string"
     },
     "is_default": {
       "type": "boolean",
-      "default": false,
-      "description": "Use this template by default"
+      "default": false
     }
   },
   "required": [
