@@ -21,10 +21,8 @@ Deno.serve(async (req) => {
       if (item.manufacturer_part_number) existingByPartNo[item.manufacturer_part_number.toLowerCase()] = item;
     }
 
-    const created = [];
     const skipped = [];
     const merged = [];
-    const errors = [];
 
     // Map preview_id → DB id for parent rows (needed for child parent_id)
     const previewIdToDbId = {};
@@ -33,12 +31,36 @@ Deno.serve(async (req) => {
     const topLevelRows = preview_rows.filter(r => !r.is_child);
     const childRows = preview_rows.filter(r => r.is_child);
 
+    // Separate rows into those needing merge vs bulk create
+    const toCreate = [];
     for (const row of topLevelRows) {
       const partNoKey = (row.manufacturer_part_number || '').toLowerCase();
       const resolution = conflict_resolutions?.[row.preview_id] || (partNoKey && existingByPartNo[partNoKey] ? 'skip' : 'create');
       const existingItem = partNoKey ? existingByPartNo[partNoKey] : null;
 
-      const payload = {
+      if (existingItem && resolution === 'skip') {
+        skipped.push(row.preview_id);
+        previewIdToDbId[row.preview_id] = existingItem.id;
+        continue;
+      }
+
+      if (existingItem && resolution === 'merge') {
+        await base44.asServiceRole.entities.BOMItem.update(existingItem.id, {
+          quantity: existingItem.quantity + (row.quantity ?? 1),
+        });
+        merged.push(existingItem.id);
+        previewIdToDbId[row.preview_id] = existingItem.id;
+        continue;
+      }
+
+      toCreate.push(row);
+    }
+
+    // Bulk create top-level rows in batches of 25
+    const BATCH = 25;
+    const delay = (ms) => new Promise(r => setTimeout(r, ms));
+    for (let i = 0; i < toCreate.length; i += BATCH) {
+      const batch = toCreate.slice(i, i + BATCH).map(row => ({
         project_id,
         description: row.description,
         category: row.category || 'other',
@@ -54,54 +76,39 @@ Deno.serve(async (req) => {
         order_status: row.order_status || 'not_ordered',
         delivery_status: row.delivery_status || 'pending',
         currency: 'SAR',
-      };
-
-      if (existingItem && resolution === 'skip') {
-        skipped.push(row.preview_id);
-        previewIdToDbId[row.preview_id] = existingItem.id;
-        continue;
-      }
-
-      if (existingItem && resolution === 'merge') {
-        // Merge: sum quantities, keep existing prices unless overridden
-        const updated = await base44.asServiceRole.entities.BOMItem.update(existingItem.id, {
-          quantity: existingItem.quantity + payload.quantity,
-        });
-        merged.push(existingItem.id);
-        previewIdToDbId[row.preview_id] = existingItem.id;
-        continue;
-      }
-
-      // Create new
-      const newItem = await base44.asServiceRole.entities.BOMItem.create(payload);
-      previewIdToDbId[row.preview_id] = newItem.id;
-      created.push(newItem.id);
+      }));
+      const newItems = await base44.asServiceRole.entities.BOMItem.bulkCreate(batch);
+      newItems.forEach((newItem, idx) => {
+        previewIdToDbId[toCreate[i + idx].preview_id] = newItem.id;
+      });
+      if (i + BATCH < toCreate.length) await delay(300);
     }
 
-    // Create child rows with parent_id resolved
-    for (const child of childRows) {
-      const parentDbId = previewIdToDbId[child._parent_preview_id];
-      const payload = {
-        project_id,
-        parent_id: parentDbId || null,
-        description: child.description,
-        category: child.category || 'other',
-        supplier: child.supplier || '',
-        manufacturer_part_number: child.manufacturer_part_number || '',
-        quantity: child.quantity ?? 1,
-        unit: child.unit || 'pcs',
-        planned_cost_price: child.planned_cost_price ?? 0,
-        actual_cost_price: child.actual_cost_price ?? child.planned_cost_price ?? 0,
-        cost_price: child.planned_cost_price ?? 0,
-        selling_price: child.selling_price ?? 0,
-        stock_qty: 0,
-        order_status: 'not_ordered',
-        delivery_status: 'pending',
-        currency: 'SAR',
-      };
-      const newChild = await base44.asServiceRole.entities.BOMItem.create(payload);
-      created.push(newChild.id);
+    // Bulk create child rows in batches of 25
+    const childPayloads = childRows.map(child => ({
+      project_id,
+      parent_id: previewIdToDbId[child._parent_preview_id] || null,
+      description: child.description,
+      category: child.category || 'other',
+      supplier: child.supplier || '',
+      manufacturer_part_number: child.manufacturer_part_number || '',
+      quantity: child.quantity ?? 1,
+      unit: child.unit || 'pcs',
+      planned_cost_price: child.planned_cost_price ?? 0,
+      actual_cost_price: child.actual_cost_price ?? child.planned_cost_price ?? 0,
+      cost_price: child.planned_cost_price ?? 0,
+      selling_price: child.selling_price ?? 0,
+      stock_qty: 0,
+      order_status: 'not_ordered',
+      delivery_status: 'pending',
+      currency: 'SAR',
+    }));
+    for (let i = 0; i < childPayloads.length; i += BATCH) {
+      await base44.asServiceRole.entities.BOMItem.bulkCreate(childPayloads.slice(i, i + BATCH));
+      if (i + BATCH < childPayloads.length) await delay(300);
     }
+
+    const created = toCreate.length + childPayloads.length;
 
     // Save template if requested
     let savedTemplate = null;
@@ -114,10 +121,9 @@ Deno.serve(async (req) => {
     }
 
     return Response.json({
-      created: created.length,
+      created,
       skipped: skipped.length,
       merged: merged.length,
-      errors,
       template_id: savedTemplate?.id || null,
     });
 
