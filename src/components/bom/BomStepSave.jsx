@@ -72,13 +72,19 @@ export default function BomStepSave({ projectId, previewRows, profile, warnings,
     setSaving(true);
     setError('');
     try {
+      // Sanitize profile: excluded_columns must be strings for the BOMTemplate schema
+      const sanitizedProfile = profile ? {
+        ...profile,
+        excluded_columns: (profile.excluded_columns || []).map(c => String(c)),
+      } : profile;
+
       const res = await base44.functions.invoke('bomSkillSave', {
         project_id: projectId,
         preview_rows: previewRows,
         conflict_resolutions: resolutions,
         save_template: saveTemplate && templateName.trim() ? true : false,
         template_name: templateName.trim() || null,
-        profile: profile,
+        profile: sanitizedProfile,
       });
       setResult(res.data);
     } catch (err) {
