@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
 import { formatCurrency, formatDate, BOM_CATEGORY_LABELS } from '@/lib/constants';
-import { Plus, Package, Trash2, Filter, Tag, Truck, ShoppingCart, TrendingUp, CheckCircle, Clock, Edit2, X, Check } from 'lucide-react';
+import { Plus, Package, Trash2, Filter, Tag, Truck, ShoppingCart, TrendingUp, CheckCircle, Clock, Edit2, X, Check, ChevronDown, ChevronRight, Layers } from 'lucide-react';
 import PanelWrapper from '@/components/ui/PanelWrapper';
 
 const DELIVERY_COLORS = {
@@ -33,6 +33,9 @@ export default function TabBOM({ projectId }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState({});
   const saveTimers = useRef({});
+
+  // Panel expand/collapse
+  const [expandedPanels, setExpandedPanels] = useState({});
 
   // Multi-select / bulk edit
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -173,27 +176,62 @@ export default function TabBOM({ projectId }) {
 
   const suppliers = useMemo(() => [...new Set(items.map(i => i.supplier).filter(Boolean))], [items]);
 
-  const filtered = useMemo(() => items.filter(item => {
+  // Separate panel parents, panel children, and standalone items
+  const panelParents = useMemo(() => items.filter(i => !i.parent_id && i.category === 'panel'), [items]);
+  const childItems = useMemo(() => items.filter(i => !!i.parent_id), [items]);
+  const standaloneItems = useMemo(() => items.filter(i => !i.parent_id && i.category !== 'panel'), [items]);
+
+  // Aggregate standalone items by part_no+description into single lines
+  const aggregatedStandalone = useMemo(() => {
+    const map = new Map();
+    for (const item of standaloneItems) {
+      const key = `${(item.manufacturer_part_number || '').trim().toLowerCase()}||${(item.description || '').trim().toLowerCase()}`;
+      if (map.has(key)) {
+        const agg = map.get(key);
+        agg._qty_total = (agg._qty_total || agg.quantity || 1) + (item.quantity || 1);
+        agg._ids = [...(agg._ids || [agg.id]), item.id];
+        agg.quantity = agg._qty_total;
+      } else {
+        map.set(key, { ...item, _qty_total: item.quantity || 1, _ids: [item.id] });
+      }
+    }
+    return [...map.values()];
+  }, [standaloneItems]);
+
+  // Children lookup by parent_id
+  const childrenByParent = useMemo(() => {
+    const map = {};
+    for (const c of childItems) {
+      if (!map[c.parent_id]) map[c.parent_id] = [];
+      map[c.parent_id].push(c);
+    }
+    return map;
+  }, [childItems]);
+
+  // All top-level items for filtering: panel parents + aggregated standalone
+  const allTopLevel = useMemo(() => [...panelParents, ...aggregatedStandalone], [panelParents, aggregatedStandalone]);
+
+  const filtered = useMemo(() => allTopLevel.filter(item => {
     if (filterCategory && item.category !== filterCategory) return false;
     const os = item.order_status || (item.ordered ? 'ordered' : 'not_ordered');
     if (filterOrderStatus && os !== filterOrderStatus) return false;
     if (filterDelivery && item.delivery_status !== filterDelivery) return false;
     if (filterSupplier && item.supplier !== filterSupplier) return false;
     return true;
-  }), [items, filterCategory, filterOrderStatus, filterDelivery, filterSupplier]);
+  }), [allTopLevel, filterCategory, filterOrderStatus, filterDelivery, filterSupplier]);
 
-  // Dashboard KPIs
-  const totalItems = items.length;
-  const totalPlannedCost = items.reduce((s, i) => s + (Number(i.planned_cost_price) || Number(i.cost_price) || 0) * (Number(i.quantity) || 1), 0);
-  const totalActualCost = items.reduce((s, i) => s + (Number(i.actual_cost_price) || 0) * (Number(i.quantity) || 1), 0);
-  const totalSell = items.reduce((s, i) => s + (Number(i.selling_price) || 0) * (Number(i.quantity) || 1), 0);
-  const orderedCount = items.filter(i => (i.order_status || (i.ordered ? 'ordered' : 'not_ordered')) === 'ordered').length;
-  const receivedCount = items.filter(i => i.delivery_status === 'received').length;
-  const pendingDelivery = items.filter(i => i.delivery_status === 'pending' || i.delivery_status === 'partially_received').length;
+  // Dashboard KPIs — based on top-level items only (panels + aggregated standalone)
+  const totalItems = allTopLevel.length;
+  const totalPlannedCost = allTopLevel.reduce((s, i) => s + (Number(i.planned_cost_price) || Number(i.cost_price) || 0) * (Number(i.quantity) || 1), 0);
+  const totalActualCost = allTopLevel.reduce((s, i) => s + (Number(i.actual_cost_price) || 0) * (Number(i.quantity) || 1), 0);
+  const totalSell = allTopLevel.reduce((s, i) => s + (Number(i.selling_price) || 0) * (Number(i.quantity) || 1), 0);
+  const orderedCount = allTopLevel.filter(i => (i.order_status || (i.ordered ? 'ordered' : 'not_ordered')) === 'ordered').length;
+  const receivedCount = allTopLevel.filter(i => i.delivery_status === 'received').length;
+  const pendingDelivery = allTopLevel.filter(i => i.delivery_status === 'pending' || i.delivery_status === 'partially_received').length;
 
   const byCategory = useMemo(() => {
     const map = {};
-    items.forEach(i => {
+    allTopLevel.forEach(i => {
       const cat = i.category || 'other';
       if (!map[cat]) map[cat] = { count: 0, plannedCost: 0, actualCost: 0, sellValue: 0 };
       map[cat].count++;
@@ -202,11 +240,11 @@ export default function TabBOM({ projectId }) {
       map[cat].sellValue += (Number(i.selling_price) || 0) * (Number(i.quantity) || 1);
     });
     return Object.entries(map).sort((a, b) => b[1].plannedCost - a[1].plannedCost);
-  }, [items]);
+  }, [allTopLevel]);
 
   const bySupplier = useMemo(() => {
     const map = {};
-    items.forEach(i => {
+    allTopLevel.forEach(i => {
       const sup = i.supplier || '(No Supplier)';
       if (!map[sup]) map[sup] = { count: 0, plannedCost: 0, actualCost: 0, sellValue: 0 };
       map[sup].count++;
@@ -215,7 +253,7 @@ export default function TabBOM({ projectId }) {
       map[sup].sellValue += (Number(i.selling_price) || 0) * (Number(i.quantity) || 1);
     });
     return Object.entries(map).sort((a, b) => b[1].plannedCost - a[1].plannedCost);
-  }, [items]);
+  }, [allTopLevel]);
 
   if (loading) return <Spinner />;
 
@@ -499,19 +537,34 @@ export default function TabBOM({ projectId }) {
                               const itemOrderStatus = item.order_status || (item.ordered ? 'ordered' : 'not_ordered');
                               const isSaving = saving[item.id];
                               const isSelected = selectedIds.has(item.id);
-                              return (
-                                <tr key={item.id} className={`border-t border-slate-100 hover:bg-amber-50/30 ${isSaving ? 'opacity-70' : ''} ${isSelected ? 'bg-amber-50' : ''}`}>
+                              const isPanel = item.category === 'panel';
+                              const panelChildren = isPanel ? (childrenByParent[item.id] || []) : [];
+                              const isPanelExpanded = expandedPanels[item.id];
+                              return [
+                                <tr key={item.id} className={`border-t border-slate-100 hover:bg-amber-50/30 ${isSaving ? 'opacity-70' : ''} ${isSelected ? 'bg-amber-50' : ''} ${isPanel ? 'bg-orange-50/40' : ''}`}>
                                   <td className="px-3 py-1">
-                                    <button onClick={() => toggleSelect(item.id)} className="flex items-center justify-center">
-                                      <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${isSelected ? 'bg-amber-400 border-amber-400' : 'border-slate-300 hover:border-amber-400'}`}>
-                                        {isSelected && <Check className="w-2.5 h-2.5 text-slate-900" />}
-                                      </div>
-                                    </button>
+                                    <div className="flex items-center gap-1">
+                                      {isPanel && (
+                                        <button onClick={() => setExpandedPanels(p => ({ ...p, [item.id]: !isPanelExpanded }))}
+                                          className="text-orange-500 hover:text-orange-700 shrink-0">
+                                          {isPanelExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                                        </button>
+                                      )}
+                                      <button onClick={() => toggleSelect(item.id)} className="flex items-center justify-center">
+                                        <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${isSelected ? 'bg-amber-400 border-amber-400' : 'border-slate-300 hover:border-amber-400'}`}>
+                                          {isSelected && <Check className="w-2.5 h-2.5 text-slate-900" />}
+                                        </div>
+                                      </button>
+                                    </div>
                                   </td>
                                   <td className="px-1 py-1">
                                     <div className="space-y-0.5">
-                                      <input className={inp} value={item.description || ''} onChange={e => updateField(item.id, 'description', e.target.value)} onBlur={e => handleBlur(item, 'description', e.target.value)} placeholder="Description" />
-                                      <input className={inp + ' text-slate-400'} value={item.manufacturer_part_number || ''} onChange={e => updateField(item.id, 'manufacturer_part_number', e.target.value)} onBlur={e => handleBlur(item, 'manufacturer_part_number', e.target.value)} placeholder="Part No." />
+                                      <div className="flex items-center gap-1">
+                                        {isPanel && <Layers className="w-3 h-3 text-orange-400 shrink-0" />}
+                                        <input className={inp + (isPanel ? ' font-semibold text-orange-800' : '')} value={item.description || ''} onChange={e => updateField(item.id, 'description', e.target.value)} onBlur={e => handleBlur(item, 'description', e.target.value)} placeholder="Description" />
+                                      </div>
+                                      {!isPanel && <input className={inp + ' text-slate-400'} value={item.manufacturer_part_number || ''} onChange={e => updateField(item.id, 'manufacturer_part_number', e.target.value)} onBlur={e => handleBlur(item, 'manufacturer_part_number', e.target.value)} placeholder="Part No." />}
+                                      {isPanel && panelChildren.length > 0 && <span className="text-xs text-orange-500">{panelChildren.length} component{panelChildren.length !== 1 ? 's' : ''}</span>}
                                     </div>
                                   </td>
                                   <td className="px-1 py-1">
@@ -573,8 +626,51 @@ export default function TabBOM({ projectId }) {
                                       <Trash2 className="w-3.5 h-3.5" />
                                     </button>
                                   </td>
-                                </tr>
-                              );
+                                </tr>,
+                                // Panel children expanded sub-table
+                                isPanel && isPanelExpanded && panelChildren.length > 0 && (
+                                  <tr key={`${item.id}_children`}>
+                                    <td colSpan={14} className="p-0">
+                                      <div className="bg-orange-50/60 border-t border-orange-100 pl-8">
+                                        <table className="w-full text-xs">
+                                          <thead className="bg-orange-100 text-orange-800">
+                                            <tr>
+                                              <th className="px-3 py-1.5 text-left">Part No.</th>
+                                              <th className="px-3 py-1.5 text-left">Description</th>
+                                              <th className="px-3 py-1.5 text-left">Supplier</th>
+                                              <th className="px-3 py-1.5 text-right">Qty</th>
+                                              <th className="px-3 py-1.5 text-left">Unit</th>
+                                              <th className="px-3 py-1.5 text-right">Unit Cost</th>
+                                              <th className="px-3 py-1.5 text-right">Total Cost</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {panelChildren.map(child => (
+                                              <tr key={child.id} className="border-t border-orange-100 hover:bg-orange-50">
+                                                <td className="px-3 py-1.5 font-mono text-slate-500">{child.manufacturer_part_number || '—'}</td>
+                                                <td className="px-3 py-1.5 text-slate-700">{child.description}</td>
+                                                <td className="px-3 py-1.5 text-slate-500">{child.supplier || '—'}</td>
+                                                <td className="px-3 py-1.5 text-right font-semibold">{child.quantity}</td>
+                                                <td className="px-3 py-1.5 text-slate-500">{child.unit || 'pcs'}</td>
+                                                <td className="px-3 py-1.5 text-right">{formatCurrency(child.planned_cost_price || 0, 'SAR')}</td>
+                                                <td className="px-3 py-1.5 text-right font-semibold">{formatCurrency((child.planned_cost_price || 0) * (child.quantity || 1), 'SAR')}</td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                          <tfoot className="border-t border-orange-200 bg-orange-100/60">
+                                            <tr>
+                                              <td colSpan={6} className="px-3 py-1.5 text-xs text-orange-700 font-semibold">Total ({panelChildren.length} components)</td>
+                                              <td className="px-3 py-1.5 text-right text-xs font-bold text-orange-800">
+                                                {formatCurrency(panelChildren.reduce((s, c) => s + (c.planned_cost_price || 0) * (c.quantity || 1), 0), 'SAR')}
+                                              </td>
+                                            </tr>
+                                          </tfoot>
+                                        </table>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ),
+                              ];
                             })}
                           </tbody>
                           <tfoot className="bg-slate-50 border-t border-slate-200 text-xs font-semibold text-slate-600">
