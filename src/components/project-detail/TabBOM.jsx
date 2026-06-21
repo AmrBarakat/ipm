@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
 import { formatCurrency, formatDate, BOM_CATEGORY_LABELS } from '@/lib/constants';
 import { Plus, Package, Trash2, Filter, Tag, Truck, ShoppingCart, TrendingUp, CheckCircle, Clock, Edit2, X, Check } from 'lucide-react';
@@ -32,6 +32,7 @@ export default function TabBOM({ projectId }) {
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState({});
+  const saveTimers = useRef({});
 
   // Multi-select / bulk edit
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -50,7 +51,7 @@ export default function TabBOM({ projectId }) {
 
   async function load() {
     setLoading(true);
-    const b = await base44.entities.BOMItem.filter({ project_id: projectId }, '-created_date', 500);
+    const b = await base44.entities.BOMItem.filter({ project_id: projectId }, '-created_date', 300);
     setItems(b);
     setLoading(false);
   }
@@ -82,7 +83,9 @@ export default function TabBOM({ projectId }) {
       ? Number(rawValue) || 0
       : rawValue;
     const updated = { ...item, [field]: parsed };
-    saveItem(updated);
+    // Debounce saves per item to avoid rate limiting on rapid edits
+    if (saveTimers.current[item.id]) clearTimeout(saveTimers.current[item.id]);
+    saveTimers.current[item.id] = setTimeout(() => saveItem(updated), 600);
   }
 
   // Selection helpers
