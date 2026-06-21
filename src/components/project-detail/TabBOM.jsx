@@ -415,7 +415,10 @@ export default function TabBOM({ projectId }) {
               if (!groups[cat]) groups[cat] = [];
               groups[cat].push(item);
             });
-            const sortedCats = catOrder.filter(c => groups[c]);
+            // Include any category in the data, even if not in catOrder (fallback at end)
+            const knownCats = catOrder.filter(c => groups[c]);
+            const unknownCats = Object.keys(groups).filter(c => !catOrder.includes(c));
+            const sortedCats = [...knownCats, ...unknownCats];
 
             function GroupTableHeader({ catItems }) {
               const allCatSelected = catItems.length > 0 && catItems.every(i => selectedIds.has(i.id));
