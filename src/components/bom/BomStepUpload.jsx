@@ -1,15 +1,41 @@
 /**
  * Step 1 — Upload & Auto-Recognize
  */
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Upload, FileSpreadsheet, Loader2, AlertTriangle } from 'lucide-react';
 
-export default function BomStepUpload({ projectId, onRecognized }) {
+export default function BomStepUpload({ projectId, initialDocument, onRecognized }) {
   const [dragging, setDragging] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const inputRef = useRef(null);
+
+  // Auto-recognize when opened from an existing document
+  useEffect(() => {
+    if (initialDocument?.file_url) {
+      recognizeUrl(initialDocument.file_url, initialDocument.file_name || initialDocument.title);
+    }
+  }, []);
+
+  async function recognizeUrl(file_url, file_name) {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await base44.functions.invoke('bomRecognizer', { file_url, project_id: projectId });
+      onRecognized({
+        file_url,
+        file_name: file_name || file_url.split('/').pop(),
+        profile: res.data?.profile,
+        sheet_names: res.data?.sheet_names,
+        template_match: res.data?.template_match,
+      });
+    } catch (err) {
+      setError(err?.response?.data?.error || err.message || 'Recognition failed.');
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function handleFile(file) {
     if (!file) return;
@@ -23,20 +49,7 @@ export default function BomStepUpload({ projectId, onRecognized }) {
     try {
       // Upload file
       const { file_url } = await base44.integrations.Core.UploadFile({ file });
-
-      // Run recognizer
-      const res = await base44.functions.invoke('bomRecognizer', {
-        file_url,
-        project_id: projectId,
-      });
-
-      onRecognized({
-        file_url,
-        file_name: file.name,
-        profile: res.data?.profile,
-        sheet_names: res.data?.sheet_names,
-        template_match: res.data?.template_match,
-      });
+      await recognizeUrl(file_url, file.name);
     } catch (err) {
       setError(err?.response?.data?.error || err.message || 'Recognition failed.');
     } finally {

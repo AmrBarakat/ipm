@@ -12,7 +12,7 @@ import BomStepSave from './BomStepSave';
 
 const STEPS = ['Upload & Recognize', 'Confirm Mapping', 'Preview & Edit', 'Save to BOM'];
 
-export default function BomImportSkill({ projectId, onClose, onImported }) {
+export default function BomImportSkill({ projectId, initialDocument, onClose, onImported }) {
   const [step, setStep] = useState(0);
   const [fileUrl, setFileUrl] = useState(null);
   const [fileName, setFileName] = useState('');
@@ -82,7 +82,11 @@ export default function BomImportSkill({ projectId, onClose, onImported }) {
         {/* Body */}
         <div className="flex-1 overflow-auto">
           {step === 0 && (
-            <BomStepUpload projectId={projectId} onRecognized={handleRecognized} />
+            <BomStepUpload
+              projectId={projectId}
+              initialDocument={initialDocument}
+              onRecognized={handleRecognized}
+            />
           )}
           {step === 1 && profile && (
             <BomStepMapping

@@ -3,9 +3,8 @@ import { base44 } from '@/api/base44Client';
 import { formatDate, formatBytes, CATEGORY_LABELS } from '@/lib/constants';
 import {
   FileText, Upload, ExternalLink, Pencil, Trash2, Save, X,
-  Cpu, Filter, FolderOpen, Link2, ChevronDown, ChevronRight, FileCheck
+  Cpu, Filter, Link2, ChevronDown, ChevronRight, FileCheck
 } from 'lucide-react';
-import BOMExtractionPreviewModal from './BOMExtractionPreviewModal';
 import ProjectPlanExtractModal from './ProjectPlanExtractModal';
 import BomImportSkill from '@/components/bom/BomImportSkill';
 
@@ -43,9 +42,8 @@ export default function TabDocuments({ projectId, project }) {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
-  const [bomPreviewDoc, setBomPreviewDoc] = useState(null);
+  const [bomSkillDoc, setBomSkillDoc] = useState(null); // null = closed, {} = open with no doc, doc = open with doc pre-loaded
   const [planExtractDoc, setPlanExtractDoc] = useState(null);
-  const [showBomSkill, setShowBomSkill] = useState(false);
   const [filterCategory, setFilterCategory] = useState('');
   const [collapsed, setCollapsed] = useState({});
 
@@ -143,7 +141,7 @@ export default function TabDocuments({ projectId, project }) {
           <span className="text-xs text-slate-400">{filtered.length} document{filtered.length !== 1 ? 's' : ''}</span>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setShowBomSkill(true)}
+          <button onClick={() => setBomSkillDoc({})}
             className="flex items-center gap-1 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white font-semibold text-sm rounded">
             <Cpu className="w-4 h-4" /> Import BOM
           </button>
@@ -287,9 +285,9 @@ export default function TabDocuments({ projectId, project }) {
                                     <ExternalLink className="w-3 h-3" /> Open
                                   </a>
                                   {['engineering', 'drawing', 'submittal', 'other', 'bom', 'charter'].includes(doc.category) && (
-                                    <button onClick={() => setBomPreviewDoc(doc)}
+                                    <button onClick={() => setBomSkillDoc(doc)}
                                       className="flex items-center gap-1 px-2.5 py-1 text-xs border border-amber-300 rounded hover:bg-amber-50 text-amber-700 font-medium">
-                                      <Cpu className="w-3 h-3" /> Extract BOM
+                                      <Cpu className="w-3 h-3" /> Import BOM
                                     </button>
                                   )}
                                   {doc.category === 'project_plan' && (
@@ -319,13 +317,6 @@ export default function TabDocuments({ projectId, project }) {
         </div>
       )}
 
-      {bomPreviewDoc && (
-        <BOMExtractionPreviewModal
-          document={bomPreviewDoc}
-          projectId={projectId}
-          onClose={() => setBomPreviewDoc(null)}
-          onImported={() => setBomPreviewDoc(null)} />
-      )}
       {planExtractDoc && (
         <ProjectPlanExtractModal
           document={planExtractDoc}
@@ -334,11 +325,12 @@ export default function TabDocuments({ projectId, project }) {
           onClose={() => setPlanExtractDoc(null)}
           onApplied={() => setPlanExtractDoc(null)} />
       )}
-      {showBomSkill && (
+      {bomSkillDoc !== null && (
         <BomImportSkill
           projectId={projectId}
-          onClose={() => setShowBomSkill(false)}
-          onImported={() => setShowBomSkill(false)} />
+          initialDocument={bomSkillDoc?.id ? bomSkillDoc : null}
+          onClose={() => setBomSkillDoc(null)}
+          onImported={() => { setBomSkillDoc(null); load(); }} />
       )}
     </div>
   );
