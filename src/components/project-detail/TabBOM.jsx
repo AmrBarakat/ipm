@@ -108,32 +108,38 @@ export default function TabBOM({ projectId }) {
   async function applyBulkEdit() {
     if (!bulkEdit || selectedIds.size === 0) return;
     const { field, value } = bulkEdit;
-    const updates = [...selectedIds].map(id => {
-      const item = items.find(i => i.id === id);
-      if (!item) return null;
-      const updated = { ...item, [field]: value };
-      if (field === 'order_status') updated.ordered = value === 'ordered';
-      return base44.entities.BOMItem.update(id, updated);
-    }).filter(Boolean);
-    await Promise.all(updates);
+    const ids = [...selectedIds];
+    // Optimistic UI update first
     setItems(prev => prev.map(i =>
       selectedIds.has(i.id) ? { ...i, [field]: value, ...(field === 'order_status' ? { ordered: value === 'ordered' } : {}) } : i
     ));
     setBulkEdit(null);
     setSelectedIds(new Set());
+    // Sequential saves to avoid rate limiting
+    for (const id of ids) {
+      const item = items.find(i => i.id === id);
+      if (!item) continue;
+      const updated = { ...item, [field]: value };
+      if (field === 'order_status') updated.ordered = value === 'ordered';
+      await base44.entities.BOMItem.update(id, updated);
+    }
   }
 
   async function bulkDelete() {
     if (!confirm(`Delete ${selectedIds.size} selected item(s)?`)) return;
-    await Promise.all([...selectedIds].map(id => base44.entities.BOMItem.delete(id)));
-    setItems(prev => prev.filter(i => !selectedIds.has(i.id)));
+    const ids = [...selectedIds];
+    setItems(prev => prev.filter(i => !ids.includes(i.id)));
     setSelectedIds(new Set());
+    for (const id of ids) {
+      await base44.entities.BOMItem.delete(id);
+    }
   }
 
   function handleSelectChange(item, field, value) {
     const updated = { ...item, [field]: value };
     setItems(prev => prev.map(i => i.id === item.id ? updated : i));
-    saveItem(updated);
+    if (saveTimers.current[item.id]) clearTimeout(saveTimers.current[item.id]);
+    saveTimers.current[item.id] = setTimeout(() => saveItem(updated), 300);
   }
 
   async function create(e) {
