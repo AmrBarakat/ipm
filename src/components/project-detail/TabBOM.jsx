@@ -111,31 +111,27 @@ export default function TabBOM({ projectId }) {
   async function applyBulkEdit() {
     if (!bulkEdit || selectedIds.size === 0) return;
     const { field, value } = bulkEdit;
-    const ids = [...selectedIds];
+    // Expand selected (possibly aggregated) rows into their underlying BOMItem ids
+    const selectedRows = allTopLevel.filter(i => selectedIds.has(i.id));
+    const ids = selectedRows.flatMap(i => i._ids || [i.id]);
     // Optimistic UI update first
     setItems(prev => prev.map(i =>
-      selectedIds.has(i.id) ? { ...i, [field]: value, ...(field === 'order_status' ? { ordered: value === 'ordered' } : {}) } : i
+      ids.includes(i.id) ? { ...i, [field]: value, ...(field === 'order_status' ? { ordered: value === 'ordered' } : {}) } : i
     ));
     setBulkEdit(null);
     setSelectedIds(new Set());
-    // Sequential saves to avoid rate limiting
-    for (const id of ids) {
-      const item = items.find(i => i.id === id);
-      if (!item) continue;
-      const updated = { ...item, [field]: value };
-      if (field === 'order_status') updated.ordered = value === 'ordered';
-      await base44.entities.BOMItem.update(id, updated);
-    }
+    // Single batched request instead of one call per item
+    const extra = field === 'order_status' ? { ordered: value === 'ordered' } : {};
+    await base44.entities.BOMItem.bulkUpdate(ids.map(id => ({ id, [field]: value, ...extra })));
   }
 
   async function bulkDelete() {
     if (!confirm(`Delete ${selectedIds.size} selected item(s)?`)) return;
-    const ids = [...selectedIds];
+    const selectedRows = allTopLevel.filter(i => selectedIds.has(i.id));
+    const ids = selectedRows.flatMap(i => i._ids || [i.id]);
     setItems(prev => prev.filter(i => !ids.includes(i.id)));
     setSelectedIds(new Set());
-    for (const id of ids) {
-      await base44.entities.BOMItem.delete(id);
-    }
+    await base44.entities.BOMItem.deleteMany({ id: { $in: ids } });
   }
 
   function handleSelectChange(item, field, value) {
