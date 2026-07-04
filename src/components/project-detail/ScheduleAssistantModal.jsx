@@ -12,6 +12,7 @@ export default function ScheduleAssistantModal({ projectId, onClose, onApplied, 
   const [summary, setSummary] = useState('');
   const [selected, setSelected] = useState(new Set());
   const [error, setError] = useState(null);
+  const [notice, setNotice] = useState(null);
 
   // Auto-launch the optimize flow when opened directly from the Gantt.
   useEffect(() => {
@@ -30,8 +31,9 @@ export default function ScheduleAssistantModal({ projectId, onClose, onApplied, 
       return;
     }
     const suggs = res.data?.suggestions || [];
+    setNotice(res.data?.notice || null);
     if (suggs.length === 0 && (res.data?.milestone_impacts || []).length === 0) {
-      setError('No scheduling issues or improvements found. Your WBS schedule looks good!');
+      setError(res.data?.notice || 'No scheduling issues or improvements found. Your WBS schedule looks good!');
       setFlow(null);
       setStep('idle');
       return;
@@ -148,6 +150,13 @@ export default function ScheduleAssistantModal({ projectId, onClose, onApplied, 
 
           {step === 'review' && (
             <div className="space-y-5">
+              {/* Honest-input notice (e.g. no dependencies) */}
+              {notice && (
+                <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                  <p className="text-sm text-amber-800">{notice}</p>
+                </div>
+              )}
               {/* Summary banner */}
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
                 <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />

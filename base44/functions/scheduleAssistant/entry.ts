@@ -54,6 +54,14 @@ Deno.serve(async (req) => {
     const byId = Object.fromEntries(items.map(i => [i.id, i]));
     const today = new Date().toISOString().slice(0, 10);
 
+    // Dependency detection: without predecessors there's no critical path to
+    // optimize — surface a plain notice instead of presenting thin output as
+    // if it were a real optimization.
+    const hasAnyDeps = items.some((i) => (i.predecessor_ids || []).length > 0);
+    const notice = !hasAnyDeps
+      ? 'No task dependencies are defined, so schedule optimization is limited. Add predecessors to enable critical-path optimization.'
+      : null;
+
     // ── Step 1: Detect delays & compute cascading impacts ──────────────────
     const delays = []; // { item, delayDays, reason }
 
@@ -262,6 +270,7 @@ Return only valid JSON.`,
       suggestions: Object.entries(allSuggestions).map(([id, s]) => ({ id, ...s })),
       milestone_impacts: milestoneImpacts,
       summary: `Found ${Object.keys(suggested).length} delay-driven adjustment(s) and ${Object.keys(aiSuggestions).length} AI date suggestion(s). ${milestoneImpacts.length} milestone(s) affected.`,
+      notice,
     });
 
   } catch (error) {

@@ -73,6 +73,14 @@ Deno.serve(async (req) => {
       .filter((w) => w.planned_start && w.planned_end && w.planned_start !== w.planned_end)
       .map((w) => ({ name: w.name, wbs_code: w.wbs_code || '', days: durDays(w) }));
 
+    // When there are no dated activities the model has nothing to calibrate
+    // against — force every estimate to low confidence and surface a notice so
+    // the user knows these are rough guesses, not calibrated values.
+    const noCalibration = dated.length === 0;
+    const notice = noCalibration
+      ? 'No dated activities to calibrate from — these are rough domain-based guesses. Add a few real durations to improve accuracy.'
+      : null;
+
     const projectType = project?.project_type || 'plc';
     const typeHint = {
       plc: 'PLC / control panel build',
@@ -174,10 +182,15 @@ Deno.serve(async (req) => {
         .map((item) => {
           const e = estMap.get(item.id) || {
             estimated_duration_days: avgDays,
-            reason: `fallback: project average (~${avgDays} day${avgDays === 1 ? '' : 's'})`,
+            reason: noCalibration
+              ? `fallback: no calibration data — rough domain guess (~${avgDays} day${avgDays === 1 ? '' : 's'})`
+              : `fallback: project average (~${avgDays} day${avgDays === 1 ? '' : 's'})`,
             confidence: 'low',
           };
           const dur = Math.max(1, Math.round(e.estimated_duration_days || 1));
+          // No calibration → every estimate is a rough guess; never let the
+          // model dress it up as medium/high confidence.
+          const conf = noCalibration ? 'low' : (e.confidence || 'medium');
 
           let start;
           if (item.planned_start) {
@@ -216,7 +229,7 @@ Deno.serve(async (req) => {
             proposed_end: toISO(end),
             estimated_duration_days: dur,
             reason: e.reason || '',
-            confidence: e.confidence || 'medium',
+            confidence: conf,
             had_planned_start: !!item.planned_start,
             is_rollup: false,
           };
@@ -281,6 +294,7 @@ Deno.serve(async (req) => {
       estimates: [...rollups, ...aiResults],
       undated_count: undated.length,
       rollup_count: rollups.length,
+      notice,
     });
   } catch (err) {
     return Response.json({ error: err.message || 'Estimation failed' }, { status: 500 });

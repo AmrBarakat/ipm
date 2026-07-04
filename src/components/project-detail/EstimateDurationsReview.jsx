@@ -36,6 +36,7 @@ export default function EstimateDurationsReview({ projectId, onApplied }) {
   const [accepted, setAccepted] = useState(new Set());
   const [applying, setApplying] = useState(false);
   const [applied, setApplied] = useState(false);
+  const [notice, setNotice] = useState('');
 
   useEffect(() => {
     let alive = true;
@@ -49,6 +50,7 @@ export default function EstimateDurationsReview({ projectId, onApplied }) {
         const list = data?.estimates || [];
         if (alive) {
           setRows(list);
+          setNotice(data?.notice || '');
           setAccepted(new Set(list.map((r) => r.wbs_id)));
         }
       } catch (e) {
@@ -146,6 +148,11 @@ export default function EstimateDurationsReview({ projectId, onApplied }) {
 
   return (
     <div className="space-y-4">
+      {notice && (
+        <div className="flex items-start gap-2 bg-amber-50 border border-amber-300 rounded-lg px-4 py-3 text-sm text-amber-800">
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" /> {notice}
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table className="w-full text-xs min-w-[820px]">
           <thead className="bg-slate-100 text-slate-500 uppercase">
@@ -165,7 +172,7 @@ export default function EstimateDurationsReview({ projectId, onApplied }) {
             {rows.map((r) => {
               const isLow = r.confidence === 'low';
               return (
-                <tr key={r.wbs_id} className={`border-t border-slate-100 ${accepted.has(r.wbs_id) ? 'bg-amber-50/50' : 'bg-white'}`}>
+                <tr key={r.wbs_id} className={`border-t border-slate-100 ${isLow ? 'bg-amber-50' : accepted.has(r.wbs_id) ? 'bg-amber-50/30' : 'bg-white'}`}>
                   <td className="px-2 py-2 text-center">
                     <input
                       type="checkbox"
