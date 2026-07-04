@@ -51,6 +51,11 @@
     },
     "notes": {
       "type": "string"
+    },
+    "due_alert_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Planned date for which an upcoming-due alert has already been sent (dedup)"
     }
   },
   "required": [
