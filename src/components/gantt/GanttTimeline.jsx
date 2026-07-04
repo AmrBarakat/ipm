@@ -105,7 +105,7 @@ export default function GanttTimeline({
           fromY: fromIdx * ROW_H + ROW_H / 2,
           toY: toIdx * ROW_H + ROW_H / 2,
           isCritical,
-          conflict: itemStart <= predEnd,
+          conflict: itemStart < predEnd,
         });
       }
     }

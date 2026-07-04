@@ -106,7 +106,7 @@ export default function TabGantt({ projectId, project }) {
       if (!predEnds.length) continue;
       const latest = predEnds.reduce((a, b) => (a > b ? a : b));
       const myStart = item.actual_start || item.planned_start;
-      if (myStart && myStart <= latest) s.add(item.id);
+      if (myStart && myStart < latest) s.add(item.id);
     }
     return s;
   }, [wbsItems, wbsById]);
