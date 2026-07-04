@@ -61,8 +61,12 @@ export default function BomStepSave({ projectId, previewRows, profile, warnings,
       const defaultRes = {};
       found.forEach(c => { defaultRes[c.preview_id] = 'skip'; });
       setResolutions(defaultRes);
-    } catch (err) {
-      setError('Could not check for conflicts: ' + (err.message || ''));
+    } catch (_err) {
+      // Conflict detection is optional. If the existing-BOM lookup fails
+      // (e.g. a user-directory permission error for non-admins), degrade
+      // silently so the import itself stays fully usable — no banner.
+      setConflicts([]);
+      setResolutions({});
     } finally {
       setLoading(false);
     }
@@ -88,7 +92,10 @@ export default function BomStepSave({ projectId, previewRows, profile, warnings,
       });
       setResult(res.data);
     } catch (err) {
-      setError(err?.response?.data?.error || err.message || 'Save failed.');
+      const raw = err?.response?.data?.error || err.message || '';
+      // Never surface a raw permission / user-directory failure to the user.
+      const isPermission = /authentic|permission|view users|forbidden|unauthor/i.test(raw);
+      setError(isPermission ? 'Save failed. Please try again.' : (raw || 'Save failed.'));
     } finally {
       setSaving(false);
     }
