@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { TrendingUp } from 'lucide-react';
+import { TrendingUp, Activity } from 'lucide-react';
 import FinancialDashboard from '@/components/portfolio/FinancialDashboard';
+import PortfolioHealthTable from '@/components/portfolio/PortfolioHealthTable';
 
 
 
@@ -32,6 +33,16 @@ export default function Portfolio() {
           <TrendingUp className="text-amber-500 w-6 h-6" /> Portfolio Dashboard
         </h1>
         <p className="text-sm text-slate-500">All industrial automation & energy projects at a glance.</p>
+      </section>
+
+      {/* High-level health comparison */}
+      <section className="mb-6">
+        <div className="flex items-center gap-2 mb-3">
+          <Activity className="text-amber-500 w-5 h-5" />
+          <h2 className="text-lg font-semibold text-slate-700">Portfolio Health</h2>
+          <span className="text-sm text-slate-400">— cost variance & milestone progress across active projects</span>
+        </div>
+        <PortfolioHealthTable projects={projects} />
       </section>
 
       <FinancialDashboard projects={projects} />
