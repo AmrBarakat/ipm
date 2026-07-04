@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useEntityList, useEntityMutation } from '@/hooks/useEntity';
 import PanelWrapper from '@/components/ui/PanelWrapper';
 import { formatCurrency, formatDate, INVOICE_STATUS_LABELS, EXPENSE_CATEGORY_LABELS, EXPENSE_STATUS_LABELS } from '@/lib/constants';
-import { Plus, TrendingUp, TrendingDown, AlertTriangle, Pencil, Trash2, Save, X, Banknote, AlertCircle } from 'lucide-react';
+import { Plus, TrendingUp, TrendingDown, AlertTriangle, Pencil, Trash2, Save, X, Banknote, AlertCircle, FileEdit } from 'lucide-react';
 import ExpenseCategoryChart from '@/components/project-detail/ExpenseCategoryChart';
 import BaselineManager from '@/components/project-detail/BaselineManager';
 import SpendingTrendChart from '@/components/project-detail/SpendingTrendChart';
@@ -29,6 +29,7 @@ export default function TabFinancials({ projectId, project }) {
   const { data: invoices = [], isLoading: loadingInv } = useEntityList('Invoice', { project_id: projectId }, 'planned_date', 100);
   const { data: expenses = [], isLoading: loadingExp } = useEntityList('Expense', { project_id: projectId }, 'planned_date', 100);
   const { data: collections = [], isLoading: loadingCol } = useEntityList('Collection', { project_id: projectId }, '-received_date', 100);
+  const { data: changeOrders = [] } = useEntityList('ChangeOrder', { project_id: projectId }, '-created_date', 500);
   const invoiceMutation = useEntityMutation('Invoice');
   const expenseMutation = useEntityMutation('Expense');
   const collectionMutation = useEntityMutation('Collection');
@@ -154,6 +155,15 @@ export default function TabFinancials({ projectId, project }) {
   const exceedsBudget = budget > 0 && plannedExpenses > budget;
   const hasWarning = exceedsInvoiced || exceedsBudget;
 
+  // Approved / implemented change orders adjust the contract value & costs
+  const approvedCOs = changeOrders.filter(co => ['approved', 'implemented'].includes(co.status));
+  const coRevenue = approvedCOs.reduce((s, co) => s + (co.co_selling || 0), 0);
+  const coCost = approvedCOs.reduce((s, co) => s + (co.co_cost || 0), 0);
+  const revisedContractValue = budget + coRevenue;
+  const revisedCosts = actualExpenses + coCost;
+  const revisedMargin = revisedContractValue > 0 ? Math.round(((revisedContractValue - revisedCosts) / revisedContractValue) * 100) : 0;
+  const coDelta = coRevenue;
+
   if (loading) return <SkeletonTable columns={5} rows={6} />;
 
   return (
@@ -234,6 +244,52 @@ export default function TabFinancials({ projectId, project }) {
               <div className="text-xs text-slate-400 mt-0.5">{remainingToCollect > 0 ? 'Still outstanding' : 'Fully collected'}</div>
             </div>
             <AlertCircle className="w-5 h-5 text-slate-300" />
+          </div>
+        </div>
+      </div>
+
+      {/* Change Orders impact on contract value & margin */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-slate-300">
+          <div className="flex items-start justify-between">
+            <div>
+              <div className="text-xs text-slate-400 uppercase tracking-wide mb-1">Original Contract</div>
+              <div className="text-xl font-semibold text-slate-800">{formatCurrency(budget, 'SAR')}</div>
+              <div className="text-xs text-slate-400 mt-0.5">Per contract</div>
+            </div>
+            <FileEdit className="w-5 h-5 text-slate-300" />
+          </div>
+        </div>
+        <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-indigo-400">
+          <div className="flex items-start justify-between">
+            <div>
+              <div className="text-xs text-slate-400 uppercase tracking-wide mb-1">Approved CO (Revenue)</div>
+              <div className="text-xl font-semibold text-indigo-700">{formatCurrency(coRevenue, 'SAR')}</div>
+              <div className="text-xs text-slate-400 mt-0.5">{approvedCOs.length} approved / implemented</div>
+            </div>
+            <TrendingUp className="w-5 h-5 text-indigo-300" />
+          </div>
+        </div>
+        <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-purple-400">
+          <div className="flex items-start justify-between">
+            <div>
+              <div className="text-xs text-slate-400 uppercase tracking-wide mb-1">Change Order Costs</div>
+              <div className="text-xl font-semibold text-purple-700">{formatCurrency(coCost, 'SAR')}</div>
+              <div className="text-xs text-slate-400 mt-0.5">Approved / implemented</div>
+            </div>
+            <TrendingDown className="w-5 h-5 text-purple-300" />
+          </div>
+        </div>
+        <div className="bg-emerald-50 rounded-lg shadow-sm p-4 border-l-4 border-emerald-500">
+          <div className="flex items-start justify-between">
+            <div>
+              <div className="text-xs text-slate-400 uppercase tracking-wide mb-1">Revised Contract</div>
+              <div className="text-xl font-semibold text-emerald-700">{formatCurrency(revisedContractValue, 'SAR')}</div>
+              <div className="text-xs text-emerald-600 mt-0.5">
+                {coDelta >= 0 ? `+${formatCurrency(coDelta, 'SAR')}` : `-${formatCurrency(Math.abs(coDelta), 'SAR')}`} from COs · Margin {revisedMargin}%
+              </div>
+            </div>
+            <TrendingUp className="w-5 h-5 text-emerald-500" />
           </div>
         </div>
       </div>
