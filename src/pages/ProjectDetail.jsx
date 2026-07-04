@@ -49,6 +49,7 @@ export default function ProjectDetail() {
   const [lastTabByGroup, setLastTabByGroup] = useState({ [DEFAULT_GROUP]: DEFAULT_TAB });
   const [editing, setEditing] = useState(false);
   const [showProgressReport, setShowProgressReport] = useState(false);
+  const [overduePOCount, setOverduePOCount] = useState(0);
 
   function selectGroup(groupId) {
     setActiveGroup(groupId);
@@ -61,6 +62,22 @@ export default function ProjectDetail() {
   }
 
   useEffect(() => { loadProject(); }, [id]);
+  useEffect(() => { loadOverduePOs(); }, [id]);
+
+  async function loadOverduePOs() {
+    if (!id || id === ':id') return;
+    try {
+      const pos = await base44.entities.PurchaseOrder.filter({ project_id: id }, '-expected_delivery_date', 500);
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const count = pos.filter(po => {
+        if (!po.expected_delivery_date) return false;
+        if (po.status === 'delivered' || po.status === 'cancelled') return false;
+        const d = new Date(po.expected_delivery_date); d.setHours(0, 0, 0, 0);
+        return d < today;
+      }).length;
+      setOverduePOCount(count);
+    } catch (_) { setOverduePOCount(0); }
+  }
 
   async function loadProject() {
     if (!id || id === ':id') {
@@ -190,7 +207,12 @@ export default function ProjectDetail() {
                       : 'border-transparent text-slate-500 hover:text-slate-700'
                   }`}
                 >
-                  {t(`projectDetail.tabs.${tabId}`)}
+                  <span className="flex items-center gap-1">
+                    {t(`projectDetail.tabs.${tabId}`)}
+                    {tabId === 'procurement' && overduePOCount > 0 && (
+                      <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 text-[10px] font-bold text-white bg-red-500 rounded-full">{overduePOCount}</span>
+                    )}
+                  </span>
                 </button>
               ))}
             </div>

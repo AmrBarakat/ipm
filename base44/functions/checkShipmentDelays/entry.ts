@@ -1,42 +1,64 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
+
+/**
+ * checkShipmentDelays
+ *
+ * Scans PurchaseOrders for overdue shipments and notifies the project team.
+ *
+ * Auth: automation callers pass `x-automation-secret` matching AUTOMATION_SECRET;
+ *       manual callers are authenticated via the user token. Either is accepted.
+ *
+ * Input:  { project_id?: string }   // omit to scan all projects
+ * Output:  { data: { overdue_count: number, overdue_pos: [{ id, po_number, vendor }] } }
+ *
+ * A PO is overdue if it has an expected_delivery_date in the past AND its status
+ * is not "delivered" and not "cancelled".
+ */
 
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
 
-    // Allow both scheduled (service role) and manual invocation
-    let user = null;
-    try { user = await base44.auth.me(); } catch {}
+    // ── Auth ──────────────────────────────────────────────────────────────
+    const secret = req.headers.get('x-automation-secret');
+    const isAutomation = !!secret && secret === Deno.env.get('AUTOMATION_SECRET');
+    if (!isAutomation) {
+      let user = null;
+      try { user = await base44.auth.me(); } catch (_) { user = null; }
+      if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // ── Input ─────────────────────────────────────────────────────────────
+    let body = {};
+    try { body = await req.json(); } catch (_) { body = {}; }
+    const projectId = body.project_id || null;
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Fetch all active POs that are not yet delivered
-    const activePOs = await base44.asServiceRole.entities.PurchaseOrder.filter(
-      { status: { $nin: ['delivered', 'cancelled'] } },
-      '-expected_delivery_date',
-      500
-    );
+    // Scan PurchaseOrders for the project (or all projects if none specified)
+    const poFilter = projectId ? { project_id: projectId } : {};
+    const pos = await base44.asServiceRole.entities.PurchaseOrder.filter(poFilter, '-expected_delivery_date', 1000);
 
-    const delayed = activePOs.filter(po => {
+    // Overdue: delivery_date in the past AND status not delivered/cancelled
+    const isOverdue = (po) => {
       if (!po.expected_delivery_date) return false;
+      if (po.status === 'delivered' || po.status === 'cancelled') return false;
       const expected = new Date(po.expected_delivery_date);
       expected.setHours(0, 0, 0, 0);
       return expected < today;
-    });
+    };
+    const overdue = pos.filter(isOverdue);
 
-    let alertsCreated = 0;
-    const results = [];
-
-    for (const po of delayed) {
+    // ── Notify: create a Notification per newly-overdue PO (dedup via delay_alerted) ──
+    for (const po of overdue) {
       const expected = new Date(po.expected_delivery_date);
       expected.setHours(0, 0, 0, 0);
       const delayDays = Math.round((today - expected) / 86400000);
 
-      // Update delay_days on the PO record
       await base44.asServiceRole.entities.PurchaseOrder.update(po.id, { delay_days: delayDays });
 
-      // Only alert once per PO (or re-alert if delay has grown by 7+ days since last alert)
+      // Alert once per PO (or re-alert if delay grew by 7+ days since last alert)
       const shouldAlert = !po.delay_alerted || (po.delay_days !== undefined && delayDays - po.delay_days >= 7);
 
       if (shouldAlert) {
@@ -71,18 +93,19 @@ Deno.serve(async (req) => {
             priority: po.priority,
           },
         });
-
-        alertsCreated++;
       }
-
-      results.push({ po_number: po.po_number || po.id, delay_days: delayDays, alerted: shouldAlert });
     }
 
+    // ── Response contract ─────────────────────────────────────────────────
     return Response.json({
-      checked: activePOs.length,
-      delayed: delayed.length,
-      alerts_created: alertsCreated,
-      results,
+      data: {
+        overdue_count: overdue.length,
+        overdue_pos: overdue.map(po => ({
+          id: po.id,
+          po_number: po.po_number || '',
+          vendor: po.vendor_name || '',
+        })),
+      },
     });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
