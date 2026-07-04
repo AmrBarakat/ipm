@@ -1,4 +1,4 @@
-import { ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Maximize2, Minimize2, Calendar, Crosshair, Image, FileText, Sheet, Loader2, Link2, AlertTriangle, Sparkles } from 'lucide-react';
+import { ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Maximize2, Minimize2, Calendar, Crosshair, Image, FileText, Sheet, Loader2, Link2, AlertTriangle } from 'lucide-react';
 import { TIME_SCALES } from './ganttUtils';
 
 export default function GanttToolbar({
@@ -8,7 +8,6 @@ export default function GanttToolbar({
   criticalCount, projectDuration, projectFinish,
   fullscreen, toggleFullscreen,
   onExportPNG, onExportPDF, onExportExcel, exporting,
-  onEstimateDurations,
 }) {
   const fmtFinish = projectFinish ? projectFinish.toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
   return (
@@ -48,9 +47,6 @@ export default function GanttToolbar({
         </button>
         <button onClick={onJumpStart} className="px-3 py-1.5 text-xs border border-slate-200 rounded hover:bg-slate-100 text-slate-600 font-medium" title="Jump to project start">
           Start
-        </button>
-        <button onClick={onEstimateDurations} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-amber-300 rounded hover:bg-amber-50 text-amber-700 font-semibold" title="AI-estimate durations for undated activities">
-          <Sparkles className="w-3.5 h-3.5" /> AI: Estimate durations
         </button>
       </div>
 

@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { base44 } from '@/api/base44Client';
-import { X, Loader2, CheckCircle, Wand2, AlertTriangle, Calendar, ArrowRight, Flag } from 'lucide-react';
+import { X, Loader2, CheckCircle, Wand2, AlertTriangle, Calendar, ArrowRight, Flag, Sparkles } from 'lucide-react';
+import EstimateDurationsReview from './EstimateDurationsReview';
 
 export default function ScheduleAssistantModal({ projectId, onClose, onApplied }) {
   const [step, setStep] = useState('idle'); // idle | analyzing | review | applying | done
+  const [flow, setFlow] = useState(null); // null | 'optimize' | 'estimate'
   const [suggestions, setSuggestions] = useState([]);
   const [milestoneImpacts, setMilestoneImpacts] = useState([]);
   const [summary, setSummary] = useState('');
@@ -81,27 +83,35 @@ export default function ScheduleAssistantModal({ projectId, onClose, onApplied }
         {/* Body */}
         <div className="flex-1 overflow-auto p-6">
 
-          {step === 'idle' && (
-            <div className="text-center py-12">
-              <div className="w-16 h-16 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Calendar className="w-8 h-8 text-amber-500" />
+          {step === 'idle' && !flow && (
+            <div className="py-6">
+              <div className="grid sm:grid-cols-2 gap-4 max-w-2xl mx-auto">
+                <button onClick={() => { setFlow('optimize'); analyze(); }}
+                  className="text-left p-5 border-2 border-slate-200 rounded-xl hover:border-amber-400 hover:bg-amber-50/40 transition">
+                  <div className="w-10 h-10 bg-amber-50 rounded-lg flex items-center justify-center mb-3">
+                    <Wand2 className="w-5 h-5 text-amber-500" />
+                  </div>
+                  <h3 className="font-semibold text-slate-800 text-sm mb-1">Optimize Schedule</h3>
+                  <p className="text-xs text-slate-500 leading-relaxed">Detect delays, cascade date shifts through dependencies, suggest dates for unscheduled items, and adjust milestones.</p>
+                </button>
+                <button onClick={() => setFlow('estimate')}
+                  className="text-left p-5 border-2 border-slate-200 rounded-xl hover:border-amber-400 hover:bg-amber-50/40 transition">
+                  <div className="w-10 h-10 bg-amber-50 rounded-lg flex items-center justify-center mb-3">
+                    <Sparkles className="w-5 h-5 text-amber-500" />
+                  </div>
+                  <h3 className="font-semibold text-slate-800 text-sm mb-1">AI: Estimate Durations</h3>
+                  <p className="text-xs text-slate-500 leading-relaxed">Fill in undated activities with realistic, dependency-aware durations calibrated against your project's own dated tasks — review before applying.</p>
+                </button>
               </div>
-              <h3 className="font-semibold text-slate-700 text-lg mb-2">Analyze Project Schedule</h3>
-              <p className="text-slate-500 text-sm max-w-md mx-auto mb-2">
-                The assistant will scan your WBS dependency chains, detect delays, propagate cascading date shifts to downstream tasks, and suggest optimal start/end dates for unscheduled items.
-              </p>
-              <ul className="text-xs text-slate-400 max-w-sm mx-auto mb-6 space-y-1 text-left list-none">
-                <li className="flex items-center gap-2"><span className="w-1.5 h-1.5 bg-amber-400 rounded-full shrink-0" /> Detects late-started or unstarted overdue tasks</li>
-                <li className="flex items-center gap-2"><span className="w-1.5 h-1.5 bg-amber-400 rounded-full shrink-0" /> Cascades delay impact through all dependent tasks</li>
-                <li className="flex items-center gap-2"><span className="w-1.5 h-1.5 bg-amber-400 rounded-full shrink-0" /> Suggests dates for unscheduled items using AI</li>
-                <li className="flex items-center gap-2"><span className="w-1.5 h-1.5 bg-amber-400 rounded-full shrink-0" /> Auto-adjusts downstream milestone dates</li>
-              </ul>
-              {error && <p className="text-sm mb-4 bg-slate-50 border border-slate-200 rounded p-3 text-slate-600">{error}</p>}
-              <button onClick={analyze}
-                className="px-6 py-3 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold rounded-lg text-sm flex items-center gap-2 mx-auto">
-                <Wand2 className="w-4 h-4" /> Run Schedule Analysis
-              </button>
+              {error && <p className="text-sm mt-6 text-center bg-slate-50 border border-slate-200 rounded p-3 text-slate-600 max-w-md mx-auto">{error}</p>}
             </div>
+          )}
+
+          {flow === 'estimate' && (
+            <EstimateDurationsReview
+              projectId={projectId}
+              onApplied={() => { onApplied(); onClose(); }}
+            />
           )}
 
           {step === 'analyzing' && (
@@ -275,7 +285,7 @@ export default function ScheduleAssistantModal({ projectId, onClose, onApplied }
         </div>
 
         {/* Footer */}
-        {step === 'review' && (
+        {step === 'review' && flow === 'optimize' && (
           <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-between shrink-0 bg-slate-50">
             <p className="text-sm text-slate-500">
               {selected.size} WBS update{selected.size !== 1 ? 's' : ''} + {milestoneImpacts.length} milestone adjustment{milestoneImpacts.length !== 1 ? 's' : ''} will be applied
