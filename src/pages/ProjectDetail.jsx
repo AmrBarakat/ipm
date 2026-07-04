@@ -12,7 +12,7 @@ const TabMilestones = lazy(() => import('@/components/project-detail/TabMileston
 const TabBOM = lazy(() => import('@/components/project-detail/TabBOM'));
 const TabFinancials = lazy(() => import('@/components/project-detail/TabFinancials'));
 const TabDocuments = lazy(() => import('@/components/project-detail/TabDocuments'));
-const TabGantt = lazy(() => import('@/components/project-detail/TabGantt'));
+const TabGantt = lazy(() => import('@/components/gantt/TabGantt'));
 const TabWBS = lazy(() => import('@/components/project-detail/TabWBS'));
 const TabNotes = lazy(() => import('@/components/project-detail/TabNotes'));
 const TabRisks = lazy(() => import('@/components/project-detail/TabRisks'));
