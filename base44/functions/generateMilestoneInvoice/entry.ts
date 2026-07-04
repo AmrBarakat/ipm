@@ -6,10 +6,11 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
  * Triggered when a Milestone status changes to 'completed'.
  * Creates a linked Invoice draft based on the milestone's weight % of the contract value.
  *
- * Idempotent / race-safe: the unique constraint on Invoice.milestone_id guarantees
- * that two near-simultaneous completion events cannot double-bill the client — the
- * second create fails cleanly on the unique index and is treated as a no-op that
- * returns the existing invoice.
+ * Idempotent / race-safe: the platform does not enforce a DB-level unique index on
+ * milestone_id, so a concurrent completion event could pass the pre-check and also
+ * create an invoice. We resolve the race immediately after creating by keeping
+ * only the earliest invoice for the milestone (by created_date, then id) and
+ * deleting the rest — guaranteeing at most one invoice per milestone.
  */
 Deno.serve(async (req) => {
   try {
@@ -72,34 +73,46 @@ Deno.serve(async (req) => {
 
     const today = new Date().toISOString().slice(0, 10);
 
-    // Create Invoice draft linked to the milestone. The unique constraint on
-    // milestone_id makes a concurrent completion event fail cleanly here
-    // instead of creating a duplicate (double-billing guard).
-    let invoice;
-    try {
-      invoice = await base44.asServiceRole.entities.Invoice.create({
-        project_id: milestone.project_id,
-        milestone_id,
-        description: `Milestone: ${milestone.title}`,
-        status: 'planned',
-        planned_date: today,
-        planned_amount: plannedAmount,
-        notes: `Auto-generated upon completion of milestone "${milestone.title}".\nContract Value: ${contractValue} ${currency}\nMilestone Weight: ${milestoneWeight}%\nPlanned Amount: ${plannedAmount.toFixed(2)} ${currency}`,
+    // Create Invoice draft linked to the milestone. Since the DB does not enforce
+    // uniqueness on milestone_id, a concurrent completion event could also reach
+    // here. We reconcile immediately after creating: keep only the earliest
+    // invoice for this milestone and delete any duplicates from the race.
+    const invoice = await base44.asServiceRole.entities.Invoice.create({
+      project_id: milestone.project_id,
+      milestone_id,
+      description: `Milestone: ${milestone.title}`,
+      status: 'planned',
+      planned_date: today,
+      planned_amount: plannedAmount,
+      notes: `Auto-generated upon completion of milestone "${milestone.title}".\nContract Value: ${contractValue} ${currency}\nMilestone Weight: ${milestoneWeight}%\nPlanned Amount: ${plannedAmount.toFixed(2)} ${currency}`,
+    });
+
+    // Race guard: if a concurrent call also created an invoice for this milestone,
+    // keep the earliest (by created_date, then id) and delete the rest. Both
+    // concurrent calls agree deterministically on which is earliest, so exactly
+    // one invoice survives.
+    const invoicesForMs = await base44.asServiceRole.entities.Invoice.filter({ milestone_id });
+    if (invoicesForMs.length > 1) {
+      invoicesForMs.sort((a, b) => {
+        const ca = a.created_date || '';
+        const cb = b.created_date || '';
+        if (ca !== cb) return ca < cb ? -1 : 1;
+        return a.id < b.id ? -1 : 1;
       });
-    } catch (createError) {
-      // Unique-constraint violation: a concurrent event already created the
-      // invoice. Treat as a no-op — return the existing invoice.
-      const alreadyExisting = await base44.asServiceRole.entities.Invoice.filter({
-        project_id: milestone.project_id,
-        milestone_id,
-      });
-      if (alreadyExisting.length > 0) {
+      const keep = invoicesForMs[0];
+      await Promise.all(
+        invoicesForMs.slice(1).map(d =>
+          base44.asServiceRole.entities.Invoice.delete(d.id).catch(() => {})
+        )
+      );
+      // If this call's invoice was a duplicate (not the earliest), stop here —
+      // the winner creates the notification/audit.
+      if (keep.id !== invoice.id) {
         return Response.json({
-          message: 'Invoice already exists for this milestone — skipped (concurrent create).',
-          invoice_id: alreadyExisting[0].id,
+          message: 'Invoice already exists for this milestone — duplicate removed.',
+          invoice_id: keep.id,
         });
       }
-      throw createError;
     }
 
     // Notification
