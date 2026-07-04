@@ -149,38 +149,47 @@ export default function TabProcurement({ projectId, project }) {
         <KpiCard label="Selected Value" value={formatCurrency(selectedValue, project?.currency || 'SAR')} color="border-emerald-400" />
       </div>
 
+      {/* Top toolbar — always visible so "Sync with BOM" stays reachable
+          even after locally deleting all items. */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          {items.length > 0 && (
+            <button onClick={toggleAll}
+              className="flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900">
+              <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${selectedIds.size === items.length ? 'bg-amber-400 border-amber-400' : 'border-slate-300'}`}>
+                {selectedIds.size === items.length && <Check className="w-2.5 h-2.5 text-slate-900" />}
+              </div>
+              <span>{selectedIds.size === items.length ? 'Deselect All' : 'Select All'} ({items.length} items)</span>
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="flex items-center gap-2 text-xs text-slate-400">
+            <AlertCircle className="w-3.5 h-3.5" />
+            Unordered BOM items grouped by supplier
+          </span>
+          <button onClick={syncWithBOM} disabled={syncing}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-amber-300 rounded hover:bg-amber-50 text-amber-700 font-semibold disabled:opacity-60">
+            <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
+            {syncing ? 'Syncing…' : 'Sync with BOM'}
+          </button>
+        </div>
+      </div>
+
       {items.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-lg shadow-sm border border-slate-100">
           <CheckGreen />
-          <h3 className="font-semibold text-slate-700 text-lg mt-4 mb-1">All items are ordered!</h3>
-          <p className="text-slate-400 text-sm">No BOM items with "Not Ordered" status found.</p>
+          <h3 className="font-semibold text-slate-700 text-lg mt-4 mb-1">
+            {hiddenIds.size > 0 ? 'Items removed from procurement' : 'All items are ordered!'}
+          </h3>
+          <p className="text-slate-400 text-sm">
+            {hiddenIds.size > 0
+              ? `${hiddenIds.size} item(s) hidden — press "Sync with BOM" above to restore them.`
+              : 'No BOM items with "Not Ordered" status found.'}
+          </p>
         </div>
       ) : (
         <>
-          {/* Global select-all + info */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <button onClick={toggleAll}
-                className="flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900">
-                <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${selectedIds.size === items.length ? 'bg-amber-400 border-amber-400' : 'border-slate-300'}`}>
-                  {selectedIds.size === items.length && <Check className="w-2.5 h-2.5 text-slate-900" />}
-                </div>
-                <span>{selectedIds.size === items.length ? 'Deselect All' : 'Select All'} ({items.length} items)</span>
-              </button>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="flex items-center gap-2 text-xs text-slate-400">
-                <AlertCircle className="w-3.5 h-3.5" />
-                Unordered BOM items grouped by supplier
-              </span>
-              <button onClick={syncWithBOM} disabled={syncing}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-amber-300 rounded hover:bg-amber-50 text-amber-700 font-semibold disabled:opacity-60">
-                <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
-                {syncing ? 'Syncing…' : 'Sync with BOM'}
-              </button>
-            </div>
-          </div>
-
           {/* Bulk edit toolbar */}
           {selectedIds.size > 0 && (
             <div className="flex flex-wrap items-center gap-3 bg-slate-800 text-white rounded-lg px-4 py-2.5 text-sm">
