@@ -1,0 +1,70 @@
+{
+  "name": "Baseline",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to the Project this baseline freezes"
+    },
+    "baseline_name": {
+      "type": "string",
+      "description": "Human-readable label, e.g. 'Kickoff Baseline'"
+    },
+    "captured_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date the baseline was captured"
+    },
+    "captured_by": {
+      "type": "string",
+      "description": "Username of whoever captured the baseline"
+    },
+    "total_planned_cost": {
+      "type": "number",
+      "default": 0,
+      "description": "Frozen sum of BOM planned_cost_price * quantity at capture time"
+    },
+    "total_contract_value": {
+      "type": "number",
+      "default": 0,
+      "description": "Frozen project contract value at capture time"
+    },
+    "currency": {
+      "type": "string",
+      "default": "SAR"
+    },
+    "line_items": {
+      "type": "array",
+      "description": "Frozen snapshot of each BOM item's planned_cost_price and quantity at capture time",
+      "items": {
+        "type": "object",
+        "properties": {
+          "bom_item_id": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "manufacturer_part_number": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "planned_cost_price": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "project_id",
+    "baseline_name",
+    "captured_date",
+    "captured_by"
+  ]
+}
