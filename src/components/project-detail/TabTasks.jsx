@@ -141,7 +141,8 @@ export default function TabTasks({ projectId }) {
 
   async function applyBulkEdit() {
     if (!bulkField || !bulkValue) return;
-    await Promise.all([...selectedIds].map(id => taskMutation.mutateAsync({ action: 'update', id, data: { [bulkField]: bulkValue } })));
+    const value = bulkField === 'progress' ? Number(bulkValue) : bulkValue;
+    await Promise.all([...selectedIds].map(id => taskMutation.mutateAsync({ action: 'update', id, data: { [bulkField]: value } })));
     clearSelection();
   }
 
@@ -207,6 +208,7 @@ export default function TabTasks({ projectId }) {
             <option value="status">Status</option>
             <option value="priority">Priority</option>
             <option value="assignee">Assignee</option>
+            <option value="progress">Progress %</option>
           </select>
           {bulkField === 'status' && (
             <select value={bulkValue} onChange={e => setBulkValue(e.target.value)}
@@ -225,6 +227,10 @@ export default function TabTasks({ projectId }) {
           {bulkField === 'assignee' && (
             <input value={bulkValue} onChange={e => setBulkValue(e.target.value)} placeholder="Assignee name"
               className="text-xs bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white placeholder-slate-400 focus:outline-none focus:border-amber-400 w-36" />
+          )}
+          {bulkField === 'progress' && (
+            <input type="number" min="0" max="100" value={bulkValue} onChange={e => setBulkValue(e.target.value)} placeholder="0–100"
+              className="text-xs bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white placeholder-slate-400 focus:outline-none focus:border-amber-400 w-20" />
           )}
           {bulkField && bulkValue && (
             <button onClick={applyBulkEdit}
@@ -306,6 +312,14 @@ export default function TabTasks({ projectId }) {
                             </span>
                           )}
                         </div>
+                        {(task.progress || 0) > 0 && (
+                          <div className="flex items-center gap-1 mt-1.5">
+                            <div className="flex-1 bg-slate-200 rounded-full h-1.5">
+                              <div className="bg-amber-500 h-1.5 rounded-full" style={{ width: `${task.progress}%` }} />
+                            </div>
+                            <span className="text-xs text-slate-400">{task.progress}%</span>
+                          </div>
+                        )}
                         {/* Move buttons */}
                         <div className="flex gap-1 mt-2 flex-wrap">
                           {COLUMNS.filter(c => c.id !== col.id).map(c => (

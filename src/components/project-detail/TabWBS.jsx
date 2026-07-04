@@ -233,7 +233,7 @@ export default function TabWBS({ projectId, project, onProgressChange }) {
   }
   async function applyBulkEdit() {
     if (!bulkField || !bulkValue) return;
-    const value = bulkField === 'weight' ? Number(bulkValue) : bulkValue;
+    const value = (bulkField === 'weight' || bulkField === 'progress') ? Number(bulkValue) : bulkValue;
     await Promise.all([...selectedIds].map(id => wbsMutation.mutateAsync({ action: 'update', id, data: { [bulkField]: value } })));
     setBulkField(''); setBulkValue(''); setSelectedIds(new Set());
   }
@@ -475,6 +475,7 @@ export default function TabWBS({ projectId, project, onProgressChange }) {
             <option value="assignee">Assignee</option>
             <option value="milestone_id">Milestone</option>
             <option value="weight">Weight %</option>
+            <option value="progress">Progress %</option>
           </select>
           {bulkField === 'status' && (
             <select value={bulkValue} onChange={e => setBulkValue(e.target.value)}
@@ -494,7 +495,7 @@ export default function TabWBS({ projectId, project, onProgressChange }) {
               {milestones.map(m => <option key={m.id} value={m.id}>{m.title}</option>)}
             </select>
           )}
-          {bulkField === 'weight' && (
+          {(bulkField === 'weight' || bulkField === 'progress') && (
             <input type="number" min="0" max="100" value={bulkValue} onChange={e => setBulkValue(e.target.value)} placeholder="0–100"
               className="text-xs bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white placeholder-slate-400 focus:outline-none focus:border-amber-400 w-20" />
           )}
