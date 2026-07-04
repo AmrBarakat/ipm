@@ -3,7 +3,7 @@ import { useEntityList } from '@/hooks/useEntity';
 import { useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { formatCurrency, formatDate, BOM_CATEGORY_LABELS } from '@/lib/constants';
-import { ShoppingCart, Package, ChevronDown, ChevronRight, Check, AlertCircle, X, Save } from 'lucide-react';
+import { ShoppingCart, Package, ChevronDown, ChevronRight, Check, AlertCircle, X, Save, Trash2 } from 'lucide-react';
 
 export default function TabProcurement({ projectId, project }) {
   const { data: all = [], isLoading } = useEntityList('BOMItem', { project_id: projectId }, 'supplier', 500);
@@ -66,6 +66,16 @@ export default function TabProcurement({ projectId, project }) {
     await base44.entities.BOMItem.bulkUpdate(ids.map(id => ({ id, [field]: value, ...extra })));
     setBulkEdit(null);
     setSelectedIds(new Set());
+    queryClient.invalidateQueries({ queryKey: ['BOMItem'] });
+  }
+
+  async function bulkDelete() {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Delete ${selectedIds.size} selected item(s)? This removes them from the BOM.`)) return;
+    const ids = [...selectedIds];
+    setSelectedIds(new Set());
+    setBulkEdit(null);
+    await base44.entities.BOMItem.deleteMany({ id: { $in: ids } });
     queryClient.invalidateQueries({ queryKey: ['BOMItem'] });
   }
 
@@ -167,8 +177,13 @@ export default function TabProcurement({ projectId, project }) {
                 </button>
               )}
 
+              <button onClick={bulkDelete}
+                className="flex items-center gap-1 px-3 py-1 bg-red-600 hover:bg-red-500 text-white font-semibold text-xs rounded ml-auto">
+                <Trash2 className="w-3.5 h-3.5" /> Delete {selectedIds.size}
+              </button>
+
               <button onClick={() => { setBulkEdit(null); setSelectedIds(new Set()); }}
-                className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-white ml-auto">
+                className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-white">
                 <X className="w-4 h-4" />
               </button>
             </div>
