@@ -1,4 +1,4 @@
-import { ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Maximize2, Minimize2, Calendar, Crosshair, Image, FileText, Sheet, Loader2, Link2, AlertTriangle, ChevronsDownUp, ChevronsUpDown, Sparkles, Wand2 } from 'lucide-react';
+import { ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Maximize2, Minimize2, Calendar, Crosshair, Image, FileText, Sheet, Loader2, Link2, AlertTriangle, ChevronsDownUp, ChevronsUpDown, Wand2 } from 'lucide-react';
 import { TIME_SCALES } from './ganttUtils';
 
 export default function GanttToolbar({

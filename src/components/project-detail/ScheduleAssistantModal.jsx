@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { X, Loader2, CheckCircle, Wand2, AlertTriangle, Calendar, ArrowRight, Flag, Sparkles } from 'lucide-react';
+import { X, Loader2, CheckCircle, Wand2, AlertTriangle, ArrowRight, Flag, Sparkles } from 'lucide-react';
 import EstimateDurationsReview from './EstimateDurationsReview';
 
 export default function ScheduleAssistantModal({ projectId, onClose, onApplied, initialFlow = null }) {
