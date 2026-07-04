@@ -1,107 +1,137 @@
 import { useState, useEffect, useMemo } from 'react';
 import { base44 } from '@/api/base44Client';
-import { formatDate } from '@/lib/constants';
-import { Package, CheckCircle2, Clock, AlertCircle, Filter, X, Download, FileText, Sheet } from 'lucide-react';
+import { formatCurrency, formatDate } from '@/lib/constants';
+import { Package, AlertTriangle, FileText, Loader2, Truck, CheckCircle2, Clock } from 'lucide-react';
 import { jsPDF } from 'jspdf';
-import * as XLSX from 'xlsx';
 
-const DELIVERY_COLORS = {
-  received:           'bg-emerald-100 text-emerald-700',
-  partially_received: 'bg-amber-100 text-amber-700',
-  pending:            'bg-slate-100 text-slate-600',
+const PO_STATUS_LABELS = {
+  draft: 'Draft',
+  issued: 'Issued',
+  acknowledged: 'Acknowledged',
+  in_transit: 'In Transit',
+  partially_delivered: 'Partially Delivered',
+  delivered: 'Delivered',
+  cancelled: 'Cancelled',
 };
 
-const DELIVERY_LABELS = {
-  received:           'Received',
-  partially_received: 'Partially Received',
-  pending:            'Pending',
+const PO_STATUS_COLORS = {
+  draft: 'bg-slate-100 text-slate-600',
+  issued: 'bg-blue-100 text-blue-700',
+  acknowledged: 'bg-indigo-100 text-indigo-700',
+  in_transit: 'bg-amber-100 text-amber-700',
+  partially_delivered: 'bg-orange-100 text-orange-700',
+  delivered: 'bg-emerald-100 text-emerald-700',
+  cancelled: 'bg-slate-200 text-slate-500 line-through',
 };
 
-const ORDER_STATUS_COLORS = {
-  ordered:     'bg-blue-100 text-blue-700',
-  not_ordered: 'bg-red-100 text-red-700',
-};
+function isPoOverdue(po) {
+  if (!po.expected_delivery_date) return false;
+  if (['delivered', 'cancelled'].includes(po.status)) return false;
+  const d = new Date(po.expected_delivery_date); d.setHours(0, 0, 0, 0);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  return d < today;
+}
 
 export default function MaterialTrackingReport({ projects }) {
-  const [items, setItems] = useState([]);
+  const [pos, setPos] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filterProject, setFilterProject] = useState('');
-  const [filterSupplier, setFilterSupplier] = useState('');
-  const [filterDelivery, setFilterDelivery] = useState('');
-  const [exportMenu, setExportMenu] = useState(false);
+  const [generating, setGenerating] = useState(false);
 
-  const projectMap = useMemo(() =>
-    Object.fromEntries(projects.map(p => [p.id, p])), [projects]);
+  const projectMap = useMemo(() => Object.fromEntries(projects.map(p => [p.id, p])), [projects]);
 
   useEffect(() => {
-    base44.entities.BOMItem.list('-created_date', 2000).then(all => {
+    async function load() {
+      setLoading(true);
       const projectIds = new Set(projects.map(p => p.id));
-      setItems(all.filter(i => projectIds.has(i.project_id)));
+      const all = await base44.entities.PurchaseOrder.list('-created_date', 2000);
+      setPos(all.filter(po => projectIds.has(po.project_id)));
       setLoading(false);
-    });
+    }
+    load();
   }, [projects]);
 
-  const suppliers = useMemo(() => {
-    const s = new Set(items.map(i => i.supplier).filter(Boolean));
-    return [...s].sort();
-  }, [items]);
-
-  const filtered = useMemo(() => {
-    return items.filter(i => {
-      if (filterProject && i.project_id !== filterProject) return false;
-      if (filterSupplier && i.supplier !== filterSupplier) return false;
-      if (filterDelivery && i.delivery_status !== filterDelivery) return false;
-      return true;
+  // Group POs by project (only projects that have POs)
+  const groups = useMemo(() => {
+    const map = {};
+    pos.forEach(po => {
+      if (!map[po.project_id]) map[po.project_id] = [];
+      map[po.project_id].push(po);
     });
-  }, [items, filterProject, filterSupplier, filterDelivery]);
+    return Object.entries(map)
+      .map(([pid, poList]) => ({ project: projectMap[pid], pos: poList }))
+      .filter(g => g.project)
+      .sort((a, b) => (a.project.code || '').localeCompare(b.project.code || ''));
+  }, [pos, projectMap]);
 
-  // KPIs (based on filtered)
-  const totalOrdered = filtered.filter(i => i.order_status === 'ordered').length;
-  const totalReceived = filtered.filter(i => i.delivery_status === 'received').length;
-  const totalPartial = filtered.filter(i => i.delivery_status === 'partially_received').length;
-  const totalPending = filtered.filter(i => i.order_status === 'ordered' && i.delivery_status === 'pending').length;
+  // Totals
+  const grandTotal = pos.reduce((s, po) => s + (po.amount || 0), 0);
+  const overdueCount = pos.filter(isPoOverdue).length;
+  const deliveredCount = pos.filter(po => po.status === 'delivered').length;
+  const openCount = pos.length - deliveredCount - pos.filter(po => po.status === 'cancelled').length;
 
-  const clearFilters = () => { setFilterProject(''); setFilterSupplier(''); setFilterDelivery(''); };
-  const hasFilters = filterProject || filterSupplier || filterDelivery;
-
-  function getExportRows() {
-    return filtered.map(item => {
-      const proj = projectMap[item.project_id];
-      return {
-        'Project Code': proj?.code || '',
-        'Project Name': proj?.name || '',
-        'Description': item.description || '',
-        'Manufacturer': item.manufacturer || '',
-        'Part No.': item.manufacturer_part_number || '',
-        'Supplier': item.supplier || '',
-        'Qty': item.quantity,
-        'Unit': item.unit || '',
-        'PO #': item.po_number || '',
-        'Order Status': item.order_status === 'ordered' ? 'Ordered' : 'Not Ordered',
-        'Delivery Status': DELIVERY_LABELS[item.delivery_status] || item.delivery_status,
-        'Expected Delivery': item.expected_delivery_date ? formatDate(item.expected_delivery_date) : '',
-        'Actual Delivery': item.actual_delivery_date ? formatDate(item.actual_delivery_date) : '',
-      };
-    });
+  function projectTotal(poList) {
+    return poList.reduce((s, po) => s + (po.amount || 0), 0);
   }
 
-  function exportExcel() {
-    const rows = getExportRows();
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Material Tracking');
-    XLSX.writeFile(wb, `Material_Tracking_Report_${new Date().toISOString().slice(0, 10)}.xlsx`);
-    setExportMenu(false);
-  }
-
-  function exportPDF() {
+  // ── PDF export ──────────────────────────────────────────────────────────
+  async function exportPDF() {
+    setGenerating(true);
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-    const W = 297;
-    const margin = 12;
-    const colW = W - margin * 2;
+    const W = 297, margin = 12, colW = W - margin * 2;
     let y = 0;
+    const today = new Date().toLocaleDateString('en-GB');
 
-    // Header
+    function checkPage(needed = 10) {
+      if (y + needed > 200) { doc.addPage(); y = 16; }
+    }
+    function sectionTitle(text) {
+      checkPage(10);
+      doc.setFillColor(245, 158, 11);
+      doc.rect(margin, y - 4, 3, 6, 'F');
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'bold');
+      doc.setTextColor(15, 23, 42);
+      doc.text(text, margin + 5, y);
+      y += 6;
+    }
+    function poHeader() {
+      checkPage(8);
+      const cols = [0.22, 0.12, 0.13, 0.13, 0.15, 0.13, 0.12];
+      const labels = ['Vendor', 'PO #', 'Value', 'Delivery Date', 'Status', 'Type', 'Overdue'];
+      doc.setFillColor(15, 23, 42);
+      doc.rect(margin, y - 4, colW, 7, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(7);
+      doc.setFont(undefined, 'bold');
+      let cx = margin + 1;
+      labels.forEach((l, i) => { doc.text(l, cx, y); cx += colW * cols[i]; });
+      doc.setTextColor(30, 41, 59);
+      y += 6;
+      return cols;
+    }
+    function poRow(po, cols, shade) {
+      checkPage(8);
+      const overdue = isPoOverdue(po);
+      if (shade) { doc.setFillColor(248, 250, 252); doc.rect(margin, y - 4, colW, 7, 'F'); }
+      if (overdue) { doc.setFillColor(254, 226, 226); doc.rect(margin, y - 4, colW, 7, 'F'); }
+      doc.setFontSize(7);
+      doc.setFont(undefined, 'normal');
+      doc.setTextColor(overdue ? 185 : 30, overdue ? 28 : 41, overdue ? 28 : 59);
+      const vals = [
+        truncate(po.vendor_name || '—', 40),
+        po.po_number || '—',
+        formatCurrency(po.amount || 0, po.currency || 'SAR'),
+        po.expected_delivery_date ? formatDate(po.expected_delivery_date) : '—',
+        PO_STATUS_LABELS[po.status] || po.status || '—',
+        po.type || '—',
+        overdue ? 'OVERDUE' : '—',
+      ];
+      let cx = margin + 1;
+      vals.forEach((v, i) => { doc.text(String(v), cx, y); cx += colW * cols[i]; });
+      y += 6;
+    }
+
+    // Header band
     doc.setFillColor(15, 23, 42);
     doc.rect(0, 0, W, 22, 'F');
     doc.setTextColor(255, 255, 255);
@@ -110,64 +140,45 @@ export default function MaterialTrackingReport({ projects }) {
     doc.text('Material Tracking Report', margin, 10);
     doc.setFontSize(8);
     doc.setFont(undefined, 'normal');
-    doc.text(`Generated: ${new Date().toLocaleDateString('en-GB')}  |  ${filtered.length} items`, margin, 17);
+    doc.text(`Generated: ${today}  |  ${pos.length} POs across ${groups.length} projects  |  Grand Total: ${formatCurrency(grandTotal, 'SAR')}`, margin, 17);
     doc.setTextColor(0, 0, 0);
     y = 30;
 
-    const cols = [
-      { label: 'Project', frac: 0.10 },
-      { label: 'Description', frac: 0.18 },
-      { label: 'Manufacturer', frac: 0.10 },
-      { label: 'Part No.', frac: 0.10 },
-      { label: 'Supplier', frac: 0.10 },
-      { label: 'Qty', frac: 0.05 },
-      { label: 'PO #', frac: 0.08 },
-      { label: 'Order Status', frac: 0.09 },
-      { label: 'Delivery', frac: 0.09 },
-      { label: 'Expected', frac: 0.06 },
-      { label: 'Actual', frac: 0.05 },
-    ];
-
-    // Table header
-    doc.setFillColor(15, 23, 42);
-    doc.rect(margin, y - 5, colW, 8, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(7);
+    // KPI line
+    doc.setFontSize(8);
     doc.setFont(undefined, 'bold');
-    let cx = margin + 1;
-    cols.forEach(c => {
-      doc.text(c.label, cx, y);
-      cx += colW * c.frac;
-    });
-    doc.setTextColor(30, 41, 59);
-    y += 5;
+    doc.setTextColor(71, 85, 105);
+    doc.text(`Overdue: ${overdueCount}  ·  Delivered: ${deliveredCount}  ·  Open: ${openCount}`, margin, y);
+    y += 6;
 
-    filtered.forEach((item, idx) => {
-      if (y > 185) { doc.addPage(); y = 15; }
-      if (idx % 2 === 0) { doc.setFillColor(248, 250, 252); doc.rect(margin, y - 4, colW, 7, 'F'); }
-      const proj = projectMap[item.project_id];
-      const vals = [
-        proj?.code || '—',
-        (item.description || '').slice(0, 28),
-        (item.manufacturer || '—').slice(0, 18),
-        (item.manufacturer_part_number || '—').slice(0, 18),
-        (item.supplier || '—').slice(0, 18),
-        `${item.quantity || ''} ${item.unit || ''}`,
-        (item.po_number || '—').slice(0, 12),
-        item.order_status === 'ordered' ? 'Ordered' : 'Not Ordered',
-        DELIVERY_LABELS[item.delivery_status] || '—',
-        item.expected_delivery_date ? formatDate(item.expected_delivery_date) : '—',
-        item.actual_delivery_date ? formatDate(item.actual_delivery_date) : '—',
-      ];
-      doc.setFontSize(6.5);
-      doc.setFont(undefined, 'normal');
-      cx = margin + 1;
-      vals.forEach((v, i) => {
-        doc.text(String(v), cx, y);
-        cx += colW * cols[i].frac;
-      });
-      y += 7;
+    // Per-project groups
+    groups.forEach(g => {
+      checkPage(16);
+      sectionTitle(`${g.project.code} — ${truncate(g.project.name, 50)}  ·  ${g.pos.length} POs  ·  ${formatCurrency(projectTotal(g.pos), g.project.currency || 'SAR')}${g.pos.some(isPoOverdue) ? `  ·  ⚠ ${g.pos.filter(isPoOverdue).length} overdue` : ''}`);
+      const cols = poHeader();
+      g.pos.forEach((po, i) => poRow(po, cols, i % 2 === 0));
+      // Per-project subtotal
+      checkPage(8);
+      doc.setFillColor(241, 245, 249);
+      doc.rect(margin, y - 4, colW, 7, 'F');
+      doc.setFontSize(8);
+      doc.setFont(undefined, 'bold');
+      doc.setTextColor(15, 23, 42);
+      doc.text('Project Subtotal', margin + 1, y);
+      doc.text(formatCurrency(projectTotal(g.pos), g.project.currency || 'SAR'), margin + colW * (0.22 + 0.12) + 1, y);
+      y += 10;
     });
+
+    // Grand total
+    checkPage(12);
+    doc.setFillColor(15, 23, 42);
+    doc.rect(margin, y - 4, colW, 9, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(10);
+    doc.setFont(undefined, 'bold');
+    doc.text('GRAND TOTAL', margin + 1, y + 2);
+    doc.text(formatCurrency(grandTotal, 'SAR'), margin + colW * (0.22 + 0.12) + 1, y + 2);
+    y += 12;
 
     // Footer
     const pageCount = doc.getNumberOfPages();
@@ -179,7 +190,7 @@ export default function MaterialTrackingReport({ projects }) {
     }
 
     doc.save(`Material_Tracking_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
-    setExportMenu(false);
+    setGenerating(false);
   }
 
   if (loading) return (
@@ -189,131 +200,111 @@ export default function MaterialTrackingReport({ projects }) {
   );
 
   return (
-    <div className="space-y-6">
-      {/* KPI Cards */}
+    <div className="space-y-5">
+      {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard label="Total Ordered" value={totalOrdered} icon={<Package className="w-5 h-5" />} color="border-blue-400" />
-        <KpiCard label="Fully Received" value={totalReceived} icon={<CheckCircle2 className="w-5 h-5" />} color="border-emerald-400" />
-        <KpiCard label="Partially Received" value={totalPartial} icon={<AlertCircle className="w-5 h-5" />} color="border-amber-400" />
-        <KpiCard label="Pending Delivery" value={totalPending} icon={<Clock className="w-5 h-5" />} color="border-red-400" />
+        <KpiCard label="Total POs" value={pos.length} icon={<Package className="w-5 h-5" />} color="border-slate-400" />
+        <KpiCard label="Grand Total" value={formatCurrency(grandTotal, 'SAR')} icon={<Truck className="w-5 h-5" />} color="border-blue-400" />
+        <KpiCard label="Delivered" value={deliveredCount} icon={<CheckCircle2 className="w-5 h-5" />} color="border-emerald-400" />
+        <KpiCard label="Overdue" value={overdueCount} icon={<AlertTriangle className="w-5 h-5" />} color={overdueCount > 0 ? 'border-red-500' : 'border-slate-400'} valueClass={overdueCount > 0 ? 'text-red-600' : ''} />
       </div>
 
-      {/* Filters + Export */}
-      <div className="bg-white rounded-lg shadow-sm p-4 flex flex-wrap gap-3 items-center">
-        <Filter className="w-4 h-4 text-slate-400 shrink-0" />
-
-        <select value={filterProject} onChange={e => setFilterProject(e.target.value)}
-          className="border border-slate-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-amber-400 bg-white">
-          <option value="">All Projects</option>
-          {projects.map(p => <option key={p.id} value={p.id}>{p.code} — {p.name}</option>)}
-        </select>
-
-        <select value={filterSupplier} onChange={e => setFilterSupplier(e.target.value)}
-          className="border border-slate-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-amber-400 bg-white">
-          <option value="">All Suppliers</option>
-          {suppliers.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
-
-        <select value={filterDelivery} onChange={e => setFilterDelivery(e.target.value)}
-          className="border border-slate-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-amber-400 bg-white">
-          <option value="">All Statuses</option>
-          <option value="received">Received</option>
-          <option value="partially_received">Partially Received</option>
-          <option value="pending">Pending</option>
-        </select>
-
-        {hasFilters && (
-          <button onClick={clearFilters} className="flex items-center gap-1 text-xs text-slate-400 hover:text-red-500">
-            <X className="w-3.5 h-3.5" /> Clear
-          </button>
-        )}
-
-        <span className="text-xs text-slate-400 ml-auto">{filtered.length} item{filtered.length !== 1 ? 's' : ''}</span>
-
-        {/* Export dropdown */}
-        <div className="relative">
-          <button onClick={() => setExportMenu(v => !v)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-slate-200 rounded hover:bg-slate-100 text-slate-600 font-medium">
-            <Download className="w-3.5 h-3.5" /> Export
-          </button>
-          {exportMenu && (
-            <div className="absolute right-0 mt-1 w-40 bg-white border border-slate-200 rounded shadow-lg z-50 py-1">
-              <button onClick={exportExcel} className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-slate-50 text-slate-700">
-                <Sheet className="w-3.5 h-3.5 text-emerald-600" /> Excel (.xlsx)
-              </button>
-              <button onClick={exportPDF} className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-slate-50 text-slate-700">
-                <FileText className="w-3.5 h-3.5 text-red-500" /> PDF
-              </button>
-            </div>
-          )}
-        </div>
+      {/* Export bar */}
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-slate-500">{groups.length} projects · {pos.length} purchase orders</p>
+        <button onClick={exportPDF} disabled={generating || pos.length === 0}
+          className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold text-sm rounded disabled:opacity-50">
+          {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+          {generating ? 'Generating…' : 'Export PDF'}
+        </button>
       </div>
 
-      {/* Table */}
-      {filtered.length === 0 ? (
+      {/* Grouped report */}
+      {groups.length === 0 ? (
         <div className="text-center py-12 text-slate-400">
           <Package className="w-10 h-10 mx-auto mb-2 opacity-30" />
-          <p className="text-sm">No materials found for the selected filters.</p>
+          <p className="text-sm">No purchase orders found across projects.</p>
         </div>
       ) : (
-        <div className="bg-white rounded-lg shadow-sm overflow-hidden border border-slate-200">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[1000px]">
-              <thead className="bg-slate-800 text-white text-xs">
-                <tr>
-                  <th className="px-4 py-3 text-left font-semibold">Project</th>
-                  <th className="px-4 py-3 text-left font-semibold">Description</th>
-                  <th className="px-4 py-3 text-left font-semibold">Manufacturer</th>
-                  <th className="px-4 py-3 text-left font-semibold">Part No.</th>
-                  <th className="px-4 py-3 text-left font-semibold">Supplier</th>
-                  <th className="px-4 py-3 text-right font-semibold">Qty</th>
-                  <th className="px-4 py-3 text-left font-semibold">PO #</th>
-                  <th className="px-4 py-3 text-left font-semibold">Order Status</th>
-                  <th className="px-4 py-3 text-left font-semibold">Delivery Status</th>
-                  <th className="px-4 py-3 text-left font-semibold">Expected Delivery</th>
-                  <th className="px-4 py-3 text-left font-semibold">Actual Delivery</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((item, idx) => {
-                  const proj = projectMap[item.project_id];
-                  return (
-                    <tr key={item.id} className={`border-t border-slate-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
-                      <td className="px-4 py-2.5">
-                        <div className="font-mono text-xs text-slate-500">{proj?.code || '—'}</div>
-                        <div className="text-xs text-slate-700 truncate max-w-[110px]">{proj?.name || '—'}</div>
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <div className="text-xs text-slate-800 font-medium max-w-[180px]">{item.description}</div>
-                      </td>
-                      <td className="px-4 py-2.5 text-xs text-slate-500">{item.manufacturer || '—'}</td>
-                      <td className="px-4 py-2.5 text-xs font-mono text-slate-600">{item.manufacturer_part_number || '—'}</td>
-                      <td className="px-4 py-2.5 text-xs text-slate-700">{item.supplier || '—'}</td>
-                      <td className="px-4 py-2.5 text-xs text-right text-slate-700">{item.quantity} {item.unit}</td>
-                      <td className="px-4 py-2.5 text-xs font-mono text-slate-500">{item.po_number || '—'}</td>
-                      <td className="px-4 py-2.5">
-                        <span className={`text-xs px-2 py-0.5 rounded font-semibold ${ORDER_STATUS_COLORS[item.order_status] || 'bg-slate-100 text-slate-600'}`}>
-                          {item.order_status === 'ordered' ? 'Ordered' : 'Not Ordered'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <span className={`text-xs px-2 py-0.5 rounded font-semibold ${DELIVERY_COLORS[item.delivery_status] || 'bg-slate-100 text-slate-600'}`}>
-                          {DELIVERY_LABELS[item.delivery_status] || item.delivery_status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5 text-xs text-slate-500">
-                        {item.expected_delivery_date ? formatDate(item.expected_delivery_date) : '—'}
-                      </td>
-                      <td className="px-4 py-2.5 text-xs text-slate-500">
-                        {item.actual_delivery_date
-                          ? <span className="text-emerald-600 font-medium">{formatDate(item.actual_delivery_date)}</span>
-                          : '—'}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+        <div className="space-y-4">
+          {groups.map(g => {
+            const total = projectTotal(g.pos);
+            const pOverdue = g.pos.filter(isPoOverdue);
+            return (
+              <div key={g.project.id} className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+                {/* Project header */}
+                <div className="flex items-center gap-3 px-4 py-2.5 bg-slate-800 text-white">
+                  <span className="font-mono text-xs text-slate-300">{g.project.code}</span>
+                  <span className="text-sm font-semibold truncate">{g.project.name}</span>
+                  <span className="text-slate-400 text-xs">·</span>
+                  <span className="text-xs text-slate-300">{g.pos.length} POs</span>
+                  {pOverdue.length > 0 && (
+                    <span className="flex items-center gap-1 text-xs text-red-300 font-semibold">
+                      <AlertTriangle className="w-3 h-3" /> {pOverdue.length} overdue
+                    </span>
+                  )}
+                  <span className="ml-auto text-xs">
+                    Project Total: <span className="text-amber-300 font-bold">{formatCurrency(total, g.project.currency || 'SAR')}</span>
+                  </span>
+                </div>
+                {/* PO table */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm min-w-[820px]">
+                    <thead className="bg-slate-50 text-slate-500 text-xs uppercase border-b">
+                      <tr>
+                        <th className="px-4 py-2.5 text-left">Vendor</th>
+                        <th className="px-4 py-2.5 text-left">PO #</th>
+                        <th className="px-4 py-2.5 text-right">Value</th>
+                        <th className="px-4 py-2.5 text-left">Delivery Date</th>
+                        <th className="px-4 py-2.5 text-left">Status</th>
+                        <th className="px-4 py-2.5 text-left">Type</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {g.pos.map((po, i) => {
+                        const overdue = isPoOverdue(po);
+                        return (
+                          <tr key={po.id} className={`border-t border-slate-100 ${overdue ? 'bg-red-50' : i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
+                            <td className="px-4 py-2.5 text-xs text-slate-700 font-medium">
+                              {po.vendor_name || '—'}
+                            </td>
+                            <td className="px-4 py-2.5 text-xs font-mono text-slate-600">{po.po_number || '—'}</td>
+                            <td className="px-4 py-2.5 text-xs text-right font-semibold text-slate-800">{formatCurrency(po.amount || 0, po.currency || 'SAR')}</td>
+                            <td className="px-4 py-2.5 text-xs">
+                              {po.expected_delivery_date ? (
+                                <span className={overdue ? 'text-red-600 font-semibold' : 'text-slate-500'}>
+                                  {formatDate(po.expected_delivery_date)}
+                                  {overdue && <span className="ml-1.5 inline-flex items-center gap-0.5 text-red-500"><AlertTriangle className="w-3 h-3" /></span>}
+                                </span>
+                              ) : <span className="text-slate-400">—</span>}
+                            </td>
+                            <td className="px-4 py-2.5">
+                              <span className={`text-xs px-2 py-0.5 rounded font-semibold ${PO_STATUS_COLORS[po.status] || 'bg-slate-100 text-slate-600'}`}>
+                                {PO_STATUS_LABELS[po.status] || po.status || '—'}
+                              </span>
+                            </td>
+                            <td className="px-4 py-2.5 text-xs text-slate-500 capitalize">{po.type || '—'}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot className="bg-slate-50 border-t border-slate-200">
+                      <tr>
+                        <td colSpan={2} className="px-4 py-2.5 text-xs font-semibold text-slate-600">Project Subtotal</td>
+                        <td className="px-4 py-2.5 text-xs text-right font-bold text-slate-800">{formatCurrency(total, g.project.currency || 'SAR')}</td>
+                        <td colSpan={3}></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Grand total */}
+          <div className="bg-slate-800 text-white rounded-lg px-4 py-3 flex items-center justify-between">
+            <span className="text-sm font-semibold text-slate-200">Grand Total ({pos.length} POs)</span>
+            <span className="text-lg font-bold text-amber-300">{formatCurrency(grandTotal, 'SAR')}</span>
           </div>
         </div>
       )}
@@ -321,16 +312,21 @@ export default function MaterialTrackingReport({ projects }) {
   );
 }
 
-function KpiCard({ label, value, icon, color }) {
+function KpiCard({ label, value, icon, color, valueClass }) {
   return (
     <div className={`bg-white rounded-lg shadow-sm p-4 border-l-4 ${color}`}>
       <div className="flex items-start justify-between">
         <div>
           <div className="text-xs text-slate-400 uppercase tracking-wide mb-1">{label}</div>
-          <div className="text-2xl font-bold text-slate-800">{value}</div>
+          <div className={`text-xl font-bold text-slate-800 ${valueClass || ''}`}>{value}</div>
         </div>
         <div className="text-slate-300 mt-0.5">{icon}</div>
       </div>
     </div>
   );
+}
+
+function truncate(str, max) {
+  if (!str) return '—';
+  return str.length > max ? str.slice(0, max - 1) + '…' : str;
 }
