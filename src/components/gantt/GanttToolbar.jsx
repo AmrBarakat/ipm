@@ -1,4 +1,4 @@
-import { ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Maximize2, Minimize2, Calendar, Crosshair, Image, FileText, Sheet, Loader2, Link2, AlertTriangle, ChevronsDownUp, ChevronsUpDown } from 'lucide-react';
+import { ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Maximize2, Minimize2, Calendar, Crosshair, Image, FileText, Sheet, Loader2, Link2, AlertTriangle, ChevronsDownUp, ChevronsUpDown, Sparkles, Wand2 } from 'lucide-react';
 import { TIME_SCALES } from './ganttUtils';
 
 export default function GanttToolbar({
@@ -9,6 +9,7 @@ export default function GanttToolbar({
   criticalCount, projectDuration, projectFinish,
   fullscreen, toggleFullscreen,
   onExportPNG, onExportPDF, onExportExcel, exporting,
+  onEstimate, onOptimize,
 }) {
   const fmtFinish = projectFinish ? projectFinish.toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
   return (
@@ -70,6 +71,14 @@ export default function GanttToolbar({
             <AlertTriangle className="w-3.5 h-3.5" /> Critical ({criticalCount})
           </span>
         </label>
+        <div className="flex items-center border border-amber-300 rounded overflow-hidden">
+          <button onClick={onEstimate} className="flex items-center gap-1 px-2.5 py-1.5 text-xs hover:bg-amber-50 text-amber-700 font-medium border-r border-amber-300" title="AI: estimate durations for undated activities">
+            <Sparkles className="w-3.5 h-3.5" /> AI: Estimate
+          </button>
+          <button onClick={onOptimize} className="flex items-center gap-1 px-2.5 py-1.5 text-xs hover:bg-amber-50 text-amber-700 font-medium" title="AI: optimize schedule (delays & dependencies)">
+            <Wand2 className="w-3.5 h-3.5" /> AI: Optimize
+          </button>
+        </div>
         <div className="flex items-center border border-slate-200 rounded overflow-hidden">
           <button onClick={onExportPNG} disabled={exporting} className="flex items-center gap-1 px-2.5 py-1.5 text-xs hover:bg-slate-100 text-slate-600 border-r border-slate-200 disabled:opacity-50" title="Export PNG">
             {exporting === 'png' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Image className="w-3.5 h-3.5" />} PNG

@@ -15,6 +15,7 @@ import GanttToolbar from './GanttToolbar';
 import GanttTree from './GanttTree';
 import GanttTimeline from './GanttTimeline';
 import GanttEditorModal from './GanttEditorModal';
+import ScheduleAssistantModal from '@/components/project-detail/ScheduleAssistantModal';
 
 export default function TabGantt({ projectId, project }) {
   const { data: qWbs = [], isLoading: loadingWbs } = useEntityList('WBSItem', { project_id: projectId }, 'wbs_code', 2000);
@@ -41,6 +42,7 @@ export default function TabGantt({ projectId, project }) {
   const [fullscreen, setFullscreen] = useState(false);
   const [exporting, setExporting] = useState(null); // 'png' | 'pdf' | null
   const [editorRow, setEditorRow] = useState(null);
+  const [aiModal, setAiModal] = useState(null); // null | 'optimize' | 'estimate'
 
   const scrollRef = useRef(null);
   const containerRef = useRef(null);
@@ -329,6 +331,7 @@ export default function TabGantt({ projectId, project }) {
         criticalCount={cpm.criticalIds.size} projectDuration={cpm.projectDurationDays} projectFinish={cpm.projectFinish}
         fullscreen={fullscreen} toggleFullscreen={() => setFullscreen(v => !v)}
         onExportPNG={exportPNG} onExportPDF={exportPDF} onExportExcel={exportExcel} exporting={exporting}
+        onEstimate={() => setAiModal('estimate')} onOptimize={() => setAiModal('optimize')}
       />
       <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-auto border border-slate-200 rounded-lg bg-white relative" style={{ minHeight: 320 }}>
         <div style={{ width: innerWidth, position: 'relative' }} className="flex flex-col">
@@ -366,6 +369,15 @@ export default function TabGantt({ projectId, project }) {
 
       {editorRow && (
         <GanttEditorModal row={editorRow} allWbs={wbsItems} onSave={onEditorSave} onClose={() => setEditorRow(null)} />
+      )}
+
+      {aiModal && (
+        <ScheduleAssistantModal
+          projectId={projectId}
+          initialFlow={aiModal}
+          onClose={() => setAiModal(null)}
+          onApplied={() => queryClient.invalidateQueries({ queryKey: ['WBSItem'] })}
+        />
       )}
     </>
   );

@@ -1,16 +1,23 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { X, Loader2, CheckCircle, Wand2, AlertTriangle, Calendar, ArrowRight, Flag, Sparkles } from 'lucide-react';
 import EstimateDurationsReview from './EstimateDurationsReview';
 
-export default function ScheduleAssistantModal({ projectId, onClose, onApplied }) {
-  const [step, setStep] = useState('idle'); // idle | analyzing | review | applying | done
-  const [flow, setFlow] = useState(null); // null | 'optimize' | 'estimate'
+export default function ScheduleAssistantModal({ projectId, onClose, onApplied, initialFlow = null }) {
+  // When opened with an initialFlow, skip the chooser and start that flow directly.
+  const [step, setStep] = useState(initialFlow === 'optimize' ? 'analyzing' : 'idle'); // idle | analyzing | review | applying | done
+  const [flow, setFlow] = useState(initialFlow || null); // null | 'optimize' | 'estimate'
   const [suggestions, setSuggestions] = useState([]);
   const [milestoneImpacts, setMilestoneImpacts] = useState([]);
   const [summary, setSummary] = useState('');
   const [selected, setSelected] = useState(new Set());
   const [error, setError] = useState(null);
+
+  // Auto-launch the optimize flow when opened directly from the Gantt.
+  useEffect(() => {
+    if (initialFlow === 'optimize') analyze();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function analyze() {
     setStep('analyzing');
