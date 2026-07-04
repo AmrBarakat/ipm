@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
-import { base44 } from '@/api/base44Client';
+import { useState, useMemo } from 'react';
+import { useEntityList } from '@/hooks/useEntity';
 import { formatCurrency, TYPE_LABELS } from '@/lib/constants';
 import { Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   LineChart, Line, ComposedChart, ResponsiveContainer,
@@ -47,11 +47,6 @@ const selCls = 'border border-slate-200 rounded px-2 py-1.5 text-xs focus:outlin
 
 // ── Main Component ─────────────────────────────────────────────────────────
 export default function FinancialDashboard({ projects }) {
-  const [invoices, setInvoices] = useState([]);
-  const [collections, setCollections] = useState([]);
-  const [expenses, setExpenses] = useState([]);
-  const [loading, setLoading] = useState(true);
-
   // Filters
   const [period, setPeriod] = useState('monthly');
   const [projectType, setProjectType] = useState('');
@@ -59,23 +54,16 @@ export default function FinancialDashboard({ projects }) {
   const [dateTo, setDateTo] = useState('');
   const [view, setView] = useState('actual'); // actual | planned | both
 
-  useEffect(() => {
-    if (!projects.length) {setLoading(false);return;}
-    const ids = projects.map((p) => p.id);
+  // Fetch all financial data across all projects (cross-project pattern)
+  const { data: rawInvoices = [], isLoading: invLoading } = useEntityList('Invoice', null, '-planned_date', 2000);
+  const { data: rawCollections = [], isLoading: colLoading } = useEntityList('Collection', null, '-received_date', 2000);
+  const { data: rawExpenses = [], isLoading: expLoading } = useEntityList('Expense', null, '-planned_date', 2000);
 
-    // Fetch all financial data across all projects in parallel
-    Promise.all([
-    base44.entities.Invoice.list('-planned_date', 2000),
-    base44.entities.Collection.list('-received_date', 2000),
-    base44.entities.Expense.list('-planned_date', 2000)]
-    ).then(([inv, col, exp]) => {
-      const idSet = new Set(ids);
-      setInvoices(inv.filter((i) => idSet.has(i.project_id)));
-      setCollections(col.filter((c) => idSet.has(c.project_id)));
-      setExpenses(exp.filter((e) => idSet.has(e.project_id)));
-      setLoading(false);
-    });
-  }, [projects]);
+  const idSet = useMemo(() => new Set(projects.map((p) => p.id)), [projects]);
+  const invoices = useMemo(() => rawInvoices.filter((i) => idSet.has(i.project_id)), [rawInvoices, idSet]);
+  const collections = useMemo(() => rawCollections.filter((c) => idSet.has(c.project_id)), [rawCollections, idSet]);
+  const expenses = useMemo(() => rawExpenses.filter((e) => idSet.has(e.project_id)), [rawExpenses, idSet]);
+  const loading = invLoading || colLoading || expLoading;
 
   // Project id → type lookup
   const projectTypeMap = useMemo(() =>

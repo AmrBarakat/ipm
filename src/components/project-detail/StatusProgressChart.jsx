@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
-import { base44 } from '@/api/base44Client';
+import { useMemo } from 'react';
+import { useEntityList } from '@/hooks/useEntity';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from 'recharts';
 import { Target, Package, Activity } from 'lucide-react';
 
@@ -33,22 +33,9 @@ function truncate(s, n = 28) {
 }
 
 export default function StatusProgressChart({ projectId }) {
-  const [milestones, setMilestones] = useState([]);
-  const [deliverables, setDeliverables] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!projectId) return;
-    setLoading(true);
-    Promise.all([
-      base44.entities.Milestone.filter({ project_id: projectId }, 'planned_date', 200),
-      base44.entities.Deliverable.filter({ project_id: projectId }, 'planned_delivery_date', 200),
-    ]).then(([m, d]) => {
-      setMilestones(m);
-      setDeliverables(d);
-      setLoading(false);
-    }).catch(() => setLoading(false));
-  }, [projectId]);
+  const { data: milestones = [], isLoading: msLoading } = useEntityList('Milestone', { project_id: projectId }, 'planned_date', 200);
+  const { data: deliverables = [], isLoading: delLoading } = useEntityList('Deliverable', { project_id: projectId }, 'planned_delivery_date', 200);
+  const loading = msLoading || delLoading;
 
   const data = useMemo(() => {
     const ms = milestones.map(m => ({

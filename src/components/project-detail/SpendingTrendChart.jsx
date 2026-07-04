@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
-import { base44 } from '@/api/base44Client';
+import { useMemo } from 'react';
+import { useEntityList } from '@/hooks/useEntity';
 import { formatCurrency } from '@/lib/constants';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { TrendingUp, Snowflake } from 'lucide-react';
@@ -9,24 +9,11 @@ import { TrendingUp, Snowflake } from 'lucide-react';
  * plotted month-by-month across the project timeline.
  */
 export default function SpendingTrendChart({ expenses = [], project }) {
-  const [baselines, setBaselines] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      try {
-        const bl = await base44.entities.Baseline.filter({ project_id: project?.id }, 'captured_date', 100);
-        bl.sort((a, b) => (a.captured_date || '').localeCompare(b.captured_date || ''));
-        if (active) setBaselines(bl);
-      } catch {
-        if (active) setBaselines([]);
-      } finally {
-        if (active) setLoading(false);
-      }
-    })();
-    return () => { active = false; };
-  }, [project?.id]);
+  const { data: rawBaselines = [], isLoading: loading } = useEntityList('Baseline', { project_id: project?.id }, 'captured_date', 100);
+  const baselines = useMemo(() =>
+    [...rawBaselines].sort((a, b) => (a.captured_date || '').localeCompare(b.captured_date || '')),
+    [rawBaselines]
+  );
 
   const earliest = baselines[0] || null;
   const currency = project?.currency || earliest?.currency || 'SAR';

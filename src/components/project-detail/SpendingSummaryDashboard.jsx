@@ -1,20 +1,11 @@
-import { useState, useEffect, useMemo } from 'react';
-import { base44 } from '@/api/base44Client';
+import { useMemo } from 'react';
+import { useEntityList } from '@/hooks/useEntity';
 import { formatCurrency, EXPENSE_CATEGORY_LABELS } from '@/lib/constants';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { Wallet, TrendingDown, Scale, Gauge } from 'lucide-react';
 
 export default function SpendingSummaryDashboard({ projectId, currency = 'SAR' }) {
-  const [expenses, setExpenses] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!projectId) return;
-    setLoading(true);
-    base44.entities.Expense.filter({ project_id: projectId }, 'planned_date', 500)
-      .then(exp => { setExpenses(exp); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, [projectId]);
+  const { data: expenses = [], isLoading: loading } = useEntityList('Expense', { project_id: projectId }, 'planned_date', 500);
 
   const { totalPlanned, totalActual, byCategory } = useMemo(() => {
     const planned = expenses
