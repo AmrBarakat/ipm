@@ -72,8 +72,8 @@ export default function AppSidebar() {
           <Factory className="text-amber-400 w-7 h-7" />
           {!collapsed && (
             <div className="leading-tight">
-              <div className="text-sm font-bold tracking-wide">IndustrialPM</div>
-              <div className="text-[10px] text-slate-400">Automation & Energy</div>
+              <div className="text-sm font-bold tracking-wide">IAM</div>
+              <div className="text-[10px] text-slate-400">Industrial Automation Management</div>
             </div>
           )}
         </Link>
