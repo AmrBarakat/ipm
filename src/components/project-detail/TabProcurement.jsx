@@ -7,6 +7,7 @@ import { ShoppingCart, Package, ChevronDown, ChevronRight, Check, AlertCircle, X
 
 export default function TabProcurement({ projectId, project }) {
   const { data: all = [], isLoading } = useEntityList('BOMItem', { project_id: projectId }, 'supplier', 500);
+  const [hiddenIds, setHiddenIds] = useState(new Set());
   const items = useMemo(() => all.filter(i => {
     const os = i.order_status || (i.ordered ? 'ordered' : 'not_ordered');
     if (os !== 'not_ordered') return false;
@@ -23,7 +24,6 @@ export default function TabProcurement({ projectId, project }) {
   const [collapsedSuppliers, setCollapsedSuppliers] = useState(new Set());
   const [bulkEdit, setBulkEdit] = useState(null);
   const [syncing, setSyncing] = useState(false);
-  const [hiddenIds, setHiddenIds] = useState(new Set());
   const queryClient = useQueryClient();
 
   // Auto-select all unordered items whenever the list refreshes
