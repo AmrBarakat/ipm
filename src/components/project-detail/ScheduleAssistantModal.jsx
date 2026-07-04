@@ -18,12 +18,14 @@ export default function ScheduleAssistantModal({ projectId, onClose, onApplied }
     const res = await base44.functions.invoke('scheduleAssistant', { project_id: projectId });
     if (res.data?.error) {
       setError(`Analysis failed: ${res.data.error}`);
+      setFlow(null);
       setStep('idle');
       return;
     }
     const suggs = res.data?.suggestions || [];
     if (suggs.length === 0 && (res.data?.milestone_impacts || []).length === 0) {
       setError('No scheduling issues or improvements found. Your WBS schedule looks good!');
+      setFlow(null);
       setStep('idle');
       return;
     }
