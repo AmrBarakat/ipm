@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { STATUS_COLORS, STATUS_LABELS, PRIORITY_COLORS, PRIORITY_LABELS, TYPE_LABELS, formatCurrency, formatDate } from '@/lib/constants';
@@ -6,19 +6,26 @@ import { ArrowLeft, Pencil, FolderOpen, BarChart2 } from 'lucide-react';
 import ProjectPDFExport from '@/components/project-detail/ProjectPDFExport';
 import ProgressReportModal from '@/components/project-detail/ProgressReportModal';
 import ProjectForm from '@/components/projects/ProjectForm';
-import TabOverview from '@/components/project-detail/TabOverview';
-import TabTasks from '@/components/project-detail/TabTasks';
-import TabMilestones from '@/components/project-detail/TabMilestones';
-import TabBOM from '@/components/project-detail/TabBOM';
-import TabFinancials from '@/components/project-detail/TabFinancials';
-import TabDocuments from '@/components/project-detail/TabDocuments';
-import TabGantt from '@/components/project-detail/TabGantt';
-import TabWBS from '@/components/project-detail/TabWBS';
-import TabNotes from '@/components/project-detail/TabNotes';
-import TabRisks from '@/components/project-detail/TabRisks';
-import TabVendors from '@/components/project-detail/TabVendors';
-import TabDeliverables from '@/components/project-detail/TabDeliverables';
-import TabBOMReconciliation from '@/components/project-detail/TabBOMReconciliation';
+
+const TabOverview = lazy(() => import('@/components/project-detail/TabOverview'));
+const TabTasks = lazy(() => import('@/components/project-detail/TabTasks'));
+const TabMilestones = lazy(() => import('@/components/project-detail/TabMilestones'));
+const TabBOM = lazy(() => import('@/components/project-detail/TabBOM'));
+const TabFinancials = lazy(() => import('@/components/project-detail/TabFinancials'));
+const TabDocuments = lazy(() => import('@/components/project-detail/TabDocuments'));
+const TabGantt = lazy(() => import('@/components/project-detail/TabGantt'));
+const TabWBS = lazy(() => import('@/components/project-detail/TabWBS'));
+const TabNotes = lazy(() => import('@/components/project-detail/TabNotes'));
+const TabRisks = lazy(() => import('@/components/project-detail/TabRisks'));
+const TabVendors = lazy(() => import('@/components/project-detail/TabVendors'));
+const TabDeliverables = lazy(() => import('@/components/project-detail/TabDeliverables'));
+const TabBOMReconciliation = lazy(() => import('@/components/project-detail/TabBOMReconciliation'));
+
+const TabSpinner = () => (
+  <div className="flex items-center justify-center py-20">
+    <div className="w-8 h-8 border-4 border-slate-200 border-t-amber-500 rounded-full animate-spin" />
+  </div>
+);
 
 const TABS = [
   { id: 'overview',      label: 'Overview'       },
@@ -162,7 +169,8 @@ export default function ProjectDetail() {
             ))}
           </div>
 
-          <div>
+          <Suspense fallback={<TabSpinner />}>
+            <div>
             {activeTab === 'overview'   && <TabOverview   project={project} onRefresh={loadProject} />}
             {activeTab === 'gantt'      && <TabGantt      projectId={id} project={project} />}
             {activeTab === 'wbs'        && <TabWBS        projectId={id} project={project} onProgressChange={(p) => setProject(prev => ({ ...prev, progress: p }))} />}
@@ -176,7 +184,8 @@ export default function ProjectDetail() {
             {activeTab === 'deliverables' && <TabDeliverables projectId={id} />}
             {activeTab === 'vendors'    && <TabVendors    projectId={id} project={project} />}
             {activeTab === 'bom_reconcile' && <TabBOMReconciliation projectId={id} />}
-          </div>
+            </div>
+          </Suspense>
         </>
       )}
       {showProgressReport && (
