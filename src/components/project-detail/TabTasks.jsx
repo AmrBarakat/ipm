@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useEntityList, useEntityMutation, runBatch } from '@/hooks/useEntity';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { Plus, Pencil, X, Trash2, RefreshCw, Layers, Check, Save, ListTodo } from 'lucide-react';
 import EmptyState from '@/components/ui/EmptyState';
 
@@ -41,6 +42,7 @@ export default function TabTasks({ projectId }) {
   const { data: tasks = [], isLoading } = useEntityList('Task', { project_id: projectId }, '-created_date', 300);
   const taskMutation = useEntityMutation('Task', ['WBSItem']);
   const wbsMutation = useEntityMutation('WBSItem', ['Task']);
+  const confirmDialog = useConfirm();
   const [syncing, setSyncing] = useState(false);
   const [addingCol, setAddingCol] = useState(null);
   const [newTitle, setNewTitle] = useState('');
@@ -134,7 +136,11 @@ export default function TabTasks({ projectId }) {
   function clearSelection() { setSelectedIds(new Set()); setBulkField(''); setBulkValue(''); }
 
   async function bulkDelete() {
-    if (!confirm(`Delete ${selectedIds.size} tasks?`)) return;
+    if (!(await confirmDialog({
+      title: `Delete ${selectedIds.size} task${selectedIds.size === 1 ? '' : 's'}?`,
+      description: 'The selected tasks will be permanently removed. This action cannot be undone.',
+      confirmText: 'Delete', destructive: true,
+    }))) return;
     await runBatch([...selectedIds].map(id => taskMutation.mutateAsync({ action: 'delete', id })), 'task deletions');
     clearSelection();
   }

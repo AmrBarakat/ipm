@@ -16,6 +16,7 @@ import Resources from '@/pages/Resources';
 import Reports from '@/pages/Reports';
 import Calendar from '@/pages/Calendar';
 import Settings from '@/pages/Settings';
+import { ConfirmDialogProvider } from '@/components/ui/ConfirmDialog';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -60,10 +61,12 @@ function App() {
     <AuthProvider>
       <QueryClientProvider client={queryClientInstance}>
         <TranslationProvider>
+        <ConfirmDialogProvider>
         <Router>
           <AuthenticatedApp />
         </Router>
         <Toaster />
+        </ConfirmDialogProvider>
         </TranslationProvider>
       </QueryClientProvider>
     </AuthProvider>

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useEntityList, useEntityMutation, runBatch } from '@/hooks/useEntity';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { Plus, Package, Pencil, Trash2, Save, X, CheckCircle, Wand2, Loader2, Check } from 'lucide-react';
@@ -32,6 +33,7 @@ export default function TabDeliverables({ projectId }) {
   const delMutation = useEntityMutation('Deliverable');
   const msMutation = useEntityMutation('Milestone');
   const queryClient = useQueryClient();
+  const confirmDialog = useConfirm();
   const [adding, setAdding]     = useState(false);
   const [form, setForm]         = useState(EMPTY);
   const [editingId, setEditingId] = useState(null);
@@ -209,6 +211,11 @@ export default function TabDeliverables({ projectId }) {
   }
 
   async function bulkDelete() {
+    if (!(await confirmDialog({
+      title: `Delete ${selectedIds.size} deliverable${selectedIds.size === 1 ? '' : 's'}?`,
+      description: 'The selected deliverables will be permanently removed. This action cannot be undone.',
+      confirmText: 'Delete', destructive: true,
+    }))) return;
     await runBatch([...selectedIds].map(id => delMutation.mutateAsync({ action: 'delete', id })), 'deliverable deletions');
     setSelectedIds(new Set());
   }

@@ -6,6 +6,7 @@ import { formatDate } from '@/lib/constants';
 import { todayLocal } from '@/lib/utils';
 import { Plus, ChevronRight, ChevronDown, Trash2, Pencil, Save, X, Layers, AlertTriangle, Wand2, BookOpen, Check } from 'lucide-react';
 import PanelWrapper from '@/components/ui/PanelWrapper';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 import ScheduleAssistantModal from './ScheduleAssistantModal';
 import ProjectPlanTemplateModal from './ProjectPlanTemplateModal';
 
@@ -67,6 +68,7 @@ export default function TabWBS({ projectId, project, onProgressChange }) {
   const wbsMutation = useEntityMutation('WBSItem', ['Task']);
   const msMutation = useEntityMutation('Milestone');
   const queryClient = useQueryClient();
+  const confirmDialog = useConfirm();
   const [items, setItems] = useState([]);
   const [expanded, setExpanded] = useState({});
   const [adding, setAdding] = useState(null);
@@ -229,7 +231,11 @@ export default function TabWBS({ projectId, project, onProgressChange }) {
     setSelectedIds(items.every(i => selectedIds.has(i.id)) ? new Set() : new Set(items.map(i => i.id)));
   }
   async function bulkDeleteItems() {
-    if (!confirm(`Delete ${selectedIds.size} WBS items and their children?`)) return;
+    if (!(await confirmDialog({
+      title: `Delete ${selectedIds.size} WBS item${selectedIds.size === 1 ? '' : 's'}?`,
+      description: 'The selected items and all of their child items will be permanently removed. This action cannot be undone.',
+      confirmText: 'Delete', destructive: true,
+    }))) return;
     const toDelete = new Set();
     [...selectedIds].forEach(id => { toDelete.add(id); getDescendants(id).forEach(d => toDelete.add(d)); });
     await runBatch([...toDelete].map(id => wbsMutation.mutateAsync({ action: 'delete', id })), 'WBS deletions');
