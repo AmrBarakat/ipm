@@ -1,13 +1,17 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useEntityList } from '@/hooks/useEntity';
+import { useQueryClient } from '@tanstack/react-query';
+import { base44 } from '@/api/base44Client';
 import { formatCurrency, formatDate, BOM_CATEGORY_LABELS } from '@/lib/constants';
-import { ShoppingCart, Package, ChevronDown, ChevronRight, Check, AlertCircle } from 'lucide-react';
+import { ShoppingCart, Package, ChevronDown, ChevronRight, Check, AlertCircle, X, Save } from 'lucide-react';
 
 export default function TabProcurement({ projectId, project }) {
   const { data: all = [], isLoading } = useEntityList('BOMItem', { project_id: projectId }, 'supplier', 500);
   const items = useMemo(() => all.filter(i => (i.order_status || (i.ordered ? 'ordered' : 'not_ordered')) === 'not_ordered'), [all]);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [collapsedSuppliers, setCollapsedSuppliers] = useState(new Set());
+  const [bulkEdit, setBulkEdit] = useState(null);
+  const queryClient = useQueryClient();
 
   // Auto-select all unordered items whenever the list refreshes
   useEffect(() => { setSelectedIds(new Set(items.map(i => i.id))); }, [items]);
@@ -54,6 +58,17 @@ export default function TabProcurement({ projectId, project }) {
     else setSelectedIds(new Set(items.map(i => i.id)));
   }
 
+  async function applyBulkEdit() {
+    if (!bulkEdit || selectedIds.size === 0) return;
+    const { field, value } = bulkEdit;
+    const ids = [...selectedIds];
+    const extra = field === 'order_status' ? { ordered: value === 'ordered' } : {};
+    await base44.entities.BOMItem.bulkUpdate(ids.map(id => ({ id, [field]: value, ...extra })));
+    setBulkEdit(null);
+    setSelectedIds(new Set());
+    queryClient.invalidateQueries({ queryKey: ['BOMItem'] });
+  }
+
   // KPIs
   const totalItems = items.length;
   const totalValue = items.reduce((s, i) => s + (Number(i.planned_cost_price) || Number(i.cost_price) || 0) * (Number(i.quantity) || 1), 0);
@@ -98,6 +113,66 @@ export default function TabProcurement({ projectId, project }) {
               Unordered BOM items grouped by supplier
             </div>
           </div>
+
+          {/* Bulk edit toolbar */}
+          {selectedIds.size > 0 && (
+            <div className="flex flex-wrap items-center gap-3 bg-slate-800 text-white rounded-lg px-4 py-2.5 text-sm">
+              <span className="font-semibold text-amber-400">{selectedIds.size} selected</span>
+              <span className="text-slate-400">·</span>
+              <span className="text-slate-300 text-xs">Bulk edit:</span>
+
+              <input
+                className="text-xs bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white placeholder-slate-400 focus:outline-none focus:border-amber-400 w-32"
+                placeholder="Set supplier…"
+                value={bulkEdit?.field === 'supplier' ? bulkEdit.value : ''}
+                onChange={e => setBulkEdit(e.target.value ? { field: 'supplier', value: e.target.value } : null)}
+              />
+
+              <select
+                className="text-xs bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white focus:outline-none focus:border-amber-400"
+                value={bulkEdit?.field === 'order_status' ? bulkEdit.value : ''}
+                onChange={e => setBulkEdit(e.target.value ? { field: 'order_status', value: e.target.value } : null)}
+              >
+                <option value="">Order Status…</option>
+                <option value="ordered">Mark Ordered</option>
+                <option value="not_ordered">Not Ordered</option>
+              </select>
+
+              <select
+                className="text-xs bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white focus:outline-none focus:border-amber-400"
+                value={bulkEdit?.field === 'category' ? bulkEdit.value : ''}
+                onChange={e => setBulkEdit(e.target.value ? { field: 'category', value: e.target.value } : null)}
+              >
+                <option value="">Category…</option>
+                {Object.entries(BOM_CATEGORY_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+
+              <input type="date"
+                className="text-xs bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white focus:outline-none focus:border-amber-400"
+                value={bulkEdit?.field === 'expected_delivery_date' ? bulkEdit.value : ''}
+                onChange={e => setBulkEdit(e.target.value ? { field: 'expected_delivery_date', value: e.target.value } : null)}
+              />
+
+              <input type="number" min="0"
+                className="text-xs bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white placeholder-slate-400 focus:outline-none focus:border-amber-400 w-28"
+                placeholder="Unit Cost…"
+                value={bulkEdit?.field === 'planned_cost_price' ? bulkEdit.value : ''}
+                onChange={e => setBulkEdit(e.target.value ? { field: 'planned_cost_price', value: Number(e.target.value) } : null)}
+              />
+
+              {bulkEdit && (
+                <button onClick={applyBulkEdit}
+                  className="flex items-center gap-1 px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold text-xs rounded">
+                  <Save className="w-3.5 h-3.5" /> Apply to {selectedIds.size}
+                </button>
+              )}
+
+              <button onClick={() => { setBulkEdit(null); setSelectedIds(new Set()); }}
+                className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-white ml-auto">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
 
           {/* Supplier groups */}
           <div className="space-y-4">
