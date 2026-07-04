@@ -55,6 +55,19 @@ Deno.serve(async (req) => {
       is_read: false,
     });
 
+    await base44.asServiceRole.entities.AuditLog.create({
+      project_id,
+      entity_type: 'Milestone',
+      entity_id: milestone.id,
+      action: 'auto_completed',
+      actor: 'system',
+      summary: `Milestone "${milestone.title}" auto-completed (all linked tasks done).`,
+      metadata: {
+        before: { status: milestone.status, progress: milestone.progress },
+        after: { status: 'completed', progress: 100 },
+      },
+    });
+
     completed.push(milestone.title);
   }
 

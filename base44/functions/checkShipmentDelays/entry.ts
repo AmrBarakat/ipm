@@ -55,6 +55,23 @@ Deno.serve(async (req) => {
         });
 
         await base44.asServiceRole.entities.PurchaseOrder.update(po.id, { delay_alerted: true });
+
+        await base44.asServiceRole.entities.AuditLog.create({
+          project_id: po.project_id,
+          entity_type: 'PurchaseOrder',
+          entity_id: po.id,
+          action: 'delay_alerted',
+          actor: 'system',
+          summary: `Shipment delay alert for PO ${po.po_number || po.description || po.id} — ${delayDays} day${delayDays !== 1 ? 's' : ''} overdue.`,
+          metadata: {
+            po_number: po.po_number,
+            vendor_name: po.vendor_name,
+            expected_delivery_date: po.expected_delivery_date,
+            delay_days: delayDays,
+            priority: po.priority,
+          },
+        });
+
         alertsCreated++;
       }
 

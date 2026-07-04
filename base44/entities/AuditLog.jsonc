@@ -1,0 +1,50 @@
+{
+  "name": "AuditLog",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to the Project the audited action belongs to"
+    },
+    "entity_type": {
+      "type": "string",
+      "description": "Type of entity affected, e.g. 'Milestone', 'Invoice', 'WBSItem', 'PurchaseOrder', 'Notification'"
+    },
+    "entity_id": {
+      "type": "string",
+      "description": "ID of the affected entity record"
+    },
+    "action": {
+      "type": "string",
+      "enum": [
+        "created",
+        "updated",
+        "auto_completed",
+        "auto_invoiced",
+        "progress_synced",
+        "delay_alerted"
+      ],
+      "description": "The kind of action being audited"
+    },
+    "actor": {
+      "type": "string",
+      "description": "Who performed the action \u2014 a username or the literal 'system' for automated changes"
+    },
+    "summary": {
+      "type": "string",
+      "description": "Short human-readable description of what changed"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Optional before/after values or extra context about the change"
+    }
+  },
+  "required": [
+    "project_id",
+    "entity_type",
+    "entity_id",
+    "action",
+    "actor",
+    "summary"
+  ]
+}

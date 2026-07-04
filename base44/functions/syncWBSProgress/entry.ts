@@ -48,6 +48,16 @@ Deno.serve(async (req) => {
 
     await base44.asServiceRole.entities.Project.update(projectId, { progress: overallProgress });
 
+    await base44.asServiceRole.entities.AuditLog.create({
+      project_id: projectId,
+      entity_type: 'Project',
+      entity_id: projectId,
+      action: 'progress_synced',
+      actor: 'system',
+      summary: `Project progress synced to ${overallProgress}% from WBS rollup.`,
+      metadata: { overallProgress, wbs_item_count: items.length },
+    });
+
     return Response.json({ success: true, projectId, overallProgress });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });

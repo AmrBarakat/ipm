@@ -83,6 +83,23 @@ Deno.serve(async (req) => {
     is_read: false,
   });
 
+  await base44.asServiceRole.entities.AuditLog.create({
+    project_id: milestone.project_id,
+    entity_type: 'Invoice',
+    entity_id: invoice.id,
+    action: 'auto_invoiced',
+    actor: 'system',
+    summary: `Invoice draft created for milestone "${milestone.title}" (${plannedAmount.toFixed(2)} ${currency}).`,
+    metadata: {
+      milestone_id,
+      milestone_title: milestone.title,
+      milestone_weight: milestoneWeight,
+      contract_value: contractValue,
+      planned_amount: plannedAmount,
+      currency,
+    },
+  });
+
   return Response.json({
     success: true,
     invoice_id: invoice.id,
