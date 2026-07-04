@@ -156,55 +156,56 @@ export default function ProjectPlanExtractModal({ document, projectId, project, 
     setStep('applying');
     let msCreated = 0, wbsCreated = 0, delivCreated = 0;
 
-    const msTitleToId = {};
-
-    // Create milestones
     const selectedMs = (extracted.milestones || []).filter((_, i) => selected.milestones[i]);
-    for (const ms of selectedMs) {
-      const record = await base44.entities.Milestone.create({
-        project_id: projectId,
-        title: ms.title,
-        planned_date: ms.planned_date || undefined,
-        weight: ms.weight || 0,
-        description: [ms.description, ms.is_ai_generated ? '[AI-Generated]' : ''].filter(Boolean).join(' ') || '',
-        status: 'pending',
-        progress: 0,
-      });
-      msTitleToId[ms.title] = record.id;
-      msCreated++;
-    }
-
-    // Create WBS items (first pass — no parent_id yet)
     const selectedWBS = (extracted.wbs_items || []).filter((_, i) => selected.wbs_items[i]);
+
+    // 1) Bulk-create milestones (single call instead of N)
+    const msRecords = selectedMs.length > 0
+      ? await base44.entities.Milestone.bulkCreate(selectedMs.map(ms => ({
+          project_id: projectId,
+          title: ms.title,
+          planned_date: ms.planned_date || undefined,
+          weight: ms.weight || 0,
+          description: [ms.description, ms.is_ai_generated ? '[AI-Generated]' : ''].filter(Boolean).join(' ') || '',
+          status: 'pending',
+          progress: 0,
+        })))
+      : [];
+    const msTitleToId = {};
+    msRecords.forEach((rec, i) => { msTitleToId[selectedMs[i].title] = rec.id; });
+    msCreated = msRecords.length;
+
+    // 2) Bulk-create WBS items (first pass — no links yet; single call)
+    const wbsRecords = selectedWBS.length > 0
+      ? await base44.entities.WBSItem.bulkCreate(selectedWBS.map(w => ({
+          project_id: projectId,
+          wbs_code: w.wbs_code || '',
+          name: w.name,
+          assignee: w.assignee || '',
+          planned_start: w.planned_start || undefined,
+          planned_end: w.planned_end || undefined,
+          weight: w.weight || 0,
+          status: w.status || 'not_started',
+          progress: 0,
+          description: [w.deliverable, w.remarks, w.is_ai_generated ? '[AI-Generated]' : ''].filter(Boolean).join(' | ') || undefined,
+          planned_hours: w.duration_days ? w.duration_days * 8 : undefined,
+        })))
+      : [];
     const wbsCodeToId = {};
-    for (const w of selectedWBS) {
-      const record = await base44.entities.WBSItem.create({
-        project_id: projectId,
-        wbs_code: w.wbs_code || '',
-        name: w.name,
-        assignee: w.assignee || '',
-        planned_start: w.planned_start || undefined,
-        planned_end: w.planned_end || undefined,
-        weight: w.weight || 0,
-        status: w.status || 'not_started',
-        progress: 0,
-        description: [w.deliverable, w.remarks, w.is_ai_generated ? '[AI-Generated]' : ''].filter(Boolean).join(' | ') || undefined,
-        planned_hours: w.duration_days ? w.duration_days * 8 : undefined,
-      });
-      wbsCodeToId[w.wbs_code] = record.id;
-      wbsCreated++;
-    }
+    wbsRecords.forEach((rec, i) => { wbsCodeToId[selectedWBS[i].wbs_code] = rec.id; });
+    wbsCreated = wbsRecords.length;
 
-    // Second pass — patch parent_id, milestone_id, and predecessor_ids links
+    // 3) Second pass — patch parent_id, milestone_id, predecessor_ids in ONE bulk update
+    const patches = [];
     for (const w of selectedWBS) {
-      const patches = {};
+      const id = wbsCodeToId[w.wbs_code];
+      if (!id) continue;
+      const patch = { id };
 
-      // Link parent
-      if (w.parent_code && wbsCodeToId[w.parent_code] && wbsCodeToId[w.wbs_code]) {
-        patches.parent_id = wbsCodeToId[w.parent_code];
+      if (w.parent_code && wbsCodeToId[w.parent_code]) {
+        patch.parent_id = wbsCodeToId[w.parent_code];
       }
 
-      // Link milestone: match by exact title or case-insensitive prefix
       if (w.milestone_title || w.ev_method === '0/100') {
         const targetTitle = (w.milestone_title || '').trim().toUpperCase();
         const matched = Object.entries(msTitleToId).find(([title]) =>
@@ -212,24 +213,21 @@ export default function ProjectPlanExtractModal({ document, projectId, project, 
           title.toUpperCase().includes(targetTitle) ||
           targetTitle.includes(title.toUpperCase())
         );
-        if (matched) patches.milestone_id = matched[1];
+        if (matched) patch.milestone_id = matched[1];
       }
 
-      // Link predecessors: map wbs_code strings to actual IDs
       if (w.predecessor) {
         const predCodes = String(w.predecessor).split(/[,;]+/).map(s => s.trim()).filter(Boolean);
         const predIds = predCodes.map(code => wbsCodeToId[code]).filter(Boolean);
-        if (predIds.length > 0) patches.predecessor_ids = predIds;
+        if (predIds.length > 0) patch.predecessor_ids = predIds;
       }
 
-      if (Object.keys(patches).length > 0 && wbsCodeToId[w.wbs_code]) {
-        await base44.entities.WBSItem.update(wbsCodeToId[w.wbs_code], patches);
-      }
+      if (Object.keys(patch).length > 1) patches.push(patch);
     }
+    if (patches.length > 0) await base44.entities.WBSItem.bulkUpdate(patches);
 
-    // Create deliverables from WBS milestones and key tasks
+    // 4) Deliverables (already batched)
     const deliverablesToCreate = [];
-    // One deliverable per created milestone
     for (const [title, msId] of Object.entries(msTitleToId)) {
       const ms = selectedMs.find(m => m.title === title);
       deliverablesToCreate.push({
@@ -244,11 +242,9 @@ export default function ProjectPlanExtractModal({ document, projectId, project, 
         planned_delivery_date: ms?.planned_date || undefined,
       });
     }
-    // Deliverables from WBS items that are milestones (task_mode === 'milestone') but not already covered
     const coveredTitles = new Set(Object.keys(msTitleToId).map(t => t.toUpperCase()));
     for (const w of selectedWBS) {
       if (w.task_mode === 'milestone' && w.name && !coveredTitles.has(w.name.toUpperCase())) {
-        const linkedMsId = wbsCodeToId[w.wbs_code] ? undefined : undefined; // milestone_id resolved in second pass
         deliverablesToCreate.push({
           project_id: projectId,
           name: w.name,
