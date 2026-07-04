@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useEntityList, useEntityMutation } from '@/hooks/useEntity';
+import { useEntityList, useEntityMutation, runBatch } from '@/hooks/useEntity';
 import { useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { formatDate } from '@/lib/constants';
@@ -217,7 +217,7 @@ export default function TabWBS({ projectId, project, onProgressChange }) {
 
   async function deleteItem(id) {
     const descendants = getDescendants(id);
-    await Promise.all([id, ...descendants].map(did => wbsMutation.mutateAsync({ action: 'delete', id: did })));
+    await runBatch([id, ...descendants].map(did => wbsMutation.mutateAsync({ action: 'delete', id: did })), 'WBS deletions');
     // WBS query invalidation triggers re-seed + the progress reconcile effect
   }
 
@@ -231,13 +231,13 @@ export default function TabWBS({ projectId, project, onProgressChange }) {
     if (!confirm(`Delete ${selectedIds.size} WBS items and their children?`)) return;
     const toDelete = new Set();
     [...selectedIds].forEach(id => { toDelete.add(id); getDescendants(id).forEach(d => toDelete.add(d)); });
-    await Promise.all([...toDelete].map(id => wbsMutation.mutateAsync({ action: 'delete', id })));
+    await runBatch([...toDelete].map(id => wbsMutation.mutateAsync({ action: 'delete', id })), 'WBS deletions');
     setSelectedIds(new Set()); setBulkField(''); setBulkValue('');
   }
   async function applyBulkEdit() {
     if (!bulkField || !bulkValue) return;
     const value = (bulkField === 'weight' || bulkField === 'progress') ? Number(bulkValue) : bulkValue;
-    await Promise.all([...selectedIds].map(id => wbsMutation.mutateAsync({ action: 'update', id, data: { [bulkField]: value } })));
+    await runBatch([...selectedIds].map(id => wbsMutation.mutateAsync({ action: 'update', id, data: { [bulkField]: value } })), 'WBS updates');
     setBulkField(''); setBulkValue(''); setSelectedIds(new Set());
   }
 

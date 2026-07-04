@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { base44 } from '@/api/base44Client';
-import { useEntityList, useEntityMutation } from '@/hooks/useEntity';
+import { useEntityList, useEntityMutation, runBatch } from '@/hooks/useEntity';
 import { Plus, Pencil, X, Trash2, RefreshCw, Layers, Check, Save, ListTodo } from 'lucide-react';
 import EmptyState from '@/components/ui/EmptyState';
 
@@ -123,7 +123,7 @@ export default function TabTasks({ projectId }) {
         }));
       }
     }
-    await Promise.all(ops);
+    await runBatch(ops, 'task sync operations');
     setSyncing(false);
   }
 
@@ -135,14 +135,14 @@ export default function TabTasks({ projectId }) {
 
   async function bulkDelete() {
     if (!confirm(`Delete ${selectedIds.size} tasks?`)) return;
-    await Promise.all([...selectedIds].map(id => taskMutation.mutateAsync({ action: 'delete', id })));
+    await runBatch([...selectedIds].map(id => taskMutation.mutateAsync({ action: 'delete', id })), 'task deletions');
     clearSelection();
   }
 
   async function applyBulkEdit() {
     if (!bulkField || !bulkValue) return;
     const value = bulkField === 'progress' ? Number(bulkValue) : bulkValue;
-    await Promise.all([...selectedIds].map(id => taskMutation.mutateAsync({ action: 'update', id, data: { [bulkField]: value } })));
+    await runBatch([...selectedIds].map(id => taskMutation.mutateAsync({ action: 'update', id, data: { [bulkField]: value } })), 'task updates');
     clearSelection();
   }
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useEntityList, useEntityMutation } from '@/hooks/useEntity';
+import { useEntityList, useEntityMutation, runBatch } from '@/hooks/useEntity';
 import { useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { Plus, Package, Pencil, Trash2, Save, X, CheckCircle, Wand2, Loader2, Check } from 'lucide-react';
@@ -208,13 +208,13 @@ export default function TabDeliverables({ projectId }) {
   }
 
   async function bulkDelete() {
-    await Promise.allSettled([...selectedIds].map(id => delMutation.mutateAsync({ action: 'delete', id })));
+    await runBatch([...selectedIds].map(id => delMutation.mutateAsync({ action: 'delete', id })), 'deliverable deletions');
     setSelectedIds(new Set());
   }
 
   async function applyBulkEdit() {
     if (!bulkField || !bulkValue) return;
-    await Promise.all([...selectedIds].map(id => delMutation.mutateAsync({ action: 'update', id, data: { [bulkField]: bulkValue } })));
+    await runBatch([...selectedIds].map(id => delMutation.mutateAsync({ action: 'update', id, data: { [bulkField]: bulkValue } })), 'deliverable updates');
     setBulkField(''); setBulkValue('');
     setSelectedIds(new Set());
   }

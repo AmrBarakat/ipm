@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { useEntityList, useEntityMutation } from '@/hooks/useEntity';
+import { useEntityList, useEntityMutation, runBatch } from '@/hooks/useEntity';
 import { useQueryClient } from '@tanstack/react-query';
 import { Calendar } from 'lucide-react';
 import html2canvas from 'html2canvas';
@@ -210,7 +210,7 @@ export default function TabGantt({ projectId, project }) {
       return c && (i.planned_start !== c.planned_start || i.planned_end !== c.planned_end);
     });
     if (!changed.length) return;
-    Promise.all(changed.map(i => wbsMutation.mutateAsync({ action: 'update', id: i.id, data: { planned_start: i.planned_start, planned_end: i.planned_end } })))
+    runBatch(changed.map(i => wbsMutation.mutateAsync({ action: 'update', id: i.id, data: { planned_start: i.planned_start, planned_end: i.planned_end } })), 'Gantt drag saves')
       .then(() => queryClient.invalidateQueries({ queryKey: ['WBSItem'] }));
   }, [wbsItems, wbsMutation, queryClient]);
 
@@ -223,7 +223,7 @@ export default function TabGantt({ projectId, project }) {
       const u = updates.find(x => x.id === i.id);
       return u ? { ...i, parent_id: u.parent_id, wbs_code: u.wbs_code } : i;
     }));
-    Promise.all(updates.map(u => wbsMutation.mutateAsync({ action: 'update', id: u.id, data: { parent_id: u.parent_id, wbs_code: u.wbs_code } })))
+    runBatch(updates.map(u => wbsMutation.mutateAsync({ action: 'update', id: u.id, data: { parent_id: u.parent_id, wbs_code: u.wbs_code } })), 'Gantt reorder saves')
       .then(() => queryClient.invalidateQueries({ queryKey: ['WBSItem'] }));
   }
 

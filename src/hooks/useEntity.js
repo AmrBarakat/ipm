@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery, keepPreviousData } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
+import { toast } from '@/components/ui/use-toast';
 
 /**
  * Fetch a list of entities with optional filter/sort/limit.
@@ -66,7 +67,33 @@ export function useEntityMutation(entityName) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [entityName] });
     },
+    onError: (error, variables) => {
+      toast({
+        title: `Failed to ${variables?.action || 'save'} ${entityName}`,
+        description: error?.message || 'Unknown error',
+        variant: 'destructive',
+      });
+    },
   });
+}
+
+/**
+ * Run an array of mutation promises with Promise.allSettled so one rejection
+ * doesn't abort the rest. Surfaces a summary toast when any fail.
+ * Returns { succeeded, failed, total }.
+ */
+export async function runBatch(promises, label = 'items') {
+  const results = await Promise.allSettled(promises);
+  const failed = results.filter(r => r.status === 'rejected').length;
+  const succeeded = results.length - failed;
+  if (failed > 0) {
+    toast({
+      title: `${succeeded} succeeded, ${failed} failed`,
+      description: `${failed} of ${results.length} ${label} could not be completed.`,
+      variant: 'destructive',
+    });
+  }
+  return { succeeded, failed, total: results.length };
 }
 
 /**
