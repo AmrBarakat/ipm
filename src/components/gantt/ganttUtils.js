@@ -64,9 +64,14 @@ export function buildRows(wbsItems, milestones, expanded) {
   const msSorted = [...(milestones || [])].filter(m => m.planned_date).sort((a, b) => new Date(a.planned_date) - new Date(b.planned_date));
   msSorted.forEach(m => rows.push({ kind: 'milestone', id: m.id, data: m, depth: 0, hasChildren: false }));
 
+  const items = wbsItems || [];
+  const idSet = new Set(items.map(i => i.id));
   const byParent = {};
-  (wbsItems || []).forEach(i => {
-    const p = i.parent_id || '__root__';
+  // Orphan guard: if an item's parent_id points to a parent NOT in this list
+  // (deleted / filtered out / stale), treat it as a top-level (__root__) row so
+  // it still renders. No WBS item may ever be silently dropped from the tree.
+  items.forEach(i => {
+    const p = (i.parent_id && idSet.has(i.parent_id)) ? i.parent_id : '__root__';
     (byParent[p] ||= []).push(i);
   });
   Object.values(byParent).forEach(arr =>
