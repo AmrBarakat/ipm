@@ -54,12 +54,47 @@ Deno.serve(async (req) => {
     const byId = {};
     wbs.forEach((w) => { byId[w.id] = w; });
 
-    // Needs a duration estimate: missing planned_start and/or planned_end,
+    // Parent (rollup) rows: their stored dates should span their children's
+    // actual min-start → max-end. Where they don't (stale, or missing), propose
+    // a deterministic rollup — no AI needed, confidence 'high'.
+    const childMap = {};
+    wbs.forEach((w) => { if (w.parent_id) { (childMap[w.parent_id] ||= []).push(w); } });
+    const rollups = [];
+    wbs.forEach((w) => {
+      const kids = childMap[w.id] || [];
+      if (kids.length === 0) return;
+      const childStarts = kids.map((c) => c.planned_start).filter(Boolean).sort();
+      const childEnds = kids.map((c) => c.planned_end).filter(Boolean).sort();
+      if (childStarts.length === 0 || childEnds.length === 0) return;
+      const minStart = childStarts[0];
+      const maxEnd = childEnds[childEnds.length - 1];
+      if (w.planned_start === minStart && w.planned_end === maxEnd) return; // already correct
+      const dur = Math.max(1, Math.round((new Date(maxEnd) - new Date(minStart)) / 86400000));
+      const preds = (w.predecessor_ids || []).map((id) => byId[id]).filter(Boolean);
+      rollups.push({
+        wbs_id: w.id,
+        wbs_code: w.wbs_code || '',
+        item_name: w.name,
+        predecessors: preds.map((p) => p.wbs_code || p.name).join(', '),
+        proposed_start: minStart,
+        proposed_end: maxEnd,
+        estimated_duration_days: dur,
+        reason: `rolled up from ${kids.length} child activit${kids.length === 1 ? 'y' : 'ies'}`,
+        confidence: 'high',
+        had_planned_start: !!w.planned_start,
+        is_rollup: true,
+      });
+    });
+
+    // Needs an AI duration estimate: missing planned_start and/or planned_end,
     // OR a zero-duration item (planned_start === planned_end) which draws no bar.
+    // Parent rows handled above are excluded so they aren't double-processed.
+    const rollupIds = new Set(rollups.map((r) => r.wbs_id));
     const undated = wbs.filter((w) =>
-      !w.planned_start || !w.planned_end || (w.planned_start && w.planned_end && w.planned_start === w.planned_end)
+      !rollupIds.has(w.id) &&
+      (!w.planned_start || !w.planned_end || (w.planned_start && w.planned_end && w.planned_start === w.planned_end))
     );
-    if (undated.length === 0) {
+    if (rollups.length === 0 && undated.length === 0) {
       return Response.json({ estimates: [], message: 'All WBS items already have durations.' });
     }
 
@@ -126,87 +161,96 @@ Deno.serve(async (req) => {
       `Provide one estimate per undated activity, keyed by wbs_id.`,
     ].join('\n');
 
-    let estimates = [];
-    try {
-      const llmRes = await base44.asServiceRole.integrations.Core.InvokeLLM({
-        prompt,
-        response_json_schema: {
-          type: 'object',
-          properties: {
-            estimates: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  wbs_id: { type: 'string' },
-                  estimated_duration_days: { type: 'integer' },
-                  reason: { type: 'string' },
-                  confidence: { type: 'string', enum: ['low', 'medium', 'high'] },
+    // Ask the LLM only when there are undated leaf activities to estimate.
+    let aiResults = [];
+    if (undated.length > 0) {
+      let estimates = [];
+      try {
+        const llmRes = await base44.asServiceRole.integrations.Core.InvokeLLM({
+          prompt,
+          response_json_schema: {
+            type: 'object',
+            properties: {
+              estimates: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    wbs_id: { type: 'string' },
+                    estimated_duration_days: { type: 'integer' },
+                    reason: { type: 'string' },
+                    confidence: { type: 'string', enum: ['low', 'medium', 'high'] },
+                  },
+                  required: ['wbs_id', 'estimated_duration_days', 'reason', 'confidence'],
                 },
-                required: ['wbs_id', 'estimated_duration_days', 'reason', 'confidence'],
               },
             },
+            required: ['estimates'],
           },
-          required: ['estimates'],
-        },
-      });
-      estimates = llmRes?.estimates || [];
-    } catch (err) {
-      return Response.json({ error: 'AI estimation failed: ' + (err.message || err) }, { status: 502 });
-    }
+        });
+        estimates = llmRes?.estimates || [];
+      } catch (err) {
+        return Response.json({ error: 'AI estimation failed: ' + (err.message || err) }, { status: 502 });
+      }
 
-    // Derive proposed start/end for each estimate.
-    const projectStart = project?.start_date || null;
-    const result = estimates
-      .map((e) => {
-        const item = byId[e.wbs_id];
-        if (!item) return null;
-        const dur = Math.max(1, Math.round(e.estimated_duration_days || 1));
+      // Derive proposed start/end for each estimate.
+      const projectStart = project?.start_date || null;
+      aiResults = estimates
+        .map((e) => {
+          const item = byId[e.wbs_id];
+          if (!item) return null;
+          const dur = Math.max(1, Math.round(e.estimated_duration_days || 1));
 
-        let start;
-        if (item.planned_start) {
-          start = new Date(item.planned_start);
-        } else {
+          let start;
+          if (item.planned_start) {
+            start = new Date(item.planned_start);
+          } else {
+            const preds = (item.predecessor_ids || []).map((id) => byId[id]).filter(Boolean);
+            const predEnds = preds.map((p) => p.planned_end ? new Date(p.planned_end) : null).filter(Boolean);
+            if (predEnds.length) {
+              start = new Date(Math.max(...predEnds.map((d) => d.getTime())));
+              start.setDate(start.getDate() + 1); // day after latest predecessor finish
+            } else {
+              start = projectStart ? new Date(projectStart) : new Date();
+            }
+          }
+
+          // Never let an estimated start fall before a predecessor's finish.
           const preds = (item.predecessor_ids || []).map((id) => byId[id]).filter(Boolean);
           const predEnds = preds.map((p) => p.planned_end ? new Date(p.planned_end) : null).filter(Boolean);
           if (predEnds.length) {
-            start = new Date(Math.max(...predEnds.map((d) => d.getTime())));
-            start.setDate(start.getDate() + 1); // day after latest predecessor finish
-          } else {
-            start = projectStart ? new Date(projectStart) : new Date();
+            const latestPred = new Date(Math.max(...predEnds.map((d) => d.getTime())));
+            if (start.getTime() <= latestPred.getTime()) {
+              start = new Date(latestPred);
+              start.setDate(start.getDate() + 1);
+            }
           }
-        }
 
-        // Never let an estimated start fall before a predecessor's finish.
-        const preds = (item.predecessor_ids || []).map((id) => byId[id]).filter(Boolean);
-        const predEnds = preds.map((p) => p.planned_end ? new Date(p.planned_end) : null).filter(Boolean);
-        if (predEnds.length) {
-          const latestPred = new Date(Math.max(...predEnds.map((d) => d.getTime())));
-          if (start.getTime() <= latestPred.getTime()) {
-            start = new Date(latestPred);
-            start.setDate(start.getDate() + 1);
-          }
-        }
+          rollToWorkday(start);
+          const end = addWorkingDays(start, dur);
 
-        rollToWorkday(start);
-        const end = addWorkingDays(start, dur);
+          return {
+            wbs_id: item.id,
+            wbs_code: item.wbs_code || '',
+            item_name: item.name,
+            predecessors: preds.map((p) => p.wbs_code || p.name).join(', '),
+            proposed_start: toISO(start),
+            proposed_end: toISO(end),
+            estimated_duration_days: dur,
+            reason: e.reason || '',
+            confidence: e.confidence || 'medium',
+            had_planned_start: !!item.planned_start,
+            is_rollup: false,
+          };
+        })
+        .filter(Boolean);
+    }
 
-        return {
-          wbs_id: item.id,
-          wbs_code: item.wbs_code || '',
-          item_name: item.name,
-          predecessors: preds.map((p) => p.wbs_code || p.name).join(', '),
-          proposed_start: toISO(start),
-          proposed_end: toISO(end),
-          estimated_duration_days: dur,
-          reason: e.reason || '',
-          confidence: e.confidence || 'medium',
-          had_planned_start: !!item.planned_start,
-        };
-      })
-      .filter(Boolean);
-
-    return Response.json({ estimates: result, undated_count: undated.length });
+    return Response.json({
+      estimates: [...rollups, ...aiResults],
+      undated_count: undated.length,
+      rollup_count: rollups.length,
+    });
   } catch (err) {
     return Response.json({ error: err.message || 'Estimation failed' }, { status: 500 });
   }

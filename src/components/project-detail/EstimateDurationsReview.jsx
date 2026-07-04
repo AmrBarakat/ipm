@@ -183,21 +183,31 @@ export default function EstimateDurationsReview({ projectId, onApplied }) {
                   </td>
                   <td className="px-2 py-2 text-slate-800 font-medium whitespace-nowrap">{formatDate(r.proposed_end)}</td>
                   <td className="px-2 py-2 text-center">
-                    <input
-                      type="number"
-                      min={1}
-                      max={60}
-                      disabled={applied}
-                      value={r.estimated_duration_days}
-                      onChange={(e) => updateDuration(r.wbs_id, e.target.value)}
-                      className="w-14 text-center border border-slate-200 rounded px-1 py-1 focus:outline-none focus:ring-1 focus:ring-amber-400 disabled:bg-slate-50"
-                    />
+                    {r.is_rollup ? (
+                      <span className="text-slate-500 text-xs">{r.estimated_duration_days}</span>
+                    ) : (
+                      <input
+                        type="number"
+                        min={1}
+                        max={60}
+                        disabled={applied}
+                        value={r.estimated_duration_days}
+                        onChange={(e) => updateDuration(r.wbs_id, e.target.value)}
+                        className="w-14 text-center border border-slate-200 rounded px-1 py-1 focus:outline-none focus:ring-1 focus:ring-amber-400 disabled:bg-slate-50"
+                      />
+                    )}
                   </td>
                   <td className={`px-2 py-2 max-w-[200px] ${isLow ? 'text-amber-700' : 'text-slate-500'}`}>{r.reason}</td>
                   <td className="px-2 py-2 text-center">
-                    <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold border ${CONF_BADGE[r.confidence] || CONF_BADGE.medium}`}>
-                      {r.confidence}
-                    </span>
+                    {r.is_rollup ? (
+                      <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold border bg-indigo-50 text-indigo-600 border-indigo-200">
+                        rollup
+                      </span>
+                    ) : (
+                      <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold border ${CONF_BADGE[r.confidence] || CONF_BADGE.medium}`}>
+                        {r.confidence}
+                      </span>
+                    )}
                   </td>
                 </tr>
               );
