@@ -14,6 +14,18 @@ const DELIVERY_COLORS = {
   delivered: 'bg-emerald-100 text-emerald-700',
 };
 
+/** Status is always derived from delivered_qty vs total quantity — never assumed or manually set. */
+function deriveDeliveryStatus(item) {
+  const dq = Number(item.delivered_qty) || 0;
+  const tq = Number(item.quantity) || 0;
+  if (dq <= 0) return 'not_delivered';
+  if (tq > 0 && dq < tq) return 'partially_delivered';
+  return 'delivered';
+}
+function deliveryLabel(ds) {
+  return ds === 'delivered' ? 'Delivered' : ds === 'partially_delivered' ? 'Partial' : 'Not Del.';
+}
+
 const ORDER_COLORS = {
   ordered: 'bg-blue-100 text-blue-700',
   not_ordered: 'bg-slate-100 text-slate-500',
@@ -329,20 +341,6 @@ export default function TabBOM({ projectId }) {
             </select>
           </div>
 
-          {/* Delivery Status */}
-          <div className="flex items-center gap-1.5">
-            <select
-              className="text-xs bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white focus:outline-none focus:border-amber-400"
-              value={bulkEdit?.field === 'delivery_status' ? bulkEdit.value : ''}
-              onChange={e => setBulkEdit(e.target.value ? { field: 'delivery_status', value: e.target.value } : null)}
-            >
-              <option value="">Delivery Status…</option>
-              <option value="not_delivered">Not Delivered</option>
-              <option value="partially_delivered">Partially Delivered</option>
-              <option value="delivered">Delivered</option>
-            </select>
-          </div>
-
           {/* Category */}
           <div className="flex items-center gap-1.5">
             <select
@@ -619,11 +617,7 @@ export default function TabBOM({ projectId }) {
                                     </select>
                                   </td>
                                   <td className="px-1 py-1">
-                                    <select className={`text-xs px-2 py-1 rounded font-semibold border-0 cursor-pointer ${DELIVERY_COLORS[item.delivery_status] || 'bg-slate-100 text-slate-600'}`} value={item.delivery_status || 'not_delivered'} onChange={e => handleSelectChange(item, 'delivery_status', e.target.value)}>
-                                      <option value="not_delivered">Not Delivered</option>
-                                      <option value="partially_delivered">Partially Delivered</option>
-                                      <option value="delivered">Delivered</option>
-                                    </select>
+                                    {(() => { const ds = deriveDeliveryStatus(item); return <span className={`text-xs px-2 py-1 rounded font-semibold ${DELIVERY_COLORS[ds]}`}>{deliveryLabel(ds)}</span>; })()}
                                   </td>
                                   <td className="px-1 py-1 text-right">
                                     <span className="text-xs font-semibold text-slate-600">{Math.max(0, (Number(item.quantity) || 0) - (Number(item.delivered_qty) || 0))}</span>
