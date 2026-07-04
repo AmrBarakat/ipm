@@ -3,6 +3,8 @@ import { base44 } from '@/api/base44Client';
 import { useTranslation } from '@/hooks/useTranslation';
 import { applyTheme } from '@/lib/theme';
 import { Settings as SettingsIcon, Globe, Bell, Palette, Save, Check, Loader2, Sun, Moon, Monitor, Sliders } from 'lucide-react';
+import HelpSection from '@/components/settings/HelpSection';
+import EventLogSection from '@/components/settings/EventLogSection';
 
 const DEFAULTS = {
   default_currency: 'SAR',
@@ -181,6 +183,9 @@ export default function SettingsPage() {
           ))}
         </div>
       </Section>
+
+      <HelpSection />
+      <EventLogSection />
     </div>
   );
 }
