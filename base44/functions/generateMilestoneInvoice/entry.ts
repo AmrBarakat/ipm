@@ -7,6 +7,11 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
  * Creates a linked Invoice draft based on the milestone's weight % of the contract value.
  */
 Deno.serve(async (req) => {
+  const secret = req.headers.get('x-automation-secret');
+  if (!secret || secret !== Deno.env.get('AUTOMATION_SECRET')) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const base44 = createClientFromRequest(req);
   const body = await req.json();
 

@@ -79,11 +79,19 @@ export default function TabWBS({ projectId, project, onProgressChange }) {
 
   useEffect(() => { load(); }, [projectId]);
 
-  // Sync project progress from WBS on every tab open to fix any stale data
+  // Reconcile project progress from WBS on every tab open (local rollup —
+  // syncWBSProgress is now automation-only behind x-automation-secret).
   useEffect(() => {
-    base44.functions.invoke('syncWBSProgress', { project_id: projectId })
-      .then(res => { if (res?.data?.overallProgress != null) onProgressChange?.(res.data.overallProgress); })
-      .catch(() => {}); // silent — non-critical
+    (async () => {
+      try {
+        const w = await base44.entities.WBSItem.filter({ project_id: projectId }, 'wbs_code', 500);
+        const byIdLocal = Object.fromEntries(w.map(i => [i.id, i]));
+        const treeLocal = {};
+        w.forEach(i => { const pid = i.parent_id || '__root__'; if (!treeLocal[pid]) treeLocal[pid] = []; treeLocal[pid].push(i); });
+        const p = await syncProjectProgress(projectId, w, treeLocal, byIdLocal);
+        if (p != null) onProgressChange?.(p);
+      } catch (_) { /* silent — non-critical */ }
+    })();
   }, [projectId]);
 
   async function load() {

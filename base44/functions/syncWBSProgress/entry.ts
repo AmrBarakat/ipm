@@ -10,6 +10,11 @@ function rollupProgress(id, tree, byId) {
 
 Deno.serve(async (req) => {
   try {
+    const secret = req.headers.get('x-automation-secret');
+    if (!secret || secret !== Deno.env.get('AUTOMATION_SECRET')) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const base44 = createClientFromRequest(req);
     const body = await req.json();
 
