@@ -3,6 +3,7 @@ import { useEntityList, useEntityMutation } from '@/hooks/useEntity';
 import PanelWrapper from '@/components/ui/PanelWrapper';
 import { formatCurrency, formatDate, INVOICE_STATUS_LABELS, EXPENSE_CATEGORY_LABELS, EXPENSE_STATUS_LABELS } from '@/lib/constants';
 import { Plus, TrendingUp, TrendingDown, AlertTriangle, Pencil, Trash2, Save, X, Banknote, AlertCircle } from 'lucide-react';
+import ExpenseCategoryChart from '@/components/project-detail/ExpenseCategoryChart';
 
 const INV_STATUS_COLORS = {
   planned: 'bg-slate-100 text-slate-600',
@@ -232,6 +233,9 @@ export default function TabFinancials({ projectId, project }) {
           </div>
         </div>
       </div>
+
+      {/* Expenses by Category — Planned vs Actual chart */}
+      {!loading && <ExpenseCategoryChart expenses={expenses} currency={project?.currency} />}
 
       {/* Invoices */}
       <div>
