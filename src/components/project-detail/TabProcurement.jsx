@@ -8,13 +8,23 @@ import { ShoppingCart, Package, ChevronDown, ChevronRight, Check, AlertCircle, X
 // Items eligible for procurement: not ordered, top-level (not panel children),
 // and not an engineering/service line item.
 function isProcurementItem(i) {
-  const os = i.order_status || (i.ordered ? 'ordered' : 'not_ordered');
-  if (os !== 'not_ordered') return false;
+  // Top-level materials only (no panel children, no engineering/service lines).
+  // Ordered AND pending items are both shown so status badges are meaningful.
   if (i.parent_id) return false;
   const pn = (i.manufacturer_part_number || '').trim().toLowerCase();
   if (i.category === 'service' || pn === 'engineering') return false;
   return true;
 }
+
+function orderStatusOf(i) {
+  return i.order_status || (i.ordered ? 'ordered' : 'not_ordered');
+}
+
+const STATUS_BADGE = {
+  ordered: 'bg-blue-100 text-blue-700',
+  not_ordered: 'bg-amber-100 text-amber-700',
+};
+const STATUS_LABEL = { ordered: 'Ordered', not_ordered: 'Pending' };
 
 // Session cache so locally-deleted procurement items (and the frozen BOM
 // snapshot) survive tab switches / unmounts WITHOUT touching the BOM entity.
@@ -156,8 +166,9 @@ export default function TabProcurement({ projectId, project }) {
 
       {/* Header KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard label="Items to Order" value={totalItems} color="border-amber-400" />
-        <KpiCard label="Suppliers" value={grouped.length} color="border-blue-400" />
+        <KpiCard label="Total Items" value={totalItems} color="border-slate-400" />
+        <KpiCard label="Pending" value={items.filter(i => orderStatusOf(i) === 'not_ordered').length} color="border-amber-400" />
+        <KpiCard label="Ordered" value={items.filter(i => orderStatusOf(i) === 'ordered').length} color="border-blue-400" />
         <KpiCard label="Total Value" value={formatCurrency(totalValue, project?.currency || 'SAR')} color="border-slate-400" />
         <KpiCard label="Selected Value" value={formatCurrency(selectedValue, project?.currency || 'SAR')} color="border-emerald-400" />
       </div>
@@ -193,12 +204,12 @@ export default function TabProcurement({ projectId, project }) {
         <div className="text-center py-16 bg-white rounded-lg shadow-sm border border-slate-100">
           <CheckGreen />
           <h3 className="font-semibold text-slate-700 text-lg mt-4 mb-1">
-            {hiddenIds.size > 0 ? 'Items removed from procurement' : 'All items are ordered!'}
+            {hiddenIds.size > 0 ? 'Items removed from procurement' : 'No procurement materials'}
           </h3>
           <p className="text-slate-400 text-sm">
             {hiddenIds.size > 0
               ? `${hiddenIds.size} item(s) hidden — press "Sync with BOM" above to restore them.`
-              : 'No BOM items with "Not Ordered" status found.'}
+              : 'No materials to show. Press "Sync with BOM" above to load from the BOM.'}
           </p>
         </div>
       ) : (
@@ -316,6 +327,7 @@ export default function TabProcurement({ projectId, project }) {
                             <th className="px-3 py-2 text-left">Description</th>
                             <th className="px-3 py-2 text-left">Part No.</th>
                             <th className="px-3 py-2 text-left">Category</th>
+                            <th className="px-3 py-2 text-left">Status</th>
                             <th className="px-3 py-2 text-right">Qty</th>
                             <th className="px-3 py-2 text-left">Unit</th>
                             <th className="px-3 py-2 text-right">Unit Cost</th>
@@ -348,6 +360,13 @@ export default function TabProcurement({ projectId, project }) {
                                     {BOM_CATEGORY_LABELS[item.category] || item.category || '—'}
                                   </span>
                                 </td>
+                                <td className="px-3 py-2">
+                                  {(() => { const st = orderStatusOf(item); return (
+                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${STATUS_BADGE[st] || STATUS_BADGE.not_ordered}`}>
+                                      {STATUS_LABEL[st] || 'Pending'}
+                                    </span>
+                                  ); })()}
+                                </td>
                                 <td className="px-3 py-2 text-right font-semibold text-slate-700">{qty}</td>
                                 <td className="px-3 py-2 text-slate-500">{item.unit || 'pcs'}</td>
                                 <td className="px-3 py-2 text-right text-slate-700">{unitCost > 0 ? formatCurrency(unitCost, project?.currency || 'SAR') : '—'}</td>
@@ -359,7 +378,7 @@ export default function TabProcurement({ projectId, project }) {
                         </tbody>
                         <tfoot className="border-t-2 border-slate-200 bg-slate-50">
                           <tr>
-                            <td colSpan={7} className="px-3 py-2 text-slate-500 text-xs font-semibold">Supplier Total</td>
+                            <td colSpan={8} className="px-3 py-2 text-slate-500 text-xs font-semibold">Supplier Total</td>
                             <td className="px-3 py-2 text-right font-bold text-slate-800">
                               {formatCurrency(
                                 supplierItems.reduce((s, i) => s + (Number(i.planned_cost_price) || Number(i.cost_price) || 0) * (Number(i.quantity) || 1), 0),
