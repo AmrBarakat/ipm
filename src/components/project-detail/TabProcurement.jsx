@@ -5,29 +5,58 @@ import { base44 } from '@/api/base44Client';
 import { formatCurrency, formatDate, BOM_CATEGORY_LABELS } from '@/lib/constants';
 import { ShoppingCart, Package, ChevronDown, ChevronRight, Check, AlertCircle, X, Save, Trash2, RefreshCw } from 'lucide-react';
 
+// Items eligible for procurement: not ordered, top-level (not panel children),
+// and not an engineering/service line item.
+function isProcurementItem(i) {
+  const os = i.order_status || (i.ordered ? 'ordered' : 'not_ordered');
+  if (os !== 'not_ordered') return false;
+  if (i.parent_id) return false;
+  const pn = (i.manufacturer_part_number || '').trim().toLowerCase();
+  if (i.category === 'service' || pn === 'engineering') return false;
+  return true;
+}
+
 export default function TabProcurement({ projectId, project }) {
+  const bomQueryKey = ['BOMItem', { project_id: projectId }, 'supplier', 500];
   const { data: all = [], isLoading } = useEntityList('BOMItem', { project_id: projectId }, 'supplier', 500);
   const [hiddenIds, setHiddenIds] = useState(new Set());
-  const items = useMemo(() => all.filter(i => {
-    const os = i.order_status || (i.ordered ? 'ordered' : 'not_ordered');
-    if (os !== 'not_ordered') return false;
-    // Exclude panel child items (they're ordered as part of their panel parent)
-    if (i.parent_id) return false;
-    // Exclude engineering / service line items (non-material, not procured via PO)
-    const pn = (i.manufacturer_part_number || '').trim().toLowerCase();
-    if (i.category === 'service' || pn === 'engineering') return false;
-    // Locally hidden via procurement delete — restored on "Sync with BOM"
-    if (hiddenIds.has(i.id)) return false;
-    return true;
-  }), [all, hiddenIds]);
+  // Frozen BOM snapshot — only refreshed by "Sync with BOM" or an intentional
+  // bulk edit. Background refetches (e.g. edits in the BOM tab) do NOT resync
+  // procurement, so locally-deleted items stay hidden until Sync is pressed.
+  const [snapshot, setSnapshot] = useState(null);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [collapsedSuppliers, setCollapsedSuppliers] = useState(new Set());
   const [bulkEdit, setBulkEdit] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const queryClient = useQueryClient();
 
-  // Auto-select all unordered items whenever the list refreshes
-  useEffect(() => { setSelectedIds(new Set(items.map(i => i.id))); }, [items]);
+  // Pull the latest BOM data from the cache into the local snapshot.
+  async function refreshSnapshot() {
+    await queryClient.refetchQueries({ queryKey: bomQueryKey });
+    setSnapshot(queryClient.getQueryData(bomQueryKey) || []);
+  }
+
+  // Reset the local snapshot when the project changes.
+  useEffect(() => {
+    setSnapshot(null); setHiddenIds(new Set()); setSelectedIds(new Set());
+  }, [projectId]);
+
+  // Seed the snapshot once on first load.
+  useEffect(() => {
+    if (snapshot === null && all.length > 0) setSnapshot(all);
+  }, [all, snapshot]);
+
+  const items = useMemo(
+    () => (snapshot || all).filter(i => isProcurementItem(i) && !hiddenIds.has(i.id)),
+    [snapshot, all, hiddenIds]
+  );
+
+  // Auto-select all eligible items only when the snapshot changes (initial load
+  // + after Sync / bulk edit). A local delete does not re-trigger selection.
+  useEffect(() => {
+    if (snapshot === null) return;
+    setSelectedIds(new Set(snapshot.filter(isProcurementItem).map(i => i.id)));
+  }, [snapshot]);
 
   // Group by supplier
   const grouped = useMemo(() => {
@@ -78,19 +107,20 @@ export default function TabProcurement({ projectId, project }) {
     const extra = field === 'order_status' ? { ordered: value === 'ordered' } : {};
     await base44.entities.BOMItem.bulkUpdate(ids.map(id => ({ id, [field]: value, ...extra })));
     setBulkEdit(null);
-    setSelectedIds(new Set());
-    queryClient.invalidateQueries({ queryKey: ['BOMItem'] });
+    await refreshSnapshot(); // ordering/edits intentionally refresh procurement
   }
 
+  // "Sync with BOM" — the ONLY way to re-pull BOM changes & restore hidden items.
   async function syncWithBOM() {
     setSyncing(true);
-    await queryClient.invalidateQueries({ queryKey: ['BOMItem'] });
-    setHiddenIds(new Set()); // restore any locally-hidden items
+    await refreshSnapshot();
+    setHiddenIds(new Set());
     setSyncing(false);
   }
 
   // Procurement delete is local-only: it hides items from this view without
-  // removing them from the BOM. Use "Sync with BOM" to bring them back.
+  // removing them from the BOM and without resyncing. They stay hidden until
+  // "Sync with BOM" is pressed.
   async function bulkDelete() {
     if (selectedIds.size === 0) return;
     if (!confirm(`Remove ${selectedIds.size} selected item(s) from procurement? They stay in the BOM — use "Sync with BOM" to restore.`)) return;
