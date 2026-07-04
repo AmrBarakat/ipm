@@ -9,7 +9,7 @@ export default function GanttToolbar({
   criticalCount, projectDuration, projectFinish,
   fullscreen, toggleFullscreen,
   onExportPNG, onExportPDF, onExportExcel, exporting,
-  onEstimate, onOptimize,
+  onEstimate, onOptimize
 }) {
   const fmtFinish = projectFinish ? projectFinish.toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
   return (
@@ -17,20 +17,20 @@ export default function GanttToolbar({
       <div className="flex items-center gap-2 flex-wrap">
         {/* Time scale */}
         <div className="flex items-center border border-slate-200 rounded overflow-hidden text-xs">
-          <button onClick={() => setScaleKey(prev => {
-            const idx = TIME_SCALES.findIndex(s => s.key === prev);
+          <button onClick={() => setScaleKey((prev) => {
+            const idx = TIME_SCALES.findIndex((s) => s.key === prev);
             return TIME_SCALES[Math.min(TIME_SCALES.length - 1, idx + 1)].key;
           })} className="px-2 py-1.5 hover:bg-slate-100 border-r border-slate-200" title="Zoom out">
             <ZoomOut className="w-3.5 h-3.5" />
           </button>
-          {TIME_SCALES.map(s => (
-            <button key={s.key} onClick={() => setScaleKey(s.key)}
-              className={`px-3 py-1.5 font-medium border-r border-slate-200 last:border-0 transition ${scaleKey === s.key ? 'bg-amber-500 text-slate-900' : 'hover:bg-slate-100 text-slate-600'}`}>
+          {TIME_SCALES.map((s) =>
+          <button key={s.key} onClick={() => setScaleKey(s.key)}
+          className={`px-3 py-1.5 font-medium border-r border-slate-200 last:border-0 transition ${scaleKey === s.key ? 'bg-amber-500 text-slate-900' : 'hover:bg-slate-100 text-slate-600'}`}>
               {s.label}
             </button>
-          ))}
-          <button onClick={() => setScaleKey(prev => {
-            const idx = TIME_SCALES.findIndex(s => s.key === prev);
+          )}
+          <button onClick={() => setScaleKey((prev) => {
+            const idx = TIME_SCALES.findIndex((s) => s.key === prev);
             return TIME_SCALES[Math.max(0, idx - 1)].key;
           })} className="px-2 py-1.5 hover:bg-slate-100" title="Zoom in">
             <ZoomIn className="w-3.5 h-3.5" />
@@ -62,17 +62,17 @@ export default function GanttToolbar({
 
       <div className="flex items-center gap-2 flex-wrap">
         <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
-          <input type="checkbox" checked={showDeps} onChange={e => setShowDeps(e.target.checked)} className="accent-slate-500" />
+          <input type="checkbox" checked={showDeps} onChange={(e) => setShowDeps(e.target.checked)} className="accent-slate-500" />
           <Link2 className="w-3.5 h-3.5" /> Deps
         </label>
         <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
-          <input type="checkbox" checked={showCritical} onChange={e => setShowCritical(e.target.checked)} className="accent-rose-500" />
+          <input type="checkbox" checked={showCritical} onChange={(e) => setShowCritical(e.target.checked)} className="accent-rose-500" />
           <span className="text-rose-600 font-medium flex items-center gap-1">
             <AlertTriangle className="w-3.5 h-3.5" /> Critical ({criticalCount})
           </span>
         </label>
         <div className="flex items-center border border-amber-300 rounded overflow-hidden">
-          <button onClick={onEstimate} className="flex items-center gap-1 px-2.5 py-1.5 text-xs hover:bg-amber-50 text-amber-700 font-medium border-r border-amber-300" title="AI: estimate durations for undated activities">
+          <button onClick={onEstimate} className="flex items-center gap-1 px-2.5 py-1.5 text-xs hover:bg-amber-50 text-amber-700 font-medium border-r border-amber-300 hidden" title="AI: estimate durations for undated activities">
             <Sparkles className="w-3.5 h-3.5" /> AI: Estimate
           </button>
           <button onClick={onOptimize} className="flex items-center gap-1 px-2.5 py-1.5 text-xs hover:bg-amber-50 text-amber-700 font-medium" title="AI: optimize schedule (delays & dependencies)">
@@ -95,13 +95,13 @@ export default function GanttToolbar({
         </button>
       </div>
 
-      {(projectDuration > 0) && (
-        <div className="w-full text-xs text-slate-500 flex flex-wrap gap-4 items-center">
+      {projectDuration > 0 &&
+      <div className="w-full text-xs text-slate-500 flex flex-wrap gap-4 items-center">
           <span>Project duration: <strong className="text-slate-700">{projectDuration} days</strong></span>
           <span>CPM finish: <strong className="text-slate-700">{fmtFinish}</strong></span>
           {criticalCount > 0 && <span className="text-rose-500">{criticalCount} tasks on critical path</span>}
         </div>
-      )}
-    </div>
-  );
+      }
+    </div>);
+
 }
