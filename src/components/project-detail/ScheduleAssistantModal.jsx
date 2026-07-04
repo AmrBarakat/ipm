@@ -55,17 +55,21 @@ export default function ScheduleAssistantModal({ projectId, onClose, onApplied, 
 
   async function applySelected() {
     setStep('applying');
-    // Apply only selected WBS suggestions, always apply milestone impacts
+    // Apply only selected WBS suggestions, always apply milestone impacts.
+    // The WBS date changes and milestone date shifts form one coherent schedule
+    // edit — apply them as a single atomic batch so a mid-apply failure rolls the
+    // whole thing back instead of leaving the schedule half-changed.
     const toApply = suggestions.filter(s => selected.has(s.id));
-    const wbsUpdates = toApply.map(s =>
-      base44.entities.WBSItem.update(s.id, { planned_start: s.planned_start, planned_end: s.planned_end })
-    );
-    const msUpdates = milestoneImpacts.map(mi =>
-      base44.entities.Milestone.update(mi.milestone_id, { planned_date: mi.suggested_date })
-    );
-    await Promise.all([...wbsUpdates, ...msUpdates]);
-    setStep('done');
-    setTimeout(() => { onApplied(); onClose(); }, 1400);
+    const wbs_updates = toApply.map(s => ({ id: s.id, planned_start: s.planned_start, planned_end: s.planned_end }));
+    const milestone_updates = milestoneImpacts.map(mi => ({ id: mi.milestone_id, planned_date: mi.suggested_date }));
+    try {
+      await base44.functions.invoke('applyWBSBatch', { wbs_updates, milestone_updates });
+      setStep('done');
+      setTimeout(() => { onApplied(); onClose(); }, 1400);
+    } catch (err) {
+      setError(err?.response?.data?.error || err?.message || 'Failed to apply schedule changes — no changes were saved.');
+      setStep('review');
+    }
   }
 
   const delayDriven = suggestions.filter(s => !s.ai_suggested);

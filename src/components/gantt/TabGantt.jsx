@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { useEntityList, useEntityMutation, runBatch } from '@/hooks/useEntity';
+import { useEntityList, useEntityMutation } from '@/hooks/useEntity';
 import { useQueryClient } from '@tanstack/react-query';
+import { base44 } from '@/api/base44Client';
+import { toast } from 'sonner';
 import { Calendar } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
@@ -210,21 +212,37 @@ export default function TabGantt({ projectId, project }) {
       return c && (i.planned_start !== c.planned_start || i.planned_end !== c.planned_end);
     });
     if (!changed.length) return;
-    runBatch(changed.map(i => wbsMutation.mutateAsync({ action: 'update', id: i.id, data: { planned_start: i.planned_start, planned_end: i.planned_end } })), 'Gantt drag saves')
-      .then(() => queryClient.invalidateQueries({ queryKey: ['WBSItem'] }));
-  }, [wbsItems, wbsMutation, queryClient]);
+    const updates = changed.map(i => ({ id: i.id, planned_start: i.planned_start, planned_end: i.planned_end }));
+    // A drag cascade (moved item + shifted successors) must land together — apply
+    // atomically via the backend so a partial failure rolls back the whole cascade
+    // instead of leaving the schedule with broken dependency dates.
+    base44.functions.invoke('applyWBSBatch', { wbs_updates: updates })
+      .then(() => queryClient.invalidateQueries({ queryKey: ['WBSItem'] }))
+      .catch((err) => {
+        setWbsItems(committedRef.current); // revert the drag — backend rolled back atomically
+        toast.error(err?.response?.data?.error || 'Schedule save failed — no changes were saved.');
+      });
+  }, [wbsItems, queryClient]);
 
   // ── Tree reorder / reparent ────────────────────────────────────────────────
   function onReorder(dragId, targetId, position) {
     const updates = computeTreeMove(wbsItems, dragId, targetId, position);
     if (!updates.length) return;
+    const snapshot = wbsItems;
     // optimistic
     setWbsItems(prev => prev.map(i => {
       const u = updates.find(x => x.id === i.id);
       return u ? { ...i, parent_id: u.parent_id, wbs_code: u.wbs_code } : i;
     }));
-    runBatch(updates.map(u => wbsMutation.mutateAsync({ action: 'update', id: u.id, data: { parent_id: u.parent_id, wbs_code: u.wbs_code } })), 'Gantt reorder saves')
-      .then(() => queryClient.invalidateQueries({ queryKey: ['WBSItem'] }));
+    // Reparent/renumber must land as one unit — apply atomically via the backend
+    // so a mid-batch failure rolls back the whole tree change instead of leaving
+    // wbs_code numbering half-applied.
+    base44.functions.invoke('applyWBSBatch', { wbs_updates: updates })
+      .then(() => queryClient.invalidateQueries({ queryKey: ['WBSItem'] }))
+      .catch((err) => {
+        setWbsItems(snapshot); // revert optimistic move — backend rolled back atomically
+        toast.error(err?.response?.data?.error || 'Reorder failed — no changes were saved.');
+      });
   }
 
   // ── Editor save ────────────────────────────────────────────────────────────
