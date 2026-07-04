@@ -1,5 +1,14 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
+// Business timezone — Saudi Arabia (UTC+3). Date math is anchored to Asia/Riyadh
+// so "today" and suggested dates match the local calendar day.
+const BUSINESS_TZ = 'Asia/Riyadh';
+function tzDateStr(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: BUSINESS_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
+  const get = (t) => parts.find((p) => p.type === t)?.value || '00';
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
 /**
  * Add working days to a date string (skipping weekends)
  */
@@ -11,7 +20,7 @@ function addWorkingDays(dateStr, days) {
     const dow = d.getDay();
     if (dow !== 0 && dow !== 6) added++;
   }
-  return d.toISOString().slice(0, 10);
+  return tzDateStr(d);
 }
 
 function daysBetween(a, b) {
@@ -52,7 +61,7 @@ Deno.serve(async (req) => {
     }
 
     const byId = Object.fromEntries(items.map(i => [i.id, i]));
-    const today = new Date().toISOString().slice(0, 10);
+    const today = tzDateStr();
 
     // Dependency detection: without predecessors there's no critical path to
     // optimize — surface a plain notice instead of presenting thin output as

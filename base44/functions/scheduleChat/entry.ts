@@ -1,5 +1,14 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
+// Business timezone — Saudi Arabia (UTC+3). Date math is anchored to Asia/Riyadh
+// so "today" and projected finish dates match the local calendar day.
+const BUSINESS_TZ = 'Asia/Riyadh';
+function tzDateStr(date: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: BUSINESS_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value || '00';
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
 /**
  * scheduleChat
  *
@@ -19,7 +28,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
  */
 
 // ── Date helpers (calendar days, matching the Gantt CPM) ──────────────────────
-function toISO(d: Date): string { return d.toISOString().slice(0, 10); }
+function toISO(d: Date | string): string { return tzDateStr(new Date(d)); }
 function addDays(date: Date | string, n: number): Date {
   const d = new Date(date); d.setDate(d.getDate() + n); return d;
 }

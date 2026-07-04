@@ -11,14 +11,24 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
  */
 const WINDOW_DAYS = 7;
 
+// Business timezone — Saudi Arabia (UTC+3). "Today" and the reminder horizon are
+// computed in Asia/Riyadh so invoices due late in the local day aren't shifted to
+// the previous UTC day.
+const BUSINESS_TZ = 'Asia/Riyadh';
+function tzDateStr(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: BUSINESS_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
+  const get = (t) => parts.find((p) => p.type === t)?.value || '00';
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
 
     const now = new Date();
-    const todayStr = now.toISOString().slice(0, 10);
+    const todayStr = tzDateStr(now);
     const horizonMs = now.getTime() + WINDOW_DAYS * 24 * 60 * 60 * 1000;
-    const horizonStr = new Date(horizonMs).toISOString().slice(0, 10);
+    const horizonStr = tzDateStr(new Date(horizonMs));
 
     const [invoices, projects] = await Promise.all([
       base44.asServiceRole.entities.Invoice.list('-created_date', 1000),

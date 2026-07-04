@@ -3,6 +3,7 @@ import { useEntityList, useEntityMutation, runBatch } from '@/hooks/useEntity';
 import { useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { formatDate } from '@/lib/constants';
+import { todayLocal } from '@/lib/utils';
 import { Plus, ChevronRight, ChevronDown, Trash2, Pencil, Save, X, Layers, AlertTriangle, Wand2, BookOpen, Check } from 'lucide-react';
 import PanelWrapper from '@/components/ui/PanelWrapper';
 import ScheduleAssistantModal from './ScheduleAssistantModal';
@@ -195,7 +196,7 @@ export default function TabWBS({ projectId, project, onProgressChange }) {
     await wbsMutation.mutateAsync({ action: 'update', id, data });
     // Auto-complete linked milestone if this item is now completed
     if (data.status === 'completed' && data.milestone_id) {
-      await msMutation.mutateAsync({ action: 'update', id: data.milestone_id, data: { status: 'completed', completed_date: data.actual_end || new Date().toISOString().slice(0, 10) } });
+      await msMutation.mutateAsync({ action: 'update', id: data.milestone_id, data: { status: 'completed', completed_date: data.actual_end || todayLocal() } });
     }
     setEditingId(null);
     // WBS query invalidation triggers re-seed + the progress reconcile effect
@@ -205,7 +206,7 @@ export default function TabWBS({ projectId, project, onProgressChange }) {
     await wbsMutation.mutateAsync({ action: 'update', id: item.id, data: { status } });
     // Auto-complete milestone
     if (status === 'completed' && item.milestone_id) {
-      await msMutation.mutateAsync({ action: 'update', id: item.milestone_id, data: { status: 'completed', completed_date: item.actual_end || new Date().toISOString().slice(0, 10) } });
+      await msMutation.mutateAsync({ action: 'update', id: item.milestone_id, data: { status: 'completed', completed_date: item.actual_end || todayLocal() } });
     }
     // WBS query invalidation triggers re-seed + the progress reconcile effect
   }

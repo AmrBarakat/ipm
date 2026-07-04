@@ -1,5 +1,15 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
+// Business timezone — Saudi Arabia (UTC+3). "Today" for overdue detection is anchored
+// to Asia/Riyadh so a shipment due late in the local day isn't treated as still-current
+// by the UTC clock.
+const BUSINESS_TZ = 'Asia/Riyadh';
+function tzDateStr(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: BUSINESS_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
+  const get = (t) => parts.find((p) => p.type === t)?.value || '00';
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
 /**
  * checkShipmentDelays
  *
@@ -33,8 +43,8 @@ Deno.serve(async (req) => {
     try { body = await req.json(); } catch (_) { body = {}; }
     const projectId = body.project_id || null;
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const todayStr = tzDateStr();
+    const today = new Date(todayStr + 'T00:00:00Z');
 
     // Scan PurchaseOrders for the project (or all projects if none specified)
     const poFilter = projectId ? { project_id: projectId } : {};

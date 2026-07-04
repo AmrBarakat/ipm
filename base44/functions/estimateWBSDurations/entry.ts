@@ -9,8 +9,17 @@
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
+// Business timezone — Saudi Arabia (UTC+3). Proposed dates are anchored to Asia/Riyadh
+// so they match the local calendar day.
+const BUSINESS_TZ = 'Asia/Riyadh';
+function tzDateStr(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: BUSINESS_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
+  const get = (t) => parts.find((p) => p.type === t)?.value || '00';
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
 function toISO(d) {
-  return new Date(d).toISOString().slice(0, 10);
+  return tzDateStr(new Date(d));
 }
 
 /** Add `n` working days to `startDate` (skips Sat/Sun). Returns a Date. */

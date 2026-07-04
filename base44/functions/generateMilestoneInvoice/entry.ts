@@ -1,5 +1,14 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
+// Business timezone — Saudi Arabia (UTC+3). The auto-generated invoice planned_date
+// is stamped in Asia/Riyadh so it matches the local calendar day the milestone completed.
+const BUSINESS_TZ = 'Asia/Riyadh';
+function tzDateStr(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: BUSINESS_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
+  const get = (t) => parts.find((p) => p.type === t)?.value || '00';
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
 /**
  * generateMilestoneInvoice
  *
@@ -71,7 +80,7 @@ Deno.serve(async (req) => {
       ? Math.round((milestoneWeight / 100) * contractValue * 100) / 100
       : 0;
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = tzDateStr();
 
     // Create Invoice draft linked to the milestone. Since the DB does not enforce
     // uniqueness on milestone_id, a concurrent completion event could also reach

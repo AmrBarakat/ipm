@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
 import { formatCurrency, formatDate, isTopLevelBOM } from '@/lib/constants';
+import { todayLocal } from '@/lib/utils';
 import { Camera, GitCompare, Snowflake, TrendingUp, TrendingDown } from 'lucide-react';
 
 /**
@@ -63,7 +64,7 @@ export default function BaselineManager({ projectId, project }) {
       await base44.entities.Baseline.create({
         project_id: projectId,
         baseline_name: name,
-        captured_date: new Date().toISOString().slice(0, 10),
+        captured_date: todayLocal(),
         captured_by: user?.full_name || 'Unknown',
         total_planned_cost: currentPlannedCost,
         total_contract_value: Number(project?.contract_value) || 0,

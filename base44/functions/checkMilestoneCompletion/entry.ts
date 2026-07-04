@@ -1,5 +1,14 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
+// Business timezone — Saudi Arabia (UTC+3). Milestone completed_date is stamped in
+// Asia/Riyadh so a completion late in the local day lands on today, not yesterday (UTC).
+const BUSINESS_TZ = 'Asia/Riyadh';
+function tzDateStr(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: BUSINESS_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
+  const get = (t) => parts.find((p) => p.type === t)?.value || '00';
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
 Deno.serve(async (req) => {
   const secret = req.headers.get('x-automation-secret');
   if (!secret || secret !== Deno.env.get('AUTOMATION_SECRET')) {
@@ -39,7 +48,7 @@ Deno.serve(async (req) => {
     if (!allDone) continue;
 
     // All tasks done — mark milestone as completed
-    const today = new Date().toISOString().slice(0, 10);
+    const today = tzDateStr();
     await base44.asServiceRole.entities.Milestone.update(milestone.id, {
       status: 'completed',
       completed_date: today,

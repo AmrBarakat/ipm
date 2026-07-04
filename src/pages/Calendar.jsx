@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { CalendarDays, ChevronLeft, ChevronRight, Flag, CheckSquare, Filter, X } from 'lucide-react';
+import { toLocalDate } from '@/lib/utils';
 
 const TASK_STATUS_COLORS = {
   todo: 'bg-slate-200 text-slate-700 border-slate-300',
@@ -29,7 +30,7 @@ const MILESTONE_STATUS_COLORS = {
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 function ymd(d) {
-  return d.toISOString().slice(0, 10);
+  return toLocalDate(d);
 }
 
 export default function Calendar() {

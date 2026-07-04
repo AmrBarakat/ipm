@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { X, Plus, Trash2, Save, Wand2, ChevronDown, ChevronRight, Flag, Layers, Check } from 'lucide-react';
+import { toLocalDate } from '@/lib/utils';
 
 const inp = 'border border-slate-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white w-full';
 
@@ -67,7 +68,7 @@ export default function ProjectPlanTemplateModal({ projectId, project, onClose, 
     function addDays(d, n) {
       const r = new Date(d);
       r.setDate(r.getDate() + n);
-      return r.toISOString().slice(0, 10);
+      return toLocalDate(r);
     }
 
     // Create milestones first

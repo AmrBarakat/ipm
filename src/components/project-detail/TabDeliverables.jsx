@@ -5,6 +5,7 @@ import { base44 } from '@/api/base44Client';
 import { Plus, Package, Pencil, Trash2, Save, X, CheckCircle, Wand2, Loader2, Check } from 'lucide-react';
 import PanelWrapper from '@/components/ui/PanelWrapper';
 import { isTopLevelBOM } from '@/lib/constants';
+import { todayLocal } from '@/lib/utils';
 
 const STATUS_COLORS = {
   pending:     'bg-slate-100 text-slate-600',
@@ -87,7 +88,7 @@ export default function TabDeliverables({ projectId }) {
         id: editForm.milestone_id,
         data: {
           status: 'completed',
-          completed_date: editForm.acceptance_date || new Date().toISOString().slice(0, 10),
+          completed_date: editForm.acceptance_date || todayLocal(),
         },
       });
     }
@@ -101,7 +102,7 @@ export default function TabDeliverables({ projectId }) {
   async function quickStatus(item, status) {
     const update = { status };
     if (status === 'accepted' && !item.acceptance_date)
-      update.acceptance_date = new Date().toISOString().slice(0, 10);
+      update.acceptance_date = todayLocal();
     await delMutation.mutateAsync({ action: 'update', id: item.id, data: update });
     if (status === 'accepted' && item.milestone_id) {
       await msMutation.mutateAsync({

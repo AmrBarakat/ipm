@@ -1,4 +1,5 @@
 // ── Gantt scheduling utilities: date math, CPM critical path, tree rows ──────
+import { toLocalDate } from '@/lib/utils';
 
 export const ROW_H = 38;
 export const HEADER_H = 44; // two tiers
@@ -31,8 +32,7 @@ export function daysBetween(a, b) {
 }
 export function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 export function toISO(date) {
-  const d = new Date(date);
-  return d.toISOString().slice(0, 10);
+  return toLocalDate(date);
 }
 export function isWeekend(date) {
   const day = new Date(date).getDay();
