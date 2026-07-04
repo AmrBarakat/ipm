@@ -3,7 +3,7 @@ import { useEntityList } from '@/hooks/useEntity';
 import { useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { formatCurrency, formatDate, BOM_CATEGORY_LABELS } from '@/lib/constants';
-import { ShoppingCart, Package, ChevronDown, ChevronRight, Check, AlertCircle, X, Save, Trash2 } from 'lucide-react';
+import { ShoppingCart, Package, ChevronDown, ChevronRight, Check, AlertCircle, X, Save, Trash2, RefreshCw } from 'lucide-react';
 
 export default function TabProcurement({ projectId, project }) {
   const { data: all = [], isLoading } = useEntityList('BOMItem', { project_id: projectId }, 'supplier', 500);
@@ -11,6 +11,7 @@ export default function TabProcurement({ projectId, project }) {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [collapsedSuppliers, setCollapsedSuppliers] = useState(new Set());
   const [bulkEdit, setBulkEdit] = useState(null);
+  const [syncing, setSyncing] = useState(false);
   const queryClient = useQueryClient();
 
   // Auto-select all unordered items whenever the list refreshes
@@ -69,6 +70,12 @@ export default function TabProcurement({ projectId, project }) {
     queryClient.invalidateQueries({ queryKey: ['BOMItem'] });
   }
 
+  async function syncWithBOM() {
+    setSyncing(true);
+    await queryClient.invalidateQueries({ queryKey: ['BOMItem'] });
+    setSyncing(false);
+  }
+
   async function bulkDelete() {
     if (selectedIds.size === 0) return;
     if (!confirm(`Delete ${selectedIds.size} selected item(s)? This removes them from the BOM.`)) return;
@@ -118,9 +125,16 @@ export default function TabProcurement({ projectId, project }) {
                 <span>{selectedIds.size === items.length ? 'Deselect All' : 'Select All'} ({items.length} items)</span>
               </button>
             </div>
-            <div className="flex items-center gap-2 text-xs text-slate-400">
-              <AlertCircle className="w-3.5 h-3.5" />
-              Unordered BOM items grouped by supplier
+            <div className="flex items-center gap-3">
+              <span className="flex items-center gap-2 text-xs text-slate-400">
+                <AlertCircle className="w-3.5 h-3.5" />
+                Unordered BOM items grouped by supplier
+              </span>
+              <button onClick={syncWithBOM} disabled={syncing}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-amber-300 rounded hover:bg-amber-50 text-amber-700 font-semibold disabled:opacity-60">
+                <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
+                {syncing ? 'Syncing…' : 'Sync with BOM'}
+              </button>
             </div>
           </div>
 
