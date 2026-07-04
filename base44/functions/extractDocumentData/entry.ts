@@ -94,7 +94,7 @@ Also extract these general fields that apply to all document types:
 - parties: array of strings (company names, parties involved)
 - currency: string (e.g. SAR, USD)
 - total_amount: number (any total amount found)
-- line_items: array of objects with description, quantity, unit, unit_price, total fields
+- line_items: array of objects with part_number, description, quantity, unit, unit_price, total fields
 
 Return a JSON object with:
 - document_type: detected type (invoice, contract, po, delivery_note, other)
@@ -124,6 +124,7 @@ Return a JSON object with:
             items: {
               type: 'object',
               properties: {
+                part_number: { type: 'string' },
                 description: { type: 'string' },
                 quantity: { type: 'number' },
                 unit: { type: 'string' },

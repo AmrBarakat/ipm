@@ -10,6 +10,60 @@
     },
     "body": {
       "type": "string"
+    },
+    "note_type": {
+      "type": "string",
+      "enum": [
+        "plain",
+        "po_summary",
+        "dn_summary"
+      ],
+      "default": "plain",
+      "description": "plain = free-text note; po_summary / dn_summary = structured table rendered from table_data"
+    },
+    "table_data": {
+      "type": "object",
+      "description": "Structured payload for summary notes (po_summary / dn_summary). Null for plain notes.",
+      "properties": {
+        "document_type": {
+          "type": "string"
+        },
+        "document_number": {
+          "type": "string"
+        },
+        "document_date": {
+          "type": "string"
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "bom_item_id": {
+                "type": "string"
+              },
+              "bom_description": {
+                "type": "string"
+              },
+              "part_number": {
+                "type": "string"
+              },
+              "quantity": {
+                "type": "number"
+              },
+              "action": {
+                "type": "string"
+              },
+              "source_ref": {
+                "type": "string"
+              },
+              "source_date": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
     }
   },
   "required": [

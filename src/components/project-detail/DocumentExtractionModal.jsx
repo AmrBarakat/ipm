@@ -12,15 +12,38 @@ const TYPE_LABELS = {
 
 const inp = 'border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white w-full';
 
-export default function DocumentExtractionModal({ document, projectId, onClose, onApplied }) {
-  const [step, setStep] = useState('idle'); // idle | extracting | review | applying | done
-  const [result, setResult] = useState(null);
+function deriveMapped(r, document) {
+  const general = r.general || {};
+  const specific = r.specific || {};
+  return {
+    description: specific.description || general.document_title || document.title || '',
+    reference_number: specific.invoice_number || specific.po_number || general.reference_number || '',
+    planned_date: specific.planned_date || specific.issue_date || general.document_date || '',
+    planned_amount: specific.planned_amount ?? specific.amount ?? general.total_amount ?? '',
+    actual_amount: specific.actual_amount ?? '',
+    status: specific.status || 'planned',
+    vendor: specific.vendor_name || '',
+    notes: specific.notes || '',
+    currency: general.currency || 'SAR',
+  };
+}
+function deriveSaveTarget(r) {
+  const t = r.document_type || 'other';
+  if (t === 'invoice') return 'invoice';
+  if (t === 'po') return 'expense';
+  if (t === 'contract') return 'project_info';
+  return 'invoice';
+}
+
+export default function DocumentExtractionModal({ document, projectId, onClose, onApplied, initialResult }) {
+  const [step, setStep] = useState(initialResult ? 'review' : 'idle'); // idle | extracting | review | applying | done
+  const [result, setResult] = useState(initialResult || null);
   const [error, setError] = useState(null);
   const [showLineItems, setShowLineItems] = useState(false);
 
   // Editable mapped fields
-  const [mapped, setMapped] = useState({});
-  const [saveTarget, setSaveTarget] = useState('invoice'); // invoice | expense | milestone | project_info
+  const [mapped, setMapped] = useState(() => initialResult ? deriveMapped(initialResult, document) : {});
+  const [saveTarget, setSaveTarget] = useState(() => initialResult ? deriveSaveTarget(initialResult) : 'invoice'); // invoice | expense | milestone | project_info
 
   async function startExtraction() {
     setStep('extracting');
@@ -45,30 +68,8 @@ export default function DocumentExtractionModal({ document, projectId, onClose, 
     if (!r) { setError('No data could be extracted from this document.'); setStep('idle'); return; }
 
     setResult(r);
-    // Pre-fill mapped fields from extraction
-    const general = r.general || {};
-    const specific = r.specific || {};
-    const detectedType = r.document_type || 'other';
-
-    const initial = {
-      description: specific.description || general.document_title || document.title || '',
-      reference_number: specific.invoice_number || specific.po_number || general.reference_number || '',
-      planned_date: specific.planned_date || specific.issue_date || general.document_date || '',
-      planned_amount: specific.planned_amount ?? specific.amount ?? general.total_amount ?? '',
-      actual_amount: specific.actual_amount ?? '',
-      status: specific.status || 'planned',
-      vendor: specific.vendor_name || '',
-      notes: specific.notes || '',
-      currency: general.currency || 'SAR',
-    };
-    setMapped(initial);
-
-    // Auto-select save target based on detected type
-    if (detectedType === 'invoice') setSaveTarget('invoice');
-    else if (detectedType === 'po') setSaveTarget('expense');
-    else if (detectedType === 'contract') setSaveTarget('project_info');
-    else setSaveTarget('invoice');
-
+    setMapped(deriveMapped(r, document));
+    setSaveTarget(deriveSaveTarget(r));
     setStep('review');
   }
 

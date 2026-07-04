@@ -5,10 +5,12 @@ import { base44 } from '@/api/base44Client';
 import { formatDate, formatBytes, CATEGORY_LABELS } from '@/lib/constants';
 import {
   FileText, Upload, ExternalLink, Pencil, Trash2, Save,
-  Cpu, Filter, Link2, ChevronDown, ChevronRight, FileCheck
+  Cpu, Filter, Link2, ChevronDown, ChevronRight, FileCheck, Wand2, Loader2
 } from 'lucide-react';
 import ProjectPlanExtractModal from './ProjectPlanExtractModal';
 import BomImportSkill from '@/components/bom/BomImportSkill';
+import DocumentExtractionModal from './DocumentExtractionModal';
+import PODNExtractionPanel from '@/components/documents/PODNExtractionPanel';
 
 const CATEGORY_ICONS = {
   drawing: '📐',
@@ -49,6 +51,9 @@ export default function TabDocuments({ projectId, project }) {
   const [planExtractDoc, setPlanExtractDoc] = useState(null);
   const [filterCategory, setFilterCategory] = useState('');
   const [collapsed, setCollapsed] = useState({});
+  const [extractingId, setExtractingId] = useState(null);
+  const [podnResult, setPodnResult] = useState(null); // { document, result }
+  const [standardDoc, setStandardDoc] = useState(null); // { document, result }
 
   async function upload(e) {
     e.preventDefault();
@@ -88,6 +93,31 @@ export default function TabDocuments({ projectId, project }) {
 
   function toggleCollapse(cat) {
     setCollapsed(p => ({ ...p, [cat]: !p[cat] }));
+  }
+
+  // Run extraction once, then branch: PO/DN → BOM update panel; else → standard extractor modal.
+  async function handleExtract(doc) {
+    setExtractingId(doc.id);
+    let res;
+    try {
+      res = await base44.functions.invoke('extractDocumentData', {
+        file_url: doc.file_url,
+        document_category: doc.category,
+      });
+    } catch (err) {
+      setExtractingId(null);
+      alert(err?.response?.data?.error || err?.message || 'Extraction failed.');
+      return;
+    }
+    if (res.data?.error) { setExtractingId(null); alert(res.data.error); return; }
+    const r = res.data?.result;
+    setExtractingId(null);
+    if (!r) { alert('No data could be extracted from this document.'); return; }
+    if (r.document_type === 'po' || r.document_type === 'delivery_note') {
+      setPodnResult({ document: doc, result: r });
+    } else {
+      setStandardDoc({ document: doc, result: r });
+    }
   }
 
   const filtered = useMemo(() =>
@@ -269,6 +299,12 @@ export default function TabDocuments({ projectId, project }) {
                                     className="flex items-center gap-1 px-2.5 py-1 text-xs border border-slate-300 rounded hover:bg-slate-100 text-slate-600">
                                     <ExternalLink className="w-3 h-3" /> Open
                                   </a>
+                                  <button onClick={() => handleExtract(doc)} disabled={extractingId === doc.id}
+                                    className="flex items-center gap-1 px-2.5 py-1 text-xs border border-amber-300 rounded hover:bg-amber-50 text-amber-700 font-medium disabled:opacity-60">
+                                    {extractingId === doc.id
+                                      ? <Loader2 className="w-3 h-3 animate-spin" />
+                                      : <Wand2 className="w-3 h-3" />} Extract
+                                  </button>
                                   {['engineering', 'drawing', 'submittal', 'other', 'bom', 'charter'].includes(doc.category) && (
                                     <button onClick={() => setBomSkillDoc(doc)}
                                       className="flex items-center gap-1 px-2.5 py-1 text-xs border border-amber-300 rounded hover:bg-amber-50 text-amber-700 font-medium">
@@ -302,6 +338,22 @@ export default function TabDocuments({ projectId, project }) {
         </div>
       )}
 
+      {podnResult && (
+        <PODNExtractionPanel
+          document={podnResult.document}
+          result={podnResult.result}
+          projectId={projectId}
+          onClose={() => setPodnResult(null)}
+          onApplied={() => { setPodnResult(null); queryClient.invalidateQueries({ queryKey: ['BOMItem'] }); queryClient.invalidateQueries({ queryKey: ['Note'] }); }} />
+      )}
+      {standardDoc && (
+        <DocumentExtractionModal
+          document={standardDoc.document}
+          projectId={projectId}
+          initialResult={standardDoc.result}
+          onClose={() => setStandardDoc(null)}
+          onApplied={() => setStandardDoc(null)} />
+      )}
       {planExtractDoc && (
         <ProjectPlanExtractModal
           document={planExtractDoc}

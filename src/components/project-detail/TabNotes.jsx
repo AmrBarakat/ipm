@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useEntityList, useEntityMutation } from '@/hooks/useEntity';
 import { base44 } from '@/api/base44Client';
 import { Plus, Trash2, StickyNote, Pencil, Save, X } from 'lucide-react';
+import SummaryNoteTable from '@/components/documents/SummaryNoteTable';
 
 export default function TabNotes({ projectId }) {
   const { data: notes = [], isLoading } = useEntityList('Note', { project_id: projectId }, '-created_date', 200);
@@ -98,6 +99,11 @@ export default function TabNotes({ projectId }) {
                         className="w-full border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white resize-y"
                         autoFocus
                       />
+                    ) : note.note_type && note.note_type !== 'plain' && note.table_data ? (
+                      <div className="space-y-2">
+                        <p className="text-sm font-semibold text-slate-700">{note.body}</p>
+                        <SummaryNoteTable tableData={note.table_data} />
+                      </div>
                     ) : (
                       <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{note.body}</p>
                     )}
