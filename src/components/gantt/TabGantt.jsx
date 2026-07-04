@@ -74,6 +74,21 @@ export default function TabGantt({ projectId, project }) {
   // Extend end dynamically if bars exceed
   const totalDays = Math.max(daysBetween(effectiveStart, bounds.end), 14);
 
+  // On first load, auto-scroll the timeline to the earliest WBS activity so the
+  // bars are immediately visible. The window is anchored to project.start_date,
+  // which can be weeks/months before the first real task — leaving the default
+  // (left-aligned) view empty even though every activity is in the tree.
+  const didInitScroll = useRef(false);
+  useEffect(() => {
+    if (didInitScroll.current || wbsItems.length === 0 || !scrollRef.current) return;
+    didInitScroll.current = true;
+    const earliest = wbsItems.reduce(
+      (m, w) => (w.planned_start && (!m || w.planned_start < m)) ? w.planned_start : m, null);
+    const target = earliest || new Date().toISOString().slice(0, 10);
+    const x = Math.max(0, daysBetween(effectiveStart, target) * dayWidth - 40);
+    requestAnimationFrame(() => { if (scrollRef.current) scrollRef.current.scrollLeft = x; });
+  }, [wbsItems, effectiveStart, dayWidth]);
+
   const rows = useMemo(() => buildRows(wbsItems, milestones, expanded), [wbsItems, milestones, expanded]);
   const wbsById = useMemo(() => Object.fromEntries(wbsItems.map(i => [i.id, i])), [wbsItems]);
   const cpm = useMemo(() => computeCriticalPath(wbsItems), [wbsItems]);
