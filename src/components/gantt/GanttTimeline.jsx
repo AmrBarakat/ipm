@@ -95,7 +95,9 @@ export default function GanttTimeline({
         const pred = wbsById[predId];
         if (!pred) continue;
         const predEnd = pred.actual_end || pred.planned_end;
-        const itemStart = row.data.actual_start || row.data.planned_start;
+        // Use planned_start (not actual_start) to match the AI assistant's
+        // scheduleChat conflict check — execution actuals don't make the plan invalid.
+        const itemStart = row.data.planned_start;
         if (!predEnd || !itemStart) continue;
         const fromIdx = rowIndex[predId], toIdx = rowIndex[row.id];
         if (fromIdx == null || toIdx == null) continue;

@@ -28,9 +28,10 @@ function computeWBSImpact(items) {
     const predEnds = preds.map(p => p.actual_end || p.planned_end).filter(Boolean);
     if (predEnds.length === 0) { result[item.id] = { delayed: false }; continue; }
     const latestPredEnd = predEnds.reduce((a, b) => (a > b ? a : b));
-    const myStart = item.actual_start || item.planned_start;
-    // Same-day handoff (start == predecessor finish) is a valid finish-to-start
-    // link, NOT a conflict. Only strictly-before is a real conflict.
+    // Use planned_start (not actual_start) so this matches the AI assistant's
+    // scheduleChat conflict check. Same-day handoff (start == predecessor
+    // finish) is a valid finish-to-start link, NOT a conflict.
+    const myStart = item.planned_start;
     const delayed = myStart && myStart < latestPredEnd;
     result[item.id] = { delayed, earliestStart: latestPredEnd, predNames: preds.map(p => p.name) };
   }

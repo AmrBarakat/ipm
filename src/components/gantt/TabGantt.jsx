@@ -105,7 +105,9 @@ export default function TabGantt({ projectId, project }) {
       const predEnds = preds.map(p => p.actual_end || p.planned_end).filter(Boolean);
       if (!predEnds.length) continue;
       const latest = predEnds.reduce((a, b) => (a > b ? a : b));
-      const myStart = item.actual_start || item.planned_start;
+      // Use planned_start (not actual_start) to match the AI assistant's
+      // scheduleChat conflict check — same-day handoffs are valid.
+      const myStart = item.planned_start;
       if (myStart && myStart < latest) s.add(item.id);
     }
     return s;
