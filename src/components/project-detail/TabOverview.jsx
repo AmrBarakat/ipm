@@ -4,6 +4,7 @@ import { formatDate, formatCurrency, EXPENSE_CATEGORY_LABELS } from '@/lib/const
 import { FileText, CreditCard, CheckCircle, AlertCircle, ClipboardList, BarChart2, PieChart, Wallet, Package, Tag, Truck, ShoppingCart, TrendingUp, Clock } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import StatusProgressChart from '@/components/project-detail/StatusProgressChart';
+import SpendingSummaryDashboard from '@/components/project-detail/SpendingSummaryDashboard';
 
 export default function TabOverview({ project, onRefresh }) {
   const [invoices, setInvoices] = useState([]);
@@ -182,6 +183,9 @@ export default function TabOverview({ project, onRefresh }) {
           ))}
         </div>
       )}
+
+      {/* Actual vs Planned Spending Dashboard */}
+      {!loading && <SpendingSummaryDashboard projectId={project.id} currency={project.currency} />}
 
       {/* Milestone & Deliverable Progress Chart */}
       {!loading && <StatusProgressChart projectId={project.id} />}
