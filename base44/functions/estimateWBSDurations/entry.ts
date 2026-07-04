@@ -54,16 +54,20 @@ Deno.serve(async (req) => {
     const byId = {};
     wbs.forEach((w) => { byId[w.id] = w; });
 
-    // Undated = no planned_end at all (with or without a start).
-    const undated = wbs.filter((w) => !w.planned_end);
+    // Needs a duration estimate: missing planned_start and/or planned_end,
+    // OR a zero-duration item (planned_start === planned_end) which draws no bar.
+    const undated = wbs.filter((w) =>
+      !w.planned_start || !w.planned_end || (w.planned_start && w.planned_end && w.planned_start === w.planned_end)
+    );
     if (undated.length === 0) {
       return Response.json({ estimates: [], message: 'All WBS items already have durations.' });
     }
 
-    // Calibration: dated activities (name + day-count) so the model matches this
-    // project's real pace instead of guessing in a vacuum.
+    // Calibration: dated activities with a real duration (name + day-count) so the
+    // model matches this project's real pace instead of guessing in a vacuum.
+    // Zero-duration items are excluded so they don't pollute the baseline.
     const dated = wbs
-      .filter((w) => w.planned_start && w.planned_end)
+      .filter((w) => w.planned_start && w.planned_end && w.planned_start !== w.planned_end)
       .map((w) => ({ name: w.name, wbs_code: w.wbs_code || '', days: durDays(w) }));
 
     const projectType = project?.project_type || 'plc';
