@@ -50,11 +50,15 @@ export default function TabGantt({ projectId, project }) {
   const scale = scaleByKey(scaleKey);
   const dayWidth = scale.dayWidth;
 
-  // Auto-expand roots on load
+  // Auto-expand ALL parent levels on load so the full tree is visible
+  // immediately. Only sets parents that aren't already toggled (undefined),
+  // so manual collapses are preserved across re-renders.
   useEffect(() => {
     setExpanded(prev => {
       const e = { ...prev };
-      wbsItems.filter(i => !i.parent_id).forEach(i => { if (e[i.id] === undefined) e[i.id] = true; });
+      const childMap = {};
+      wbsItems.forEach(i => { if (i.parent_id) (childMap[i.parent_id] ||= []).push(i); });
+      wbsItems.forEach(i => { if (childMap[i.id] && e[i.id] === undefined) e[i.id] = true; });
       return e;
     });
   }, [wbsItems]);
@@ -117,6 +121,24 @@ export default function TabGantt({ projectId, project }) {
   }, [fullscreen]);
 
   function toggleExpand(id) { setExpanded(prev => ({ ...prev, [id]: !prev[id] })); }
+  function expandAll() {
+    const childMap = {};
+    wbsItems.forEach(i => { if (i.parent_id) (childMap[i.parent_id] ||= []).push(i); });
+    setExpanded(prev => {
+      const e = { ...prev };
+      wbsItems.forEach(i => { if (childMap[i.id]) e[i.id] = true; });
+      return e;
+    });
+  }
+  function collapseAll() {
+    const childMap = {};
+    wbsItems.forEach(i => { if (i.parent_id) (childMap[i.parent_id] ||= []).push(i); });
+    setExpanded(prev => {
+      const e = { ...prev };
+      wbsItems.forEach(i => { if (childMap[i.id]) e[i.id] = false; });
+      return e;
+    });
+  }
 
   function onScroll(e) {
     setScrollTop(e.target.scrollTop);
@@ -302,6 +324,7 @@ export default function TabGantt({ projectId, project }) {
       <GanttToolbar
         scaleKey={scaleKey} setScaleKey={setScaleKey}
         onPan={pan} onFit={fitToProject} onToday={jumpToToday} onJumpStart={jumpToStart}
+        onExpandAll={expandAll} onCollapseAll={collapseAll}
         showDeps={showDeps} setShowDeps={setShowDeps} showCritical={showCritical} setShowCritical={setShowCritical}
         criticalCount={cpm.criticalIds.size} projectDuration={cpm.projectDurationDays} projectFinish={cpm.projectFinish}
         fullscreen={fullscreen} toggleFullscreen={() => setFullscreen(v => !v)}
@@ -321,7 +344,7 @@ export default function TabGantt({ projectId, project }) {
               rows={rows} timelineStart={startForChart} totalDays={totalDays} dayWidth={dayWidth}
               scrollTop={scrollTop} viewportH={viewportH - HEADER_H} exporting={!!exporting}
               showDeps={showDeps} showCritical={showCritical} criticalIds={cpm.criticalIds} float={cpm.float}
-              wbsById={wbsById}
+              wbsById={wbsById} projectStart={project?.start_date || null}
               onMoveItem={onMoveItem} onResizeItem={onResizeItem} onOpenEditor={setEditorRow}
             />
           </div>

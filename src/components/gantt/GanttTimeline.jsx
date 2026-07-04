@@ -1,4 +1,5 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
+import { CalendarX } from 'lucide-react';
 import { ROW_H, HEADER_H, daysBetween, addDays, toISO, clamp, buildHeader, buildWeekends } from './ganttUtils';
 
 const MILESTONE_COLORS = {
@@ -16,7 +17,7 @@ const MILESTONE_COLORS = {
  */
 export default function GanttTimeline({
   rows, timelineStart, totalDays, dayWidth, scrollTop, viewportH, exporting,
-  showDeps, showCritical, criticalIds, float, wbsById,
+  showDeps, showCritical, criticalIds, float, wbsById, projectStart,
   onMoveItem, onResizeItem, onOpenEditor,
 }) {
   const timelineW = totalDays * dayWidth;
@@ -187,18 +188,22 @@ export default function GanttTimeline({
             );
           }
           const item = row.data;
-          // Date-less items stay visible (excluded from CPM math) but render as a
-          // clearly-flagged "Unscheduled" placeholder instead of a misleading stub.
+          // Date-less items render as a prominent dashed "Needs dates" bar pinned
+          // at the project start, with a full-row tint so the row stands out.
           if (!item.planned_start || !item.planned_end) {
+            const anchorX = projectStart ? Math.max(6, xFor(projectStart)) : 6;
+            const phW = Math.max(170, Math.min(32 * dayWidth, timelineW - anchorX - 2));
             return (
               <div key={row.id} className="relative" style={{ height: ROW_H }}>
+                <div className="absolute top-0 bottom-0 left-0 right-0 bg-amber-50/50 pointer-events-none" />
                 <div
-                  className="absolute z-10 rounded border border-dashed border-slate-300 bg-slate-100/80 flex items-center px-1.5 text-[10px] text-slate-500 italic select-none cursor-pointer"
-                  style={{ left: 8, width: 112, top: 8, height: 18 }}
+                  className="absolute z-10 rounded border-2 border-dashed border-amber-400 bg-amber-50 flex items-center px-2 gap-1 text-[10px] text-amber-700 font-semibold italic select-none cursor-pointer hover:bg-amber-100"
+                  style={{ left: anchorX, width: phW, top: 6, height: 24 }}
                   onDoubleClick={() => onOpenEditor(row)}
-                  title={`${item.wbs_code} ${item.name} · Unscheduled — double-click to set dates`}
+                  title={`${item.wbs_code} ${item.name} · Needs dates — double-click to schedule`}
                 >
-                  Unscheduled
+                  <CalendarX className="w-3.5 h-3.5 shrink-0" />
+                  Needs dates
                 </div>
               </div>
             );

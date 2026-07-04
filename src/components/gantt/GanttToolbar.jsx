@@ -1,9 +1,10 @@
-import { ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Maximize2, Minimize2, Calendar, Crosshair, Image, FileText, Sheet, Loader2, Link2, AlertTriangle } from 'lucide-react';
+import { ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Maximize2, Minimize2, Calendar, Crosshair, Image, FileText, Sheet, Loader2, Link2, AlertTriangle, ChevronsDownUp, ChevronsUpDown } from 'lucide-react';
 import { TIME_SCALES } from './ganttUtils';
 
 export default function GanttToolbar({
   scaleKey, setScaleKey,
   onPan, onFit, onToday, onJumpStart,
+  onExpandAll, onCollapseAll,
   showDeps, setShowDeps, showCritical, setShowCritical,
   criticalCount, projectDuration, projectFinish,
   fullscreen, toggleFullscreen,
@@ -48,6 +49,14 @@ export default function GanttToolbar({
         <button onClick={onJumpStart} className="px-3 py-1.5 text-xs border border-slate-200 rounded hover:bg-slate-100 text-slate-600 font-medium" title="Jump to project start">
           Start
         </button>
+        <div className="flex items-center border border-slate-200 rounded overflow-hidden">
+          <button onClick={onExpandAll} className="flex items-center gap-1 px-2.5 py-1.5 text-xs hover:bg-slate-100 text-slate-600 font-medium border-r border-slate-200" title="Expand all branches">
+            <ChevronsUpDown className="w-3.5 h-3.5" /> Expand all
+          </button>
+          <button onClick={onCollapseAll} className="flex items-center gap-1 px-2.5 py-1.5 text-xs hover:bg-slate-100 text-slate-600 font-medium" title="Collapse all branches">
+            <ChevronsDownUp className="w-3.5 h-3.5" /> Collapse all
+          </button>
+        </div>
       </div>
 
       <div className="flex items-center gap-2 flex-wrap">
