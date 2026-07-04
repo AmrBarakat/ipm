@@ -1,27 +1,18 @@
 import { useState, useEffect, useMemo } from 'react';
-import { base44 } from '@/api/base44Client';
+import { useEntityList } from '@/hooks/useEntity';
 import { formatCurrency, formatDate, BOM_CATEGORY_LABELS } from '@/lib/constants';
 import { ShoppingCart, Package, ChevronDown, ChevronRight, Check, FileText, Loader2, AlertCircle } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 
 export default function TabProcurement({ projectId, project }) {
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { data: all = [], isLoading } = useEntityList('BOMItem', { project_id: projectId }, 'supplier', 500);
+  const items = useMemo(() => all.filter(i => (i.order_status || (i.ordered ? 'ordered' : 'not_ordered')) === 'not_ordered'), [all]);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [collapsedSuppliers, setCollapsedSuppliers] = useState(new Set());
   const [generatingPO, setGeneratingPO] = useState(null); // supplier name being exported
 
-  useEffect(() => { load(); }, [projectId]);
-
-  async function load() {
-    setLoading(true);
-    const all = await base44.entities.BOMItem.filter({ project_id: projectId }, 'supplier', 500);
-    const unordered = all.filter(i => (i.order_status || (i.ordered ? 'ordered' : 'not_ordered')) === 'not_ordered');
-    setItems(unordered);
-    // Auto-select all
-    setSelectedIds(new Set(unordered.map(i => i.id)));
-    setLoading(false);
-  }
+  // Auto-select all unordered items whenever the list refreshes
+  useEffect(() => { setSelectedIds(new Set(items.map(i => i.id))); }, [items]);
 
   // Group by supplier
   const grouped = useMemo(() => {
@@ -240,7 +231,7 @@ export default function TabProcurement({ projectId, project }) {
     .filter(i => selectedIds.has(i.id))
     .reduce((s, i) => s + (Number(i.planned_cost_price) || Number(i.cost_price) || 0) * (Number(i.quantity) || 1), 0);
 
-  if (loading) return <Spinner />;
+  if (isLoading) return <Spinner />;
 
   return (
     <div className="space-y-5">

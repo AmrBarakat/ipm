@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { useState } from 'react';
+import { useEntityList, useEntityMutation } from '@/hooks/useEntity';
 import { formatDate } from '@/lib/constants';
 import { Plus, Flag, Pencil, Trash2, Save, X, Layers, Check } from 'lucide-react';
 import PanelWrapper from '@/components/ui/PanelWrapper';
@@ -42,9 +42,9 @@ function computeMilestoneProgress(milestoneId, wbsItems) {
 }
 
 export default function TabMilestones({ projectId }) {
-  const [milestones, setMilestones] = useState([]);
-  const [wbsItems, setWbsItems] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { data: milestones = [], isLoading } = useEntityList('Milestone', { project_id: projectId }, 'planned_date', 100);
+  const { data: wbsItems = [] } = useEntityList('WBSItem', { project_id: projectId }, 'wbs_code', 500);
+  const mutation = useEntityMutation('Milestone');
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ title: '', planned_date: '', weight: '' });
   const [editingId, setEditingId] = useState(null);
@@ -53,31 +53,16 @@ export default function TabMilestones({ projectId }) {
   const [bulkField, setBulkField] = useState('');
   const [bulkValue, setBulkValue] = useState('');
 
-  useEffect(() => { load(); }, [projectId]);
-
-  async function load() {
-    setLoading(true);
-    const [m, w] = await Promise.all([
-      base44.entities.Milestone.filter({ project_id: projectId }, 'planned_date', 100),
-      base44.entities.WBSItem.filter({ project_id: projectId }, 'wbs_code', 500),
-    ]);
-    setMilestones(m);
-    setWbsItems(w);
-    setLoading(false);
-  }
-
   async function create(e) {
     e.preventDefault();
     if (!form.title.trim()) return;
-    await base44.entities.Milestone.create({ ...form, project_id: projectId, weight: Number(form.weight) || 0 });
+    await mutation.mutateAsync({ action: 'create', data: { ...form, project_id: projectId, weight: Number(form.weight) || 0 } });
     setForm({ title: '', planned_date: '', weight: '' });
     setAdding(false);
-    load();
   }
 
   async function updateStatus(m, status) {
-    await base44.entities.Milestone.update(m.id, { status });
-    load();
+    await mutation.mutateAsync({ action: 'update', id: m.id, data: { status } });
   }
 
   function startEdit(m) {
@@ -86,15 +71,13 @@ export default function TabMilestones({ projectId }) {
   }
 
   async function saveEdit(id) {
-    await base44.entities.Milestone.update(id, { ...editForm, weight: Number(editForm.weight) || 0 });
+    await mutation.mutateAsync({ action: 'update', id, data: { ...editForm, weight: Number(editForm.weight) || 0 } });
     setEditingId(null);
-    load();
   }
 
   async function deleteMilestone(id) {
     if (!confirm('Delete this milestone?')) return;
-    await base44.entities.Milestone.delete(id);
-    load();
+    await mutation.mutateAsync({ action: 'delete', id });
   }
 
   function toggleSelect(id) {
@@ -105,18 +88,16 @@ export default function TabMilestones({ projectId }) {
   }
   async function bulkDelete() {
     if (!confirm(`Delete ${selectedIds.size} milestones?`)) return;
-    await Promise.all([...selectedIds].map(id => base44.entities.Milestone.delete(id)));
+    await Promise.all([...selectedIds].map(id => mutation.mutateAsync({ action: 'delete', id })));
     setSelectedIds(new Set()); setBulkField(''); setBulkValue('');
-    load();
   }
   async function applyBulkEdit() {
     if (!bulkField || !bulkValue) return;
-    await Promise.all([...selectedIds].map(id => base44.entities.Milestone.update(id, { [bulkField]: bulkValue })));
+    await Promise.all([...selectedIds].map(id => mutation.mutateAsync({ action: 'update', id, data: { [bulkField]: bulkValue } })));
     setBulkField(''); setBulkValue(''); setSelectedIds(new Set());
-    load();
   }
 
-  if (loading) return <SkeletonTable columns={4} rows={5} />;
+  if (isLoading) return <SkeletonTable columns={4} rows={5} />;
 
   return (
     <div>

@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { base44 } from '@/api/base44Client';
+import { useEntityList, useEntityMutation } from '@/hooks/useEntity';
 import { Plus, Pencil, X, Trash2, RefreshCw, Layers, Check, Save, ListTodo } from 'lucide-react';
 import EmptyState from '@/components/ui/EmptyState';
 
@@ -37,8 +38,9 @@ const PRIORITY_COLORS = {
 const inp = 'border border-slate-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white w-full';
 
 export default function TabTasks({ projectId }) {
-  const [tasks, setTasks] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { data: tasks = [], isLoading } = useEntityList('Task', { project_id: projectId }, '-created_date', 300);
+  const taskMutation = useEntityMutation('Task');
+  const wbsMutation = useEntityMutation('WBSItem');
   const [syncing, setSyncing] = useState(false);
   const [addingCol, setAddingCol] = useState(null);
   const [newTitle, setNewTitle] = useState('');
@@ -50,27 +52,20 @@ export default function TabTasks({ projectId }) {
   const [bulkField, setBulkField] = useState('');
   const [bulkValue, setBulkValue] = useState('');
 
-  useEffect(() => { load(); }, [projectId]);
-
-  async function load() {
-    setLoading(true);
-    const t = await base44.entities.Task.filter({ project_id: projectId }, '-created_date', 300);
-    setTasks(t);
-    setLoading(false);
-  }
-
   async function createTask(e, colId) {
     e.preventDefault();
     if (!newTitle.trim()) return;
-    await base44.entities.Task.create({
-      project_id: projectId,
-      title: newTitle.trim(),
-      priority: newPriority,
-      assignee: newAssignee.trim() || undefined,
-      status: colId,
+    await taskMutation.mutateAsync({
+      action: 'create',
+      data: {
+        project_id: projectId,
+        title: newTitle.trim(),
+        priority: newPriority,
+        assignee: newAssignee.trim() || undefined,
+        status: colId,
+      },
     });
     setNewTitle(''); setNewPriority('medium'); setNewAssignee(''); setAddingCol(null);
-    load();
   }
 
   function startEdit(task) {
@@ -79,13 +74,13 @@ export default function TabTasks({ projectId }) {
   }
 
   async function saveEdit(id) {
-    await base44.entities.Task.update(id, editForm);
-    setEditingId(null); load();
+    await taskMutation.mutateAsync({ action: 'update', id, data: editForm });
+    setEditingId(null);
   }
 
   async function deleteTask(id) {
     if (!confirm('Delete this task?')) return;
-    await base44.entities.Task.delete(id); load();
+    await taskMutation.mutateAsync({ action: 'delete', id });
   }
 
   async function syncFromWBS() {
@@ -107,27 +102,29 @@ export default function TabTasks({ projectId }) {
       if (existing) {
         // Update status if WBS changed
         if (TASK_TO_WBS_STATUS[existing.status] !== item.status) {
-          ops.push(base44.entities.Task.update(existing.id, { status: taskStatus }));
+          ops.push(taskMutation.mutateAsync({ action: 'update', id: existing.id, data: { status: taskStatus } }));
         }
       } else {
         // Create new task from WBS item
-        ops.push(base44.entities.Task.create({
-          project_id: projectId,
-          title: `[${item.wbs_code}] ${item.name}`,
-          description: item.description || '',
-          assignee: item.assignee || '',
-          status: taskStatus,
-          priority: 'medium',
-          start_date: item.planned_start || '',
-          due_date: item.planned_end || '',
-          milestone_id: item.milestone_id || '',
-          tags: `wbs:${item.wbs_code}`,
+        ops.push(taskMutation.mutateAsync({
+          action: 'create',
+          data: {
+            project_id: projectId,
+            title: `[${item.wbs_code}] ${item.name}`,
+            description: item.description || '',
+            assignee: item.assignee || '',
+            status: taskStatus,
+            priority: 'medium',
+            start_date: item.planned_start || '',
+            due_date: item.planned_end || '',
+            milestone_id: item.milestone_id || '',
+            tags: `wbs:${item.wbs_code}`,
+          },
         }));
       }
     }
     await Promise.all(ops);
     setSyncing(false);
-    load();
   }
 
   function toggleSelect(id) {
@@ -138,18 +135,18 @@ export default function TabTasks({ projectId }) {
 
   async function bulkDelete() {
     if (!confirm(`Delete ${selectedIds.size} tasks?`)) return;
-    await Promise.all([...selectedIds].map(id => base44.entities.Task.delete(id)));
-    clearSelection(); load();
+    await Promise.all([...selectedIds].map(id => taskMutation.mutateAsync({ action: 'delete', id })));
+    clearSelection();
   }
 
   async function applyBulkEdit() {
     if (!bulkField || !bulkValue) return;
-    await Promise.all([...selectedIds].map(id => base44.entities.Task.update(id, { [bulkField]: bulkValue })));
-    clearSelection(); load();
+    await Promise.all([...selectedIds].map(id => taskMutation.mutateAsync({ action: 'update', id, data: { [bulkField]: bulkValue } })));
+    clearSelection();
   }
 
   async function moveTask(task, status) {
-    await base44.entities.Task.update(task.id, { status });
+    await taskMutation.mutateAsync({ action: 'update', id: task.id, data: { status } });
     // Sync back to WBS if this task is linked
     const tag = (task.tags || '').split(',').find(x => x.trim().startsWith('wbs:'));
     if (tag) {
@@ -157,16 +154,15 @@ export default function TabTasks({ projectId }) {
       const wbsItems = await base44.entities.WBSItem.filter({ project_id: projectId, wbs_code: wbsCode }, 'wbs_code', 1);
       if (wbsItems[0]) {
         const newWbsStatus = TASK_TO_WBS_STATUS[status] || 'in_progress';
-        await base44.entities.WBSItem.update(wbsItems[0].id, { status: newWbsStatus });
+        await wbsMutation.mutateAsync({ action: 'update', id: wbsItems[0].id, data: { status: newWbsStatus } });
       }
     }
-    load();
   }
 
   const byCol = {};
   COLUMNS.forEach(c => { byCol[c.id] = tasks.filter(t => t.status === c.id); });
 
-  if (loading) return (
+  if (isLoading) return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
       {COLUMNS.map(c => (
         <div key={c.id} className="rounded-lg border-t-4 border-slate-200 p-3 min-h-[200px]">

@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
+import { useEntityList, useEntityMutation } from '@/hooks/useEntity';
 import { base44 } from '@/api/base44Client';
 import { Plus, Trash2, StickyNote, Pencil, Save, X } from 'lucide-react';
 
 export default function TabNotes({ projectId }) {
-  const [notes, setNotes] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { data: notes = [], isLoading } = useEntityList('Note', { project_id: projectId }, '-created_date', 200);
+  const mutation = useEntityMutation('Note');
   const [adding, setAdding] = useState(false);
   const [body, setBody] = useState('');
   const [editingId, setEditingId] = useState(null);
@@ -12,28 +13,22 @@ export default function TabNotes({ projectId }) {
   const [user, setUser] = useState(null);
 
   useEffect(() => {
-    load();
     base44.auth.me().then(u => setUser(u)).catch(() => {});
-  }, [projectId]);
-
-  async function load() {
-    setLoading(true);
-    const n = await base44.entities.Note.filter({ project_id: projectId }, '-created_date', 200);
-    setNotes(n);
-    setLoading(false);
-  }
+  }, []);
 
   async function createNote(e) {
     e.preventDefault();
     if (!body.trim()) return;
-    await base44.entities.Note.create({
-      project_id: projectId,
-      body: body.trim(),
-      author: user?.full_name || user?.email || 'Unknown',
+    await mutation.mutateAsync({
+      action: 'create',
+      data: {
+        project_id: projectId,
+        body: body.trim(),
+        author: user?.full_name || user?.email || 'Unknown',
+      },
     });
     setBody('');
     setAdding(false);
-    load();
   }
 
   function startEdit(note) {
@@ -42,18 +37,16 @@ export default function TabNotes({ projectId }) {
   }
 
   async function saveEdit(id) {
-    await base44.entities.Note.update(id, { body: editBody.trim() });
+    await mutation.mutateAsync({ action: 'update', id, data: { body: editBody.trim() } });
     setEditingId(null);
-    load();
   }
 
   async function deleteNote(id) {
     if (!confirm('Delete this note?')) return;
-    await base44.entities.Note.delete(id);
-    load();
+    await mutation.mutateAsync({ action: 'delete', id });
   }
 
-  if (loading) return <Spinner />;
+  if (isLoading) return <Spinner />;
 
   return (
     <div className="space-y-4">

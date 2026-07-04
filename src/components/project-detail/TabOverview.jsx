@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
-import { base44 } from '@/api/base44Client';
+import { useMemo } from 'react';
+import { useEntityList } from '@/hooks/useEntity';
 import { formatDate, formatCurrency, EXPENSE_CATEGORY_LABELS } from '@/lib/constants';
 import { FileText, CreditCard, CheckCircle, AlertCircle, ClipboardList, BarChart2, PieChart, Wallet, Package, Tag, Truck, ShoppingCart, TrendingUp } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -7,28 +7,11 @@ import StatusProgressChart from '@/components/project-detail/StatusProgressChart
 import SpendingSummaryDashboard from '@/components/project-detail/SpendingSummaryDashboard';
 
 export default function TabOverview({ project, onRefresh }) {
-  const [invoices, setInvoices] = useState([]);
-  const [expenses, setExpenses] = useState([]);
-  const [bomItems, setBomItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  const [collections, setCollections] = useState([]);
-
-  useEffect(() => {
-    if (!project?.id) return;
-    Promise.all([
-      base44.entities.Invoice.filter({ project_id: project.id }, 'planned_date', 500),
-      base44.entities.Expense.filter({ project_id: project.id }, 'planned_date', 500),
-      base44.entities.BOMItem.filter({ project_id: project.id }, '-created_date', 500),
-      base44.entities.Collection.filter({ project_id: project.id }, '-received_date', 500),
-    ]).then(([inv, exp, bom, col]) => {
-      setInvoices(inv);
-      setExpenses(exp);
-      setBomItems(bom);
-      setCollections(col);
-      setLoading(false);
-    });
-  }, [project?.id]);
+  const { data: invoices = [], isLoading: invoicesLoading } = useEntityList('Invoice', { project_id: project.id }, 'planned_date', 500);
+  const { data: expenses = [], isLoading: expensesLoading } = useEntityList('Expense', { project_id: project.id }, 'planned_date', 500);
+  const { data: bomItems = [], isLoading: bomLoading } = useEntityList('BOMItem', { project_id: project.id }, '-created_date', 500);
+  const { data: collections = [], isLoading: colLoading } = useEntityList('Collection', { project_id: project.id }, '-received_date', 500);
+  const loading = invoicesLoading || expensesLoading || bomLoading || colLoading;
 
   const cur = project?.currency || 'SAR';
   const contractValue = project?.contract_value || 0;

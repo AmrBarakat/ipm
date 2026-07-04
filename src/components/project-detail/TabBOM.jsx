@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useEntityList, useEntityMutation } from '@/hooks/useEntity';
+import { useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { formatCurrency, BOM_CATEGORY_LABELS } from '@/lib/constants';
 import { Plus, Package, Trash2, Filter, Tag, Truck, ShoppingCart, TrendingUp, CheckCircle, Clock, X, Check, ChevronDown, ChevronRight, Layers } from 'lucide-react';
@@ -29,8 +31,10 @@ const selCls = 'border border-slate-200 rounded px-2 py-1.5 text-xs focus:outlin
 const addInp = 'border border-slate-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white w-full';
 
 export default function TabBOM({ projectId }) {
+  const { data: bomData = [], isLoading } = useEntityList('BOMItem', { project_id: projectId }, '-created_date', 300);
+  const bomMutation = useEntityMutation('BOMItem');
+  const queryClient = useQueryClient();
   const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState({});
@@ -52,14 +56,9 @@ export default function TabBOM({ projectId }) {
   // Clear selection when filters change
   useEffect(() => { setSelectedIds(new Set()); }, [filterCategory, filterOrderStatus, filterDelivery, filterSupplier]);
 
-  useEffect(() => { load(); }, [projectId]);
-
-  async function load() {
-    setLoading(true);
-    const b = await base44.entities.BOMItem.filter({ project_id: projectId }, '-created_date', 300);
-    setItems(b);
-    setLoading(false);
-  }
+  // Seed the editable grid from the cached query; inline edits stay local
+  // and are reconciled when create/delete/bulk ops invalidate the query.
+  useEffect(() => { setItems(bomData); }, [bomData]);
 
   // Direct cell update — debounced save per item
   const updateField = useCallback(async (id, field, value) => {
@@ -125,6 +124,7 @@ export default function TabBOM({ projectId }) {
     // Single batched request instead of one call per item
     const extra = field === 'order_status' ? { ordered: value === 'ordered' } : {};
     await base44.entities.BOMItem.bulkUpdate(ids.map(id => ({ id, [field]: value, ...extra })));
+    queryClient.invalidateQueries({ queryKey: ['BOMItem'] });
   }
 
   async function bulkDelete() {
@@ -134,6 +134,7 @@ export default function TabBOM({ projectId }) {
     setItems(prev => prev.filter(i => !ids.includes(i.id)));
     setSelectedIds(new Set());
     await base44.entities.BOMItem.deleteMany({ id: { $in: ids } });
+    queryClient.invalidateQueries({ queryKey: ['BOMItem'] });
   }
 
   function handleSelectChange(item, field, value) {
@@ -146,26 +147,27 @@ export default function TabBOM({ projectId }) {
   async function create(e) {
     e.preventDefault();
     if (!form.description.trim()) return;
-    await base44.entities.BOMItem.create({
-      ...form,
-      project_id: projectId,
-      quantity: Number(form.quantity) || 1,
-      stock_qty: Number(form.stock_qty) || 0,
-      planned_cost_price: Number(form.planned_cost_price) || 0,
-      actual_cost_price: Number(form.actual_cost_price) || 0,
-      cost_price: Number(form.planned_cost_price) || 0,
-      selling_price: Number(form.selling_price) || 0,
-      ordered: form.order_status === 'ordered',
+    await bomMutation.mutateAsync({
+      action: 'create',
+      data: {
+        ...form,
+        project_id: projectId,
+        quantity: Number(form.quantity) || 1,
+        stock_qty: Number(form.stock_qty) || 0,
+        planned_cost_price: Number(form.planned_cost_price) || 0,
+        actual_cost_price: Number(form.actual_cost_price) || 0,
+        cost_price: Number(form.planned_cost_price) || 0,
+        selling_price: Number(form.selling_price) || 0,
+        ordered: form.order_status === 'ordered',
+      },
     });
     setForm(EMPTY_FORM);
     setAdding(false);
-    load();
   }
 
   async function deleteItem(id) {
     if (!confirm('Delete this BOM item?')) return;
-    await base44.entities.BOMItem.delete(id);
-    load();
+    await bomMutation.mutateAsync({ action: 'delete', id });
   }
 
   function orderQty(item) {
@@ -253,7 +255,7 @@ export default function TabBOM({ projectId }) {
     return Object.entries(map).sort((a, b) => b[1].plannedCost - a[1].plannedCost);
   }, [allTopLevel]);
 
-  if (loading) return <SkeletonTable columns={6} rows={6} />;
+  if (isLoading) return <SkeletonTable columns={6} rows={6} />;
 
   return (
     <div className="space-y-5">

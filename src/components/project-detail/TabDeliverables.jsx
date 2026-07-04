@@ -1,4 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useEntityList, useEntityMutation } from '@/hooks/useEntity';
+import { useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { Plus, Package, Pencil, Trash2, Save, X, CheckCircle, Wand2, Loader2, Check } from 'lucide-react';
 import PanelWrapper from '@/components/ui/PanelWrapper';
@@ -23,9 +25,11 @@ const EMPTY = {
 };
 
 export default function TabDeliverables({ projectId }) {
-  const [items, setItems]       = useState([]);
-  const [milestones, setMilestones] = useState([]);
-  const [loading, setLoading]   = useState(true);
+  const { data: items = [], isLoading } = useEntityList('Deliverable', { project_id: projectId }, '-created_date', 200);
+  const { data: milestones = [] } = useEntityList('Milestone', { project_id: projectId }, 'planned_date', 100);
+  const delMutation = useEntityMutation('Deliverable');
+  const msMutation = useEntityMutation('Milestone');
+  const queryClient = useQueryClient();
   const [adding, setAdding]     = useState(false);
   const [form, setForm]         = useState(EMPTY);
   const [editingId, setEditingId] = useState(null);
@@ -35,30 +39,19 @@ export default function TabDeliverables({ projectId }) {
   const [bulkField, setBulkField] = useState('');
   const [bulkValue, setBulkValue] = useState('');
 
-  useEffect(() => { load(); }, [projectId]);
-
-  async function load() {
-    setLoading(true);
-    const [d, m] = await Promise.all([
-      base44.entities.Deliverable.filter({ project_id: projectId }, '-created_date', 200),
-      base44.entities.Milestone.filter({ project_id: projectId }, 'planned_date', 100),
-    ]);
-    setItems(d);
-    setMilestones(m);
-    setLoading(false);
-  }
-
   async function create(e) {
     e.preventDefault();
     if (!form.name.trim()) return;
-    await base44.entities.Deliverable.create({
-      ...form,
-      project_id: projectId,
-      quantity: Number(form.quantity) || 1,
+    await delMutation.mutateAsync({
+      action: 'create',
+      data: {
+        ...form,
+        project_id: projectId,
+        quantity: Number(form.quantity) || 1,
+      },
     });
     setForm(EMPTY);
     setAdding(false);
-    load();
   }
 
   function startEdit(item) {
@@ -78,38 +71,47 @@ export default function TabDeliverables({ projectId }) {
   }
 
   async function saveEdit(id) {
-    await base44.entities.Deliverable.update(id, {
-      ...editForm,
-      quantity: Number(editForm.quantity) || 1,
+    await delMutation.mutateAsync({
+      action: 'update',
+      id,
+      data: {
+        ...editForm,
+        quantity: Number(editForm.quantity) || 1,
+      },
     });
     // If accepted, auto-complete linked milestone
     if (editForm.status === 'accepted' && editForm.milestone_id) {
-      await base44.entities.Milestone.update(editForm.milestone_id, {
-        status: 'completed',
-        completed_date: editForm.acceptance_date || new Date().toISOString().slice(0, 10),
+      await msMutation.mutateAsync({
+        action: 'update',
+        id: editForm.milestone_id,
+        data: {
+          status: 'completed',
+          completed_date: editForm.acceptance_date || new Date().toISOString().slice(0, 10),
+        },
       });
     }
     setEditingId(null);
-    load();
   }
 
   async function deleteItem(id) {
-    await base44.entities.Deliverable.delete(id);
-    load();
+    await delMutation.mutateAsync({ action: 'delete', id });
   }
 
   async function quickStatus(item, status) {
     const update = { status };
     if (status === 'accepted' && !item.acceptance_date)
       update.acceptance_date = new Date().toISOString().slice(0, 10);
-    await base44.entities.Deliverable.update(item.id, update);
+    await delMutation.mutateAsync({ action: 'update', id: item.id, data: update });
     if (status === 'accepted' && item.milestone_id) {
-      await base44.entities.Milestone.update(item.milestone_id, {
-        status: 'completed',
-        completed_date: update.acceptance_date || item.acceptance_date,
+      await msMutation.mutateAsync({
+        action: 'update',
+        id: item.milestone_id,
+        data: {
+          status: 'completed',
+          completed_date: update.acceptance_date || item.acceptance_date,
+        },
       });
     }
-    load();
   }
 
   async function autoGenerate() {
@@ -188,7 +190,7 @@ export default function TabDeliverables({ projectId }) {
       }
 
       await base44.entities.Deliverable.bulkCreate(toCreate);
-      load();
+      queryClient.invalidateQueries({ queryKey: ['Deliverable'] });
     } finally {
       setGenerating(false);
     }
@@ -203,17 +205,15 @@ export default function TabDeliverables({ projectId }) {
   }
 
   async function bulkDelete() {
-    await Promise.allSettled([...selectedIds].map(id => base44.entities.Deliverable.delete(id)));
+    await Promise.allSettled([...selectedIds].map(id => delMutation.mutateAsync({ action: 'delete', id })));
     setSelectedIds(new Set());
-    load();
   }
 
   async function applyBulkEdit() {
     if (!bulkField || !bulkValue) return;
-    await Promise.all([...selectedIds].map(id => base44.entities.Deliverable.update(id, { [bulkField]: bulkValue })));
+    await Promise.all([...selectedIds].map(id => delMutation.mutateAsync({ action: 'update', id, data: { [bulkField]: bulkValue } })));
     setBulkField(''); setBulkValue('');
     setSelectedIds(new Set());
-    load();
   }
 
   const milestoneById = Object.fromEntries(milestones.map(m => [m.id, m]));
@@ -228,7 +228,7 @@ export default function TabDeliverables({ projectId }) {
 
   const accepted = items.filter(d => d.status === 'accepted').length;
 
-  if (loading) return <div className="flex justify-center py-12"><div className="w-7 h-7 border-4 border-slate-200 border-t-amber-500 rounded-full animate-spin" /></div>;
+  if (isLoading) return <div className="flex justify-center py-12"><div className="w-7 h-7 border-4 border-slate-200 border-t-amber-500 rounded-full animate-spin" /></div>;
 
   return (
     <div className="space-y-5">

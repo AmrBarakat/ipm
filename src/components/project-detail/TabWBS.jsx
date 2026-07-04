@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useEntityList, useEntityMutation } from '@/hooks/useEntity';
+import { useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { formatDate } from '@/lib/constants';
 import { Plus, ChevronRight, ChevronDown, Trash2, Pencil, Save, X, Layers, AlertTriangle, Wand2, BookOpen, Check } from 'lucide-react';
@@ -56,9 +58,12 @@ async function syncProjectProgress(projectId, items, tree, byId) {
 }
 
 export default function TabWBS({ projectId, project, onProgressChange }) {
+  const { data: wbsData = [], isLoading } = useEntityList('WBSItem', { project_id: projectId }, 'wbs_code', 500);
+  const { data: milestones = [] } = useEntityList('Milestone', { project_id: projectId }, 'planned_date', 100);
+  const wbsMutation = useEntityMutation('WBSItem');
+  const msMutation = useEntityMutation('Milestone');
+  const queryClient = useQueryClient();
   const [items, setItems] = useState([]);
-  const [milestones, setMilestones] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState({});
   const [adding, setAdding] = useState(null);
   const [form, setForm] = useState(emptyForm());
@@ -77,38 +82,30 @@ export default function TabWBS({ projectId, project, onProgressChange }) {
       weight: '', milestone_id: '', predecessor_ids: [] };
   }
 
-  useEffect(() => { load(); }, [projectId]);
-
-  // Reconcile project progress from WBS on every tab open (local rollup —
-  // syncWBSProgress is now automation-only behind x-automation-secret).
+  // Seed local items + auto-expand roots whenever the WBS query refreshes
   useEffect(() => {
+    setItems(wbsData);
+    setExpanded(prev => {
+      const e = { ...prev };
+      wbsData.filter(i => !i.parent_id).forEach(i => { e[i.id] = true; });
+      return e;
+    });
+  }, [wbsData]);
+
+  // Reconcile project progress from WBS on load and after every mutation
+  // (local rollup — syncWBSProgress is now automation-only behind x-automation-secret).
+  useEffect(() => {
+    if (!wbsData.length) return;
     (async () => {
       try {
-        const w = await base44.entities.WBSItem.filter({ project_id: projectId }, 'wbs_code', 500);
-        const byIdLocal = Object.fromEntries(w.map(i => [i.id, i]));
+        const byIdLocal = Object.fromEntries(wbsData.map(i => [i.id, i]));
         const treeLocal = {};
-        w.forEach(i => { const pid = i.parent_id || '__root__'; if (!treeLocal[pid]) treeLocal[pid] = []; treeLocal[pid].push(i); });
-        const p = await syncProjectProgress(projectId, w, treeLocal, byIdLocal);
+        wbsData.forEach(i => { const pid = i.parent_id || '__root__'; if (!treeLocal[pid]) treeLocal[pid] = []; treeLocal[pid].push(i); });
+        const p = await syncProjectProgress(projectId, wbsData, treeLocal, byIdLocal);
         if (p != null) onProgressChange?.(p);
       } catch (_) { /* silent — non-critical */ }
     })();
-  }, [projectId]);
-
-  async function load() {
-    setLoading(true);
-    const [w, m] = await Promise.all([
-      base44.entities.WBSItem.filter({ project_id: projectId }, 'wbs_code', 500),
-      base44.entities.Milestone.filter({ project_id: projectId }, 'planned_date', 100),
-    ]);
-    setItems(w);
-    setMilestones(m);
-    setExpanded(prev => {
-      const e = { ...prev };
-      w.filter(i => !i.parent_id).forEach(i => { e[i.id] = true; });
-      return e;
-    });
-    setLoading(false);
-  }
+  }, [wbsData, projectId]);
 
   const tree = useMemo(() => {
     const byParent = {};
@@ -143,18 +140,20 @@ export default function TabWBS({ projectId, project, onProgressChange }) {
   async function createItem(e) {
     e.preventDefault();
     if (!form.name.trim() || !form.wbs_code.trim()) return;
-    await base44.entities.WBSItem.create({
-      ...form,
-      project_id: projectId,
-      parent_id: adding === 'root' ? null : adding,
-      weight: Number(form.weight) || 0,
-      planned_hours: form.planned_hours ? Number(form.planned_hours) : null,
-      actual_hours: form.actual_hours ? Number(form.actual_hours) : null,
-      planned_cost: form.planned_cost ? Number(form.planned_cost) : null,
-      actual_cost: form.actual_cost ? Number(form.actual_cost) : null,
+    await wbsMutation.mutateAsync({
+      action: 'create',
+      data: {
+        ...form,
+        project_id: projectId,
+        parent_id: adding === 'root' ? null : adding,
+        weight: Number(form.weight) || 0,
+        planned_hours: form.planned_hours ? Number(form.planned_hours) : null,
+        actual_hours: form.actual_hours ? Number(form.actual_hours) : null,
+        planned_cost: form.planned_cost ? Number(form.planned_cost) : null,
+        actual_cost: form.actual_cost ? Number(form.actual_cost) : null,
+      },
     });
     setAdding(null);
-    load();
   }
 
   function startEdit(item) {
@@ -190,44 +189,22 @@ export default function TabWBS({ projectId, project, onProgressChange }) {
       planned_cost: editForm.planned_cost !== '' ? Number(editForm.planned_cost) : null,
       actual_cost: editForm.actual_cost !== '' ? Number(editForm.actual_cost) : null,
     };
-    await base44.entities.WBSItem.update(id, data);
+    await wbsMutation.mutateAsync({ action: 'update', id, data });
     // Auto-complete linked milestone if this item is now completed
     if (data.status === 'completed' && data.milestone_id) {
-      await base44.entities.Milestone.update(data.milestone_id, { status: 'completed', completed_date: data.actual_end || new Date().toISOString().slice(0, 10) });
+      await msMutation.mutateAsync({ action: 'update', id: data.milestone_id, data: { status: 'completed', completed_date: data.actual_end || new Date().toISOString().slice(0, 10) } });
     }
     setEditingId(null);
-    // Reload then sync project progress
-    const updated = await base44.entities.WBSItem.filter({ project_id: projectId }, 'wbs_code', 500);
-    setItems(updated);
-    const newById = Object.fromEntries(updated.map(i => [i.id, i]));
-    const newTree = {};
-    updated.forEach(i => {
-      const pid = i.parent_id || '__root__';
-      if (!newTree[pid]) newTree[pid] = [];
-      newTree[pid].push(i);
-    });
-    const newProgress = await syncProjectProgress(projectId, updated, newTree, newById);
-    onProgressChange?.(newProgress);
+    // WBS query invalidation triggers re-seed + the progress reconcile effect
   }
 
   async function updateStatus(item, status) {
-    await base44.entities.WBSItem.update(item.id, { status });
+    await wbsMutation.mutateAsync({ action: 'update', id: item.id, data: { status } });
     // Auto-complete milestone
     if (status === 'completed' && item.milestone_id) {
-      await base44.entities.Milestone.update(item.milestone_id, { status: 'completed', completed_date: item.actual_end || new Date().toISOString().slice(0, 10) });
+      await msMutation.mutateAsync({ action: 'update', id: item.milestone_id, data: { status: 'completed', completed_date: item.actual_end || new Date().toISOString().slice(0, 10) } });
     }
-    // Reload then sync project progress
-    const updated = await base44.entities.WBSItem.filter({ project_id: projectId }, 'wbs_code', 500);
-    setItems(updated);
-    const newById = Object.fromEntries(updated.map(i => [i.id, i]));
-    const newTree = {};
-    updated.forEach(i => {
-      const pid = i.parent_id || '__root__';
-      if (!newTree[pid]) newTree[pid] = [];
-      newTree[pid].push(i);
-    });
-    const newProgress = await syncProjectProgress(projectId, updated, newTree, newById);
-    onProgressChange?.(newProgress);
+    // WBS query invalidation triggers re-seed + the progress reconcile effect
   }
 
   function getDescendants(id) {
@@ -237,20 +214,8 @@ export default function TabWBS({ projectId, project, onProgressChange }) {
 
   async function deleteItem(id) {
     const descendants = getDescendants(id);
-    await Promise.all([id, ...descendants].map(did => base44.entities.WBSItem.delete(did)));
-    // Reload and sync progress after deletion
-    const updated = await base44.entities.WBSItem.filter({ project_id: projectId }, 'wbs_code', 500);
-    setItems(updated);
-    const newById = Object.fromEntries(updated.map(i => [i.id, i]));
-    const newTree = {};
-    updated.forEach(i => {
-      const pid = i.parent_id || '__root__';
-      if (!newTree[pid]) newTree[pid] = [];
-      newTree[pid].push(i);
-    });
-    const newProgress = await syncProjectProgress(projectId, updated, newTree, newById);
-    onProgressChange?.(newProgress);
-    setLoading(false);
+    await Promise.all([id, ...descendants].map(did => wbsMutation.mutateAsync({ action: 'delete', id: did })));
+    // WBS query invalidation triggers re-seed + the progress reconcile effect
   }
 
   function toggleSelectItem(id) {
@@ -263,17 +228,14 @@ export default function TabWBS({ projectId, project, onProgressChange }) {
     if (!confirm(`Delete ${selectedIds.size} WBS items and their children?`)) return;
     const toDelete = new Set();
     [...selectedIds].forEach(id => { toDelete.add(id); getDescendants(id).forEach(d => toDelete.add(d)); });
-    await Promise.all([...toDelete].map(id => base44.entities.WBSItem.delete(id)));
+    await Promise.all([...toDelete].map(id => wbsMutation.mutateAsync({ action: 'delete', id })));
     setSelectedIds(new Set()); setBulkField(''); setBulkValue('');
-    const updated = await base44.entities.WBSItem.filter({ project_id: projectId }, 'wbs_code', 500);
-    setItems(updated);
   }
   async function applyBulkEdit() {
     if (!bulkField || !bulkValue) return;
     const value = bulkField === 'weight' ? Number(bulkValue) : bulkValue;
-    await Promise.all([...selectedIds].map(id => base44.entities.WBSItem.update(id, { [bulkField]: value })));
+    await Promise.all([...selectedIds].map(id => wbsMutation.mutateAsync({ action: 'update', id, data: { [bulkField]: value } })));
     setBulkField(''); setBulkValue(''); setSelectedIds(new Set());
-    load();
   }
 
   function togglePred(form, setForm, predId) {
@@ -471,7 +433,7 @@ export default function TabWBS({ projectId, project, onProgressChange }) {
   const roots = tree['__root__'] || [];
   const hasConflicts = Object.values(impact).some(d => d.delayed);
 
-  if (loading) return <Spinner />;
+  if (isLoading) return <Spinner />;
 
   return (
     <div className="space-y-4">
@@ -609,7 +571,7 @@ export default function TabWBS({ projectId, project, onProgressChange }) {
         <ScheduleAssistantModal
           projectId={projectId}
           onClose={() => setShowScheduleAssistant(false)}
-          onApplied={() => { setShowScheduleAssistant(false); load(); }}
+          onApplied={() => { setShowScheduleAssistant(false); queryClient.invalidateQueries({ queryKey: ['WBSItem'] }); }}
         />
       )}
       {showTemplates && (
@@ -617,7 +579,7 @@ export default function TabWBS({ projectId, project, onProgressChange }) {
           projectId={projectId}
           project={project}
           onClose={() => setShowTemplates(false)}
-          onApplied={() => { setShowTemplates(false); load(); }}
+          onApplied={() => { setShowTemplates(false); queryClient.invalidateQueries({ queryKey: ['WBSItem'] }); }}
         />
       )}
     </div>

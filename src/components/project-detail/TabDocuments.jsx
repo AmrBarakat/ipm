@@ -1,4 +1,6 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
+import { useEntityList, useEntityMutation } from '@/hooks/useEntity';
+import { useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { formatDate, formatBytes, CATEGORY_LABELS } from '@/lib/constants';
 import {
@@ -32,10 +34,11 @@ const EMPTY_FORM = {
 const inp = 'border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white w-full';
 
 export default function TabDocuments({ projectId, project }) {
-  const [docs, setDocs] = useState([]);
-  const [milestones, setMilestones] = useState([]);
-  const [tasks, setTasks] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { data: docs = [], isLoading } = useEntityList('Document', { project_id: projectId }, '-created_date', 200);
+  const { data: milestones = [] } = useEntityList('Milestone', { project_id: projectId }, 'planned_date', 100);
+  const { data: tasks = [] } = useEntityList('Task', { project_id: projectId }, 'title', 200);
+  const docMutation = useEntityMutation('Document');
+  const queryClient = useQueryClient();
   const [uploading, setUploading] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [file, setFile] = useState(null);
@@ -47,21 +50,6 @@ export default function TabDocuments({ projectId, project }) {
   const [filterCategory, setFilterCategory] = useState('');
   const [collapsed, setCollapsed] = useState({});
 
-  useEffect(() => { load(); }, [projectId]);
-
-  async function load() {
-    setLoading(true);
-    const [d, m, t] = await Promise.all([
-      base44.entities.Document.filter({ project_id: projectId }, '-created_date', 200),
-      base44.entities.Milestone.filter({ project_id: projectId }, 'planned_date', 100),
-      base44.entities.Task.filter({ project_id: projectId }, 'title', 200),
-    ]);
-    setDocs(d);
-    setMilestones(m);
-    setTasks(t);
-    setLoading(false);
-  }
-
   async function upload(e) {
     e.preventDefault();
     if (!form.title.trim()) return;
@@ -71,10 +59,9 @@ export default function TabDocuments({ projectId, project }) {
       const res = await base44.integrations.Core.UploadFile({ file });
       file_url = res.file_url; file_name = file.name; file_size = file.size; content_type = file.type;
     }
-    await base44.entities.Document.create({ ...form, project_id: projectId, file_url, file_name, file_size, content_type });
+    await docMutation.mutateAsync({ action: 'create', data: { ...form, project_id: projectId, file_url, file_name, file_size, content_type } });
     setForm(EMPTY_FORM);
     setFile(null); setShowForm(false); setUploading(false);
-    load();
   }
 
   function startEdit(doc) {
@@ -91,14 +78,12 @@ export default function TabDocuments({ projectId, project }) {
   }
 
   async function saveEdit(id) {
-    await base44.entities.Document.update(id, editForm);
+    await docMutation.mutateAsync({ action: 'update', id, data: editForm });
     setEditingId(null);
-    load();
   }
 
   async function deleteDoc(id) {
-    await base44.entities.Document.delete(id);
-    load();
+    await docMutation.mutateAsync({ action: 'delete', id });
   }
 
   function toggleCollapse(cat) {
@@ -125,7 +110,7 @@ export default function TabDocuments({ projectId, project }) {
   const milestoneById = Object.fromEntries(milestones.map(m => [m.id, m]));
   const taskById = Object.fromEntries(tasks.map(t => [t.id, t]));
 
-  if (loading) return <Spinner />;
+  if (isLoading) return <Spinner />;
 
   return (
     <div className="space-y-4">
@@ -330,7 +315,7 @@ export default function TabDocuments({ projectId, project }) {
           projectId={projectId}
           initialDocument={bomSkillDoc?.id ? bomSkillDoc : null}
           onClose={() => setBomSkillDoc(null)}
-          onImported={() => { setBomSkillDoc(null); load(); }} />
+          onImported={() => { setBomSkillDoc(null); queryClient.invalidateQueries({ queryKey: ['BOMItem'] }); queryClient.invalidateQueries({ queryKey: ['Document'] }); }} />
       )}
     </div>
   );

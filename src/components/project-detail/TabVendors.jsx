@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useEntityList, useEntityMutation } from '@/hooks/useEntity';
+import { useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { formatCurrency, formatDate, BOM_CATEGORY_LABELS } from '@/lib/constants';
 import {
@@ -88,8 +90,9 @@ function SubTabBtn({ id, label, active, onClick, icon }) {
 // ── Purchase Orders Panel ────────────────────────────────────────────────────
 
 function POsPanel({ projectId, project }) {
-  const [pos, setPOs] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { data: pos = [], isLoading } = useEntityList('PurchaseOrder', { project_id: projectId }, '-created_date', 200);
+  const poMutation = useEntityMutation('PurchaseOrder');
+  const queryClient = useQueryClient();
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState(EMPTY_PO);
   const [expanded, setExpanded] = useState({});
@@ -101,23 +104,17 @@ function POsPanel({ projectId, project }) {
   const [filterType, setFilterType] = useState('');
   const [checkingDelays, setCheckingDelays] = useState(false);
 
-  useEffect(() => { load(); }, [projectId]);
-
-  async function load() {
-    setLoading(true);
-    const data = await base44.entities.PurchaseOrder.filter({ project_id: projectId }, '-created_date', 200);
-    setPOs(data);
-    setLoading(false);
-  }
-
   async function createPO(e) {
     e.preventDefault();
     if (!form.description.trim()) return;
-    await base44.entities.PurchaseOrder.create({
-      ...form, project_id: projectId,
-      amount: Number(form.amount) || 0, delivery_notes: [], delay_days: 0, delay_alerted: false,
+    await poMutation.mutateAsync({
+      action: 'create',
+      data: {
+        ...form, project_id: projectId,
+        amount: Number(form.amount) || 0, delivery_notes: [], delay_days: 0, delay_alerted: false,
+      },
     });
-    setForm(EMPTY_PO); setAdding(false); load();
+    setForm(EMPTY_PO); setAdding(false);
   }
 
   function startEdit(po) {
@@ -134,38 +131,46 @@ function POsPanel({ projectId, project }) {
   }
 
   async function saveEdit(id) {
-    await base44.entities.PurchaseOrder.update(id, { ...editForm, amount: Number(editForm.amount) || 0 });
-    setEditingId(null); load();
+    await poMutation.mutateAsync({ action: 'update', id, data: { ...editForm, amount: Number(editForm.amount) || 0 } });
+    setEditingId(null);
   }
 
   async function deletePO(id) {
     if (!confirm('Delete this PO?')) return;
-    await base44.entities.PurchaseOrder.delete(id); load();
+    await poMutation.mutateAsync({ action: 'delete', id });
   }
 
   async function addDeliveryNote(po) {
     if (!dnForm.received_date) return;
     const updated = [...(po.delivery_notes || []), { ...dnForm, id: Date.now().toString() }];
-    await base44.entities.PurchaseOrder.update(po.id, {
-      delivery_notes: updated,
-      status: po.status !== 'delivered' ? 'partially_delivered' : 'delivered',
-      actual_delivery_date: po.actual_delivery_date || dnForm.received_date,
+    await poMutation.mutateAsync({
+      action: 'update',
+      id: po.id,
+      data: {
+        delivery_notes: updated,
+        status: po.status !== 'delivered' ? 'partially_delivered' : 'delivered',
+        actual_delivery_date: po.actual_delivery_date || dnForm.received_date,
+      },
     });
-    setDNForm(EMPTY_DN); setAddingDN(null); load();
+    setDNForm(EMPTY_DN); setAddingDN(null);
   }
 
   async function markDelivered(po) {
-    await base44.entities.PurchaseOrder.update(po.id, {
-      status: 'delivered',
-      actual_delivery_date: po.actual_delivery_date || new Date().toISOString().slice(0, 10),
+    await poMutation.mutateAsync({
+      action: 'update',
+      id: po.id,
+      data: {
+        status: 'delivered',
+        actual_delivery_date: po.actual_delivery_date || new Date().toISOString().slice(0, 10),
+      },
     });
-    load();
   }
 
   async function runDelayCheck() {
     setCheckingDelays(true);
     await base44.functions.invoke('checkShipmentDelays', {});
-    setCheckingDelays(false); load();
+    setCheckingDelays(false);
+    queryClient.invalidateQueries({ queryKey: ['PurchaseOrder'] });
   }
 
   const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -188,7 +193,7 @@ function POsPanel({ projectId, project }) {
   const inTransitCount = pos.filter(p => p.status === 'in_transit').length;
   const currency       = project?.currency || 'SAR';
 
-  if (loading) return <Spinner />;
+  if (isLoading) return <Spinner />;
 
   return (
     <div className="space-y-5">
@@ -411,22 +416,13 @@ function POsPanel({ projectId, project }) {
 // ── Procurement Panel ────────────────────────────────────────────────────────
 
 function ProcurementPanel({ projectId, project }) {
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { data: all = [], isLoading } = useEntityList('BOMItem', { project_id: projectId }, 'supplier', 500);
+  const items = useMemo(() => all.filter(i => (i.order_status || (i.ordered ? 'ordered' : 'not_ordered')) === 'not_ordered'), [all]);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [collapsedSuppliers, setCollapsedSuppliers] = useState(new Set());
   const [generatingPO, setGeneratingPO] = useState(null);
 
-  useEffect(() => { load(); }, [projectId]);
-
-  async function load() {
-    setLoading(true);
-    const all = await base44.entities.BOMItem.filter({ project_id: projectId }, 'supplier', 500);
-    const unordered = all.filter(i => (i.order_status || (i.ordered ? 'ordered' : 'not_ordered')) === 'not_ordered');
-    setItems(unordered);
-    setSelectedIds(new Set(unordered.map(i => i.id)));
-    setLoading(false);
-  }
+  useEffect(() => { setSelectedIds(new Set(items.map(i => i.id))); }, [items]);
 
   const grouped = useMemo(() => {
     const map = {};
@@ -561,7 +557,7 @@ function ProcurementPanel({ projectId, project }) {
   const totalValue = items.reduce((s, i) => s + (Number(i.planned_cost_price) || Number(i.cost_price) || 0) * (Number(i.quantity) || 1), 0);
   const selectedValue = items.filter(i => selectedIds.has(i.id)).reduce((s, i) => s + (Number(i.planned_cost_price) || Number(i.cost_price) || 0) * (Number(i.quantity) || 1), 0);
 
-  if (loading) return <Spinner />;
+  if (isLoading) return <Spinner />;
 
   return (
     <div className="space-y-5">

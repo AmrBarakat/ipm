@@ -1,5 +1,6 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { base44 } from '@/api/base44Client';
+import { useEntityList, useEntityMutation } from '@/hooks/useEntity';
 import { formatDate } from '@/lib/constants';
 import { Plus, ShieldAlert, Sparkles, Trash2, Pencil, Save, X, ChevronDown, ChevronRight, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
 
@@ -39,8 +40,9 @@ const EMPTY_FORM = {
 const inp = 'border border-slate-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white w-full';
 
 export default function TabRisks({ projectId }) {
-  const [risks, setRisks] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { data: risks = [], isLoading } = useEntityList('Risk', { project_id: projectId }, '-created_date', 200);
+  const riskMutation = useEntityMutation('Risk');
+  const taskMutation = useEntityMutation('Task');
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [editingId, setEditingId] = useState(null);
@@ -52,23 +54,13 @@ export default function TabRisks({ projectId }) {
   const [creatingTask, setCreatingTask] = useState(null);
   const [filterStatus, setFilterStatus] = useState('');
 
-  useEffect(() => { load(); }, [projectId]);
-
-  async function load() {
-    setLoading(true);
-    const r = await base44.entities.Risk.filter({ project_id: projectId }, '-created_date', 200);
-    setRisks(r);
-    setLoading(false);
-  }
-
   async function createRisk(e) {
     e.preventDefault();
     if (!form.title.trim()) return;
     const score = (PROB_SCORE[form.probability] || 1) * (IMPACT_SCORE[form.impact] || 1);
-    await base44.entities.Risk.create({ ...form, project_id: projectId, risk_score: score });
+    await riskMutation.mutateAsync({ action: 'create', data: { ...form, project_id: projectId, risk_score: score } });
     setForm(EMPTY_FORM);
     setAdding(false);
-    load();
   }
 
   function startEdit(r) {
@@ -82,15 +74,13 @@ export default function TabRisks({ projectId }) {
 
   async function saveEdit(id) {
     const score = (PROB_SCORE[editForm.probability] || 1) * (IMPACT_SCORE[editForm.impact] || 1);
-    await base44.entities.Risk.update(id, { ...editForm, risk_score: score });
+    await riskMutation.mutateAsync({ action: 'update', id, data: { ...editForm, risk_score: score } });
     setEditingId(null);
-    load();
   }
 
   async function deleteRisk(id) {
     if (!confirm('Delete this risk?')) return;
-    await base44.entities.Risk.delete(id);
-    load();
+    await riskMutation.mutateAsync({ action: 'delete', id });
   }
 
   async function getSuggestions(risk) {
@@ -112,19 +102,21 @@ export default function TabRisks({ projectId }) {
 
   async function applySuggestedTasks(risk, tasks) {
     // Save suggested tasks on the risk record
-    await base44.entities.Risk.update(risk.id, { suggested_tasks: tasks });
-    load();
+    await riskMutation.mutateAsync({ action: 'update', id: risk.id, data: { suggested_tasks: tasks } });
   }
 
   async function createTaskFromSuggestion(taskTitle) {
     if (createdTasks.has(taskTitle)) return;
     setCreatingTask(taskTitle);
     try {
-      await base44.entities.Task.create({
-        project_id: projectId,
-        title: taskTitle,
-        priority: 'high',
-        status: 'todo',
+      await taskMutation.mutateAsync({
+        action: 'create',
+        data: {
+          project_id: projectId,
+          title: taskTitle,
+          priority: 'high',
+          status: 'todo',
+        },
       });
       setCreatedTasks(prev => new Set(prev).add(taskTitle));
     } finally {
@@ -143,7 +135,7 @@ export default function TabRisks({ projectId }) {
   const criticalCount = risks.filter(r => riskScore(r) >= 9).length;
   const mitigatedCount = risks.filter(r => r.status === 'mitigated').length;
 
-  if (loading) return <Spinner />;
+  if (isLoading) return <Spinner />;
 
   return (
     <div className="space-y-5">
