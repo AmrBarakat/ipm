@@ -16,19 +16,29 @@ function isProcurementItem(i) {
   return true;
 }
 
+// Session cache so locally-deleted procurement items (and the frozen BOM
+// snapshot) survive tab switches / unmounts WITHOUT touching the BOM entity.
+// Cleared by "Sync with BOM" or a full page reload.
+const procurementCache = {}; // { [projectId]: { snapshot: array|null, hiddenIds: Set } }
+
 export default function TabProcurement({ projectId, project }) {
   const bomQueryKey = ['BOMItem', { project_id: projectId }, 'supplier', 500];
   const { data: all = [], isLoading } = useEntityList('BOMItem', { project_id: projectId }, 'supplier', 500);
-  const [hiddenIds, setHiddenIds] = useState(new Set());
   // Frozen BOM snapshot — only refreshed by "Sync with BOM" or an intentional
   // bulk edit. Background refetches (e.g. edits in the BOM tab) do NOT resync
   // procurement, so locally-deleted items stay hidden until Sync is pressed.
-  const [snapshot, setSnapshot] = useState(null);
+  const [snapshot, setSnapshot] = useState(() => procurementCache[projectId]?.snapshot ?? null);
+  const [hiddenIds, setHiddenIds] = useState(() => new Set(procurementCache[projectId]?.hiddenIds ?? []));
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [collapsedSuppliers, setCollapsedSuppliers] = useState(new Set());
   const [bulkEdit, setBulkEdit] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const queryClient = useQueryClient();
+
+  // Persist the frozen snapshot + hidden ids across unmounts (tab switches).
+  useEffect(() => {
+    procurementCache[projectId] = { snapshot, hiddenIds };
+  }, [snapshot, hiddenIds, projectId]);
 
   // Pull the latest BOM data from the cache into the local snapshot.
   async function refreshSnapshot() {
@@ -36,12 +46,15 @@ export default function TabProcurement({ projectId, project }) {
     setSnapshot(queryClient.getQueryData(bomQueryKey) || []);
   }
 
-  // Reset the local snapshot when the project changes.
+  // Load this project's cached state when the project changes (or on mount).
   useEffect(() => {
-    setSnapshot(null); setHiddenIds(new Set()); setSelectedIds(new Set());
+    const c = procurementCache[projectId];
+    setSnapshot(c?.snapshot ?? null);
+    setHiddenIds(new Set(c?.hiddenIds ?? []));
+    setSelectedIds(new Set());
   }, [projectId]);
 
-  // Seed the snapshot once on first load.
+  // Seed the snapshot once on first load (when not restored from cache).
   useEffect(() => {
     if (snapshot === null && all.length > 0) setSnapshot(all);
   }, [all, snapshot]);
