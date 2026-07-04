@@ -95,12 +95,12 @@ export default function GanttTree({
                     {isDelayed && <AlertTriangle className="w-3 h-3 text-red-500 shrink-0" />}
                     {isCritical && !isDelayed && <span className="text-rose-500 shrink-0 font-bold leading-none">●</span>}
                     <span className="font-mono text-slate-400 shrink-0">{row.data.wbs_code}</span>
-                    <span className={`truncate ${isCritical ? 'text-rose-800 font-medium' : 'text-slate-700'}`}>{row.data.name}</span>
+                    <span className={`flex-1 min-w-0 whitespace-normal break-words leading-tight line-clamp-2 ${isCritical ? 'text-rose-800 font-medium' : 'text-slate-700'}`}>{row.data.name}</span>
                   </>
                 ) : (
                   <>
                     <Flag className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                    <span className="truncate text-slate-700 font-medium">{row.data.title}</span>
+                    <span className="flex-1 min-w-0 whitespace-normal break-words leading-tight line-clamp-2 text-slate-700 font-medium">{row.data.title}</span>
                   </>
                 )}
               </div>

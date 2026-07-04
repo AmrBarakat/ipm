@@ -34,7 +34,7 @@ export default function TabGantt({ projectId, project }) {
   }, [qWbs, qMilestones]);
 
   const [scaleKey, setScaleKey] = useState('week');
-  const [leftWidth, setLeftWidth] = useState(280);
+  const [leftWidth, setLeftWidth] = useState(340);
   const [expanded, setExpanded] = useState({});
   const [showDeps, setShowDeps] = useState(true);
   const [showCritical, setShowCritical] = useState(true);
@@ -60,11 +60,19 @@ export default function TabGantt({ projectId, project }) {
   }, [wbsItems]);
 
   const bounds = useMemo(() => projectBounds(wbsItems, milestones, project), [wbsItems, milestones, project]);
-  const timelineStartRef = useRef(null);
-  if (timelineStartRef.current === null) timelineStartRef.current = bounds.start;
-  const timelineStart = timelineStartRef.current;
+  // Timeline start: initialize once real data arrives; stays stable during drags.
+  // Reframed explicitly by Fit/Start buttons and before export to focus on project span.
+  const [timelineStart, setTimelineStart] = useState(null);
+  const didInitTimeline = useRef(false);
+  useEffect(() => {
+    if (!didInitTimeline.current && wbsItems.length > 0) {
+      didInitTimeline.current = true;
+      setTimelineStart(bounds.start);
+    }
+  }, [wbsItems.length, bounds.start]);
+  const effectiveStart = timelineStart ?? bounds.start;
   // Extend end dynamically if bars exceed
-  const totalDays = Math.max(daysBetween(timelineStart, bounds.end), 14);
+  const totalDays = Math.max(daysBetween(effectiveStart, bounds.end), 14);
 
   const rows = useMemo(() => buildRows(wbsItems, milestones, expanded), [wbsItems, milestones, expanded]);
   const wbsById = useMemo(() => Object.fromEntries(wbsItems.map(i => [i.id, i])), [wbsItems]);
@@ -103,17 +111,20 @@ export default function TabGantt({ projectId, project }) {
     if (scrollRef.current) scrollRef.current.scrollLeft += days * dayWidth;
   }
   function jumpToToday() {
-    const x = daysBetween(timelineStart, new Date()) * dayWidth - 100;
+    const x = daysBetween(effectiveStart, new Date()) * dayWidth - 100;
     if (scrollRef.current) scrollRef.current.scrollLeft = Math.max(0, x);
   }
   function jumpToStart() {
-    const x = daysBetween(timelineStart, bounds.start) * dayWidth - 20;
-    if (scrollRef.current) scrollRef.current.scrollLeft = Math.max(0, x);
+    setTimelineStart(bounds.start);
+    requestAnimationFrame(() => { if (scrollRef.current) { scrollRef.current.scrollLeft = 0; scrollRef.current.scrollTop = 0; } });
   }
   function fitToProject() {
     if (!containerRef.current) return;
+    // Reframe to current project bounds first so the fit focuses on real activity span
+    setTimelineStart(bounds.start);
+    const span = Math.max(daysBetween(bounds.start, bounds.end), 14);
     const avail = containerRef.current.clientWidth - leftWidth - 24;
-    const need = avail / totalDays;
+    const need = avail / span;
     // pick closest scale
     let best = TIME_SCALES[0], bestDiff = Infinity;
     TIME_SCALES.forEach(s => {
@@ -208,6 +219,9 @@ export default function TabGantt({ projectId, project }) {
   // ── Exports ────────────────────────────────────────────────────────────────
   async function captureCanvas() {
     setExporting(e => e || 'png');
+    // Reframe the timeline to the project's actual activity span (start → end)
+    // so the export focuses only on project activities, not empty/padded space.
+    setTimelineStart(bounds.start);
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
     const el = scrollRef.current;
     const inner = el.firstChild;
@@ -267,6 +281,7 @@ export default function TabGantt({ projectId, project }) {
   );
 
   const innerWidth = leftWidth + totalDays * dayWidth;
+  const startForChart = effectiveStart;
   const chart = (
     <div ref={containerRef} className="flex flex-col h-full">
       <GanttToolbar
@@ -288,7 +303,7 @@ export default function TabGantt({ projectId, project }) {
               onResizeStart={onDividerDown}
             />
             <GanttTimeline
-              rows={rows} timelineStart={timelineStart} totalDays={totalDays} dayWidth={dayWidth}
+              rows={rows} timelineStart={startForChart} totalDays={totalDays} dayWidth={dayWidth}
               scrollTop={scrollTop} viewportH={viewportH - HEADER_H} exporting={!!exporting}
               showDeps={showDeps} showCritical={showCritical} criticalIds={cpm.criticalIds} float={cpm.float}
               wbsById={wbsById}
