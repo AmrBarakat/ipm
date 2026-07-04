@@ -1,67 +1,73 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
-const PROB_SCORE = { low: 1, medium: 2, high: 3 };
-const IMPACT_SCORE = { low: 1, medium: 2, high: 3, critical: 4 };
+/**
+ * suggestRiskMitigation
+ *
+ * Returns an AI-generated mitigation plan for a project risk.
+ *
+ * Auth: automation callers pass `x-automation-secret` matching AUTOMATION_SECRET;
+ *       frontend callers are authenticated via the user token. Either is accepted.
+ *
+ * Input:  { risk_title, risk_description, category, probability, impact }
+ * Output: { mitigation_summary, suggested_tasks[], contingency_plan, timeline }
+ */
+
+const SYSTEM_INSTRUCTION =
+  'You are a risk management expert for industrial automation and energy projects. Respond only in JSON.';
 
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
-    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { project_id, risk_title, risk_description, category, probability, impact } = await req.json();
-    if (!project_id || !risk_title) {
-      return Response.json({ error: 'project_id and risk_title are required' }, { status: 400 });
+    // ── Auth ──────────────────────────────────────────────────────────────
+    const secret = req.headers.get('x-automation-secret');
+    const isAutomation = !!secret && secret === Deno.env.get('AUTOMATION_SECRET');
+    if (!isAutomation) {
+      let user = null;
+      try { user = await base44.auth.me(); } catch (_) { user = null; }
+      if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Fetch historical completed tasks for this project for context
-    const allTasks = await base44.asServiceRole.entities.Task.filter({ project_id }, '-created_date', 200);
-    const doneTasks = allTasks.filter(t => t.status === 'done').map(t => t.title).slice(0, 40);
-    const openTasks = allTasks.filter(t => t.status !== 'done').map(t => t.title).slice(0, 20);
+    // ── Input ─────────────────────────────────────────────────────────────
+    const { risk_title, risk_description, category, probability, impact } = await req.json();
+    if (!risk_title) {
+      return Response.json({ error: 'risk_title is required' }, { status: 400 });
+    }
 
-    const riskScore = (PROB_SCORE[probability] || 2) * (IMPACT_SCORE[impact] || 2);
-
-    const prompt = `You are a senior project manager for industrial automation and energy projects.
-
-A project risk has been logged:
+    const userPrompt = `A project risk has been logged:
 - Title: "${risk_title}"
 - Description: "${risk_description || 'N/A'}"
-- Category: ${category}
-- Probability: ${probability}
-- Impact: ${impact}
-- Risk Score: ${riskScore}/12
+- Category: ${category || 'other'}
+- Probability: ${probability || 'medium'}
+- Impact: ${impact || 'medium'}
 
-Historical completed tasks in this project (for context):
-${doneTasks.length > 0 ? doneTasks.map(t => `• ${t}`).join('\n') : '(none yet)'}
-
-Current open tasks:
-${openTasks.length > 0 ? openTasks.map(t => `• ${t}`).join('\n') : '(none)'}
-
-Based on this risk and the project's task history, suggest 4–6 concrete, actionable mitigation tasks that a team member could immediately create and execute to reduce this risk. 
-Each task title should be specific, short (under 12 words), and directly address the risk.
-Do NOT suggest tasks that already appear in the open tasks list above.
-
-Return ONLY a JSON object in this exact format:
+Suggest concrete mitigation strategies for this risk. Respond with a JSON object in exactly this shape:
 {
-  "suggested_tasks": ["Task 1 title", "Task 2 title", "Task 3 title", "Task 4 title"],
-  "mitigation_summary": "A 1-2 sentence summary of the recommended mitigation strategy."
+  "mitigation_summary": "string — a concise summary of the recommended mitigation strategy",
+  "suggested_tasks": ["string", "..."] — actionable mitigation tasks a team member can execute immediately",
+  "contingency_plan": "string — what to do if the risk materializes",
+  "timeline": "string — recommended timeframe to implement the mitigation"
 }`;
 
     const result = await base44.asServiceRole.integrations.Core.InvokeLLM({
-      prompt,
+      prompt: `${SYSTEM_INSTRUCTION}\n\n${userPrompt}`,
       response_json_schema: {
         type: 'object',
         properties: {
+          mitigation_summary: { type: 'string' },
           suggested_tasks: { type: 'array', items: { type: 'string' } },
-          mitigation_summary: { type: 'string' }
-        }
-      }
+          contingency_plan: { type: 'string' },
+          timeline: { type: 'string' },
+        },
+        required: ['mitigation_summary', 'suggested_tasks', 'contingency_plan', 'timeline'],
+      },
     });
 
     return Response.json({
-      suggested_tasks: result.suggested_tasks || [],
-      mitigation_summary: result.mitigation_summary || '',
-      risk_score: riskScore,
+      mitigation_summary: String(result?.mitigation_summary || ''),
+      suggested_tasks: Array.isArray(result?.suggested_tasks) ? result.suggested_tasks.map(String) : [],
+      contingency_plan: String(result?.contingency_plan || ''),
+      timeline: String(result?.timeline || ''),
     });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });

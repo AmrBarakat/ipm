@@ -47,7 +47,9 @@ export default function TabRisks({ projectId }) {
   const [editForm, setEditForm] = useState({});
   const [expanded, setExpanded] = useState({});
   const [suggesting, setSuggesting] = useState(null); // risk id or 'new'
-  const [suggestions, setSuggestions] = useState({}); // id -> { tasks, summary }
+  const [suggestions, setSuggestions] = useState({}); // id -> { mitigation_summary, suggested_tasks, contingency_plan, timeline }
+  const [createdTasks, setCreatedTasks] = useState(new Set());
+  const [creatingTask, setCreatingTask] = useState(null);
   const [filterStatus, setFilterStatus] = useState('');
 
   useEffect(() => { load(); }, [projectId]);
@@ -115,12 +117,19 @@ export default function TabRisks({ projectId }) {
   }
 
   async function createTaskFromSuggestion(taskTitle) {
-    await base44.entities.Task.create({
-      project_id: projectId,
-      title: taskTitle,
-      priority: 'high',
-      status: 'todo',
-    });
+    if (createdTasks.has(taskTitle)) return;
+    setCreatingTask(taskTitle);
+    try {
+      await base44.entities.Task.create({
+        project_id: projectId,
+        title: taskTitle,
+        priority: 'high',
+        status: 'todo',
+      });
+      setCreatedTasks(prev => new Set(prev).add(taskTitle));
+    } finally {
+      setCreatingTask(null);
+    }
   }
 
   const sorted = useMemo(() =>
@@ -315,7 +324,7 @@ export default function TabRisks({ projectId }) {
                         {suggesting === risk.id
                           ? <Loader2 className="w-3 h-3 animate-spin" />
                           : <Sparkles className="w-3 h-3" />}
-                        {suggesting === risk.id ? 'Thinking…' : 'AI Suggest'}
+                        {suggesting === risk.id ? 'Thinking…' : 'Suggest Mitigation'}
                       </button>
                       <button onClick={() => startEdit(risk)} className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded">
                         <Pencil className="w-3.5 h-3.5" />
@@ -348,9 +357,16 @@ export default function TabRisks({ projectId }) {
                               <span className="text-xs text-slate-700">{t}</span>
                               <button
                                 onClick={() => createTaskFromSuggestion(t)}
-                                className="text-xs text-amber-600 hover:text-amber-800 font-semibold shrink-0"
+                                disabled={createdTasks.has(t) || creatingTask === t}
+                                className="text-xs font-semibold shrink-0 disabled:opacity-60"
                               >
-                                + Create Task
+                                {createdTasks.has(t) ? (
+                                  <span className="text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Created</span>
+                                ) : creatingTask === t ? (
+                                  <span className="text-slate-400 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Creating…</span>
+                                ) : (
+                                  <span className="text-amber-600 hover:text-amber-800">+ Create Task</span>
+                                )}
                               </button>
                             </div>
                           ))}
@@ -360,25 +376,60 @@ export default function TabRisks({ projectId }) {
 
                     {/* Fresh AI suggestions (just fetched) */}
                     {sug && (
-                      <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 space-y-2">
+                      <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 space-y-3">
                         <p className="text-xs font-bold text-purple-700 flex items-center gap-1">
                           <Sparkles className="w-3.5 h-3.5" /> AI Mitigation Suggestions
                         </p>
                         {sug.mitigation_summary && (
-                          <p className="text-xs text-purple-800 leading-relaxed">{sug.mitigation_summary}</p>
+                          <div>
+                            <p className="text-[10px] font-semibold text-purple-500 uppercase tracking-wide mb-0.5">Mitigation Summary</p>
+                            <p className="text-xs text-purple-800 leading-relaxed">{sug.mitigation_summary}</p>
+                          </div>
                         )}
-                        <div className="space-y-1">
-                          {(sug.suggested_tasks || []).map((t, i) => (
-                            <div key={i} className="flex items-center justify-between gap-2 bg-white border border-purple-100 rounded px-3 py-1.5">
-                              <span className="text-xs text-slate-700">{t}</span>
+                        {sug.contingency_plan && (
+                          <div>
+                            <p className="text-[10px] font-semibold text-purple-500 uppercase tracking-wide mb-0.5">Contingency Plan</p>
+                            <p className="text-xs text-purple-800 leading-relaxed">{sug.contingency_plan}</p>
+                          </div>
+                        )}
+                        {sug.timeline && (
+                          <div>
+                            <p className="text-[10px] font-semibold text-purple-500 uppercase tracking-wide mb-0.5">Timeline</p>
+                            <p className="text-xs text-purple-800 leading-relaxed">{sug.timeline}</p>
+                          </div>
+                        )}
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <p className="text-[10px] font-semibold text-purple-500 uppercase tracking-wide">Suggested Mitigation Tasks</p>
+                            {(sug.suggested_tasks || []).length > 0 && (
                               <button
-                                onClick={() => createTaskFromSuggestion(t)}
-                                className="text-xs text-amber-600 hover:text-amber-800 font-semibold shrink-0"
+                                onClick={() => Promise.all((sug.suggested_tasks || []).map(t => createTaskFromSuggestion(t)))}
+                                className="text-[10px] text-purple-700 hover:text-purple-900 font-semibold"
                               >
-                                + Create Task
+                                + Create all as Tasks
                               </button>
-                            </div>
-                          ))}
+                            )}
+                          </div>
+                          <div className="space-y-1">
+                            {(sug.suggested_tasks || []).map((t, i) => (
+                              <div key={i} className="flex items-center justify-between gap-2 bg-white border border-purple-100 rounded px-3 py-1.5">
+                                <span className="text-xs text-slate-700">{t}</span>
+                                <button
+                                  onClick={() => createTaskFromSuggestion(t)}
+                                  disabled={createdTasks.has(t) || creatingTask === t}
+                                  className="text-xs font-semibold shrink-0 disabled:opacity-60"
+                                >
+                                  {createdTasks.has(t) ? (
+                                    <span className="text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Created</span>
+                                  ) : creatingTask === t ? (
+                                    <span className="text-slate-400 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Creating…</span>
+                                  ) : (
+                                    <span className="text-amber-600 hover:text-amber-800">+ Create Task</span>
+                                  )}
+                                </button>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                         <button
                           onClick={() => applySuggestedTasks(risk, sug.suggested_tasks)}
