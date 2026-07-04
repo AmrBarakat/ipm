@@ -52,7 +52,10 @@ export default function TabFinancials({ projectId, project }) {
 
   async function createInvoice(e) {
     e.preventDefault();
-    await invoiceMutation.mutateAsync({ action: 'create', data: { ...invForm, project_id: projectId, planned_amount: Number(invForm.planned_amount) || 0 } });
+    // milestone_id is unique at the entity level; manual invoices get a
+    // 'manual-<uuid>' sentinel so they never collide with each other or with
+    // milestone-linked invoices.
+    await invoiceMutation.mutateAsync({ action: 'create', data: { ...invForm, project_id: projectId, milestone_id: `manual-${crypto.randomUUID()}`, planned_amount: Number(invForm.planned_amount) || 0 } });
     setInvForm({ description: '', planned_amount: '', planned_date: '' });
     setAddingInv(false);
   }

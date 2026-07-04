@@ -7,7 +7,8 @@
     },
     "milestone_id": {
       "type": "string",
-      "description": "Optional link to Milestone"
+      "description": "Link to Milestone. Unique: one invoice per milestone. Non-milestone invoices use a 'manual-<uuid>' sentinel so nulls never collide.",
+      "unique": true
     },
     "description": {
       "type": "string"
