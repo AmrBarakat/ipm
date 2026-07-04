@@ -162,6 +162,7 @@ Deno.serve(async (req) => {
         .join('\n');
 
       const llmResult = await base44.asServiceRole.integrations.Core.InvokeLLM({
+        model: 'gemini_3_flash',
         prompt: `You are a project scheduling expert for industrial automation projects. 
         
 Existing scheduled WBS items:
@@ -220,14 +221,14 @@ Return only valid JSON.`,
 
     // ── Step 4: Check milestone impact ─────────────────────────────────────
     const milestoneImpacts = [];
+    // Latest suggested end across all items — computed once, reused per milestone.
+    const latestEnd = Object.values(allSuggestions)
+      .map(s => s.planned_end)
+      .filter(Boolean)
+      .sort()
+      .pop();
     for (const ms of milestones) {
       if (!ms.planned_date || ms.status === 'completed') continue;
-      // Find latest planned_end among all suggested items
-      const latestEnd = Object.values(allSuggestions)
-        .map(s => s.planned_end)
-        .filter(Boolean)
-        .sort()
-        .pop();
       if (latestEnd && latestEnd > ms.planned_date) {
         const shift = workingDaysBetween(ms.planned_date, latestEnd);
         milestoneImpacts.push({
