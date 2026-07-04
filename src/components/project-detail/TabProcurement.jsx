@@ -7,7 +7,16 @@ import { ShoppingCart, Package, ChevronDown, ChevronRight, Check, AlertCircle, X
 
 export default function TabProcurement({ projectId, project }) {
   const { data: all = [], isLoading } = useEntityList('BOMItem', { project_id: projectId }, 'supplier', 500);
-  const items = useMemo(() => all.filter(i => (i.order_status || (i.ordered ? 'ordered' : 'not_ordered')) === 'not_ordered'), [all]);
+  const items = useMemo(() => all.filter(i => {
+    const os = i.order_status || (i.ordered ? 'ordered' : 'not_ordered');
+    if (os !== 'not_ordered') return false;
+    // Exclude panel child items (they're ordered as part of their panel parent)
+    if (i.parent_id) return false;
+    // Exclude engineering / service line items (non-material, not procured via PO)
+    const pn = (i.manufacturer_part_number || '').trim().toLowerCase();
+    if (i.category === 'service' || pn === 'engineering') return false;
+    return true;
+  }), [all]);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [collapsedSuppliers, setCollapsedSuppliers] = useState(new Set());
   const [bulkEdit, setBulkEdit] = useState(null);
