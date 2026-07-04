@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { formatCurrency } from '@/lib/constants';
+import { safeDiv } from '@/lib/utils';
 import { DollarSign, TrendingUp, Layers, CheckSquare } from 'lucide-react';
 
 export default function ProjectSummaryWidget({ projects }) {
@@ -8,7 +9,7 @@ export default function ProjectSummaryWidget({ projects }) {
 
     const totalValue = projects.reduce((s, p) => s + (p.contract_value || 0), 0);
     const avgProgress = Math.round(
-      projects.reduce((s, p) => s + (p.progress || 0), 0) / projects.length
+      safeDiv(projects.reduce((s, p) => s + (p.progress || 0), 0), projects.length)
     );
     const activeCount = projects.filter(p => ['planning', 'in_progress', 'commissioning'].includes(p.status)).length;
     const completedCount = projects.filter(p => p.status === 'completed').length;

@@ -6,6 +6,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { base44 } from '@/api/base44Client';
 import { isTopLevelBOM } from '@/lib/constants';
+import { safeDiv } from '@/lib/utils';
 import {
   CheckCircle2, AlertTriangle, XCircle, MinusCircle,
   ChevronDown, ChevronRight, RefreshCw, Flag, Search,
@@ -341,7 +342,7 @@ export default function TabBOMReconciliation({ projectId }) {
                               <td className="px-3 py-2 text-right text-emerald-700">{fmt(extractedSell)}</td>
                               <td className="px-3 py-2 text-right">
                                 {extractedSell > 0 ? (
-                                  <span className="text-emerald-600">{((extractedSell - extractedCost) / extractedSell * 100).toFixed(1)}%</span>
+                                  <span className="text-emerald-600">{(safeDiv(extractedSell - extractedCost, extractedSell) * 100).toFixed(1)}%</span>
                                 ) : '—'}
                               </td>
                             </tr>

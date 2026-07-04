@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import BOMTemplateEditor from '@/components/bom/BOMTemplateEditor';
 import { toast } from 'sonner';
+import { safeDiv } from '@/lib/utils';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -125,8 +126,8 @@ function PanelChildRow({ child, panelId, onDragStart }) {
       <td className="px-2 py-1.5 text-right">{fmt(child.total_selling_sar)}</td>
       <td className="px-2 py-1.5 text-right">
         {child.gross_profit != null && child.total_selling_sar > 0 ? (
-          <span className={`font-semibold text-[10px] ${(child.gross_profit / child.total_selling_sar) < 0 ? 'text-red-500' : 'text-emerald-600'}`}>
-            {((child.gross_profit / child.total_selling_sar) * 100).toFixed(1)}%
+          <span className={`font-semibold text-[10px] ${safeDiv(child.gross_profit, child.total_selling_sar) < 0 ? 'text-red-500' : 'text-emerald-600'}`}>
+            {(safeDiv(child.gross_profit, child.total_selling_sar) * 100).toFixed(1)}%
           </span>
         ) : '—'}
       </td>
@@ -612,7 +613,7 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
                             const marginDisplay  = item.margin_pct != null
                               ? (item.margin_pct * 100).toFixed(1) + '%'
                               : (item.gross_profit_sar != null && item.total_selling_sar > 0)
-                                ? ((item.gross_profit_sar / item.total_selling_sar) * 100).toFixed(1) + '%'
+                                ? (safeDiv(item.gross_profit_sar, item.total_selling_sar) * 100).toFixed(1) + '%'
                                 : '—';
 
                             return [
