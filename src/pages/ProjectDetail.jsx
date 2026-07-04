@@ -6,6 +6,7 @@ import { ArrowLeft, Pencil, FolderOpen, BarChart2 } from 'lucide-react';
 import ProjectPDFExport from '@/components/project-detail/ProjectPDFExport';
 import ProgressReportModal from '@/components/project-detail/ProgressReportModal';
 import ProjectForm from '@/components/projects/ProjectForm';
+import { useTranslation } from '@/hooks/useTranslation';
 
 const TabOverview = lazy(() => import('@/components/project-detail/TabOverview'));
 const TabTasks = lazy(() => import('@/components/project-detail/TabTasks'));
@@ -28,24 +29,14 @@ const TabSpinner = () => (
 );
 
 const TABS = [
-  { id: 'overview',      label: 'Overview'       },
-  { id: 'gantt',         label: 'Gantt'          },
-  { id: 'wbs',           label: 'WBS'            },
-  { id: 'tasks',         label: 'Tasks'          },
-  { id: 'milestones',    label: 'Milestones'     },
-  { id: 'deliverables',  label: 'Deliverables'   },
-  { id: 'bom',           label: 'BOM'            },
-  { id: 'financials',    label: 'Financials'     },
-  { id: 'documents',     label: 'Documents'      },
-  { id: 'notes',         label: 'Notes'          },
-  { id: 'risks',         label: 'Risks'          },
-  { id: 'vendors',       label: 'Vendors & POs'  },
-  { id: 'bom_reconcile', label: 'BOM Reconcile' },
+  'overview', 'gantt', 'wbs', 'tasks', 'milestones', 'deliverables',
+  'bom', 'financials', 'documents', 'notes', 'risks', 'vendors', 'bom_reconcile',
 ];
 
 export default function ProjectDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
@@ -77,7 +68,7 @@ export default function ProjectDetail() {
   );
 
   if (!project) return (
-    <div className="text-center py-20 text-slate-500">Project not found.</div>
+    <div className="text-center py-20 text-slate-500">{t('projectDetail.notFound')}</div>
   );
 
   return (
@@ -112,14 +103,14 @@ export default function ProjectDetail() {
         </div>
         <div className="flex items-center gap-2">
           <div className="text-right hidden md:block">
-            <div className="text-xs text-slate-500">Contract Value</div>
+            <div className="text-xs text-slate-500">{t('projectDetail.contractValue')}</div>
             <div className="font-bold text-slate-800">{formatCurrency(project.contract_value, project.currency)}</div>
           </div>
           <button
             onClick={() => setShowProgressReport(true)}
             className="flex items-center gap-2 px-4 py-2 rounded border border-amber-300 bg-amber-50 hover:bg-amber-100 text-sm text-amber-700 font-medium transition"
           >
-            <BarChart2 className="w-4 h-4" /> Progress Report
+            <BarChart2 className="w-4 h-4" /> {t('projectDetail.progressReport')}
           </button>
           <ProjectPDFExport project={project} />
           <button
@@ -127,7 +118,7 @@ export default function ProjectDetail() {
             className="flex items-center gap-2 px-4 py-2 rounded border border-slate-300 hover:bg-slate-100 text-sm text-slate-700 font-medium transition"
           >
             <Pencil className="w-4 h-4" />
-            {editing ? 'Cancel Edit' : 'Edit Project'}
+            {editing ? t('projectDetail.cancelEdit') : t('projectDetail.editProject')}
           </button>
         </div>
       </div>
@@ -139,7 +130,7 @@ export default function ProjectDetail() {
         </div>
         <span className="text-sm font-semibold text-slate-600 w-12 text-right">{project.progress || 0}%</span>
         {project.target_completion_date && (
-          <span className="text-xs text-slate-500 hidden sm:block">Due {formatDate(project.target_completion_date)}</span>
+          <span className="text-xs text-slate-500 hidden sm:block">{t('common.due')} {formatDate(project.target_completion_date)}</span>
         )}
       </div>
 
@@ -154,17 +145,17 @@ export default function ProjectDetail() {
       {!editing && (
         <>
           <div className="flex gap-1 border-b border-slate-200 mb-6 overflow-x-auto">
-            {TABS.map(t => (
+            {TABS.map(tabId => (
               <button
-                key={t.id}
-                onClick={() => setActiveTab(t.id)}
+                key={tabId}
+                onClick={() => setActiveTab(tabId)}
                 className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition -mb-px ${
-                  activeTab === t.id
+                  activeTab === tabId
                     ? 'border-amber-500 text-amber-600'
                     : 'border-transparent text-slate-500 hover:text-slate-700'
                 }`}
               >
-                {t.label}
+                {t(`projectDetail.tabs.${tabId}`)}
               </button>
             ))}
           </div>

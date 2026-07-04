@@ -6,6 +6,7 @@ import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import AppLayout from '@/components/layout/AppLayout';
+import { TranslationProvider } from '@/hooks/useTranslation';
 // Add page imports here
 import Portfolio from '@/pages/Portfolio';
 import Projects from '@/pages/Projects';
@@ -56,10 +57,12 @@ function App() {
   return (
     <AuthProvider>
       <QueryClientProvider client={queryClientInstance}>
+        <TranslationProvider>
         <Router>
           <AuthenticatedApp />
         </Router>
         <Toaster />
+        </TranslationProvider>
       </QueryClientProvider>
     </AuthProvider>
   )

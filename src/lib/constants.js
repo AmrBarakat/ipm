@@ -1,26 +1,10 @@
-export const STATUS_LABELS = {
-  planning: 'Planning',
-  in_progress: 'In Progress',
-  commissioning: 'Commissioning',
-  completed: 'Completed',
-  closed: 'Closed',
-  on_hold: 'On Hold',
-};
+import en from '@/locales/en';
 
-export const TYPE_LABELS = {
-  plc: 'PLC',
-  plc_scada: 'PLC & SCADA',
-  pme: 'PME',
-  service: 'Service',
-  other: 'Other',
-};
-
-export const PRIORITY_LABELS = {
-  low: 'Low',
-  medium: 'Medium',
-  high: 'High',
-  critical: 'Critical',
-};
+// Label maps are sourced from the English locale (src/locales/en.js) so all
+// display strings live in one place. Adding a language = adding a locale file.
+export const STATUS_LABELS = en.projects.status;
+export const TYPE_LABELS = en.projects.type;
+export const PRIORITY_LABELS = en.projects.priority;
 
 export const STATUS_COLORS = {
   planning: 'bg-slate-100 text-slate-700',
@@ -44,92 +28,14 @@ export const RAG_COLORS = {
   red:   { bg: 'bg-red-500',     text: 'text-red-600',     badge: 'bg-red-100 text-red-700 border-red-300',           label: 'Critical' },
 };
 
-export const CATEGORY_LABELS = {
-  charter: 'Project Charter',
-  contract: 'Contract',
-  po: 'Purchase Order',
-  offer: 'Offer / Quotation',
-  delivery_note: 'Delivery Note',
-  engineering: 'Engineering Document',
-  drawing: 'Drawing (DWG / CAD)',
-  submittal: 'Submittal',
-  bom: 'Bill of Materials (BOM)',
-  project_plan: 'Project Plan',
-  report: 'Report',
-  invoice: 'Invoice',
-  other: 'Other',
-};
-
-export const DELIVERABLE_TYPE_LABELS = {
-  hardware: 'Hardware',
-  software: 'Software',
-  document: 'Document',
-  service: 'Service',
-  training: 'Training',
-  other: 'Other',
-};
-
-export const DELIVERABLE_STATUS_LABELS = {
-  pending: 'Pending',
-  in_progress: 'In Progress',
-  delivered: 'Delivered',
-  accepted: 'Accepted',
-  rejected: 'Rejected',
-};
-
-export const INVOICE_STATUS_LABELS = {
-  planned: 'Planned',
-  invoiced: 'Invoiced',
-  paid: 'Paid',
-  partial: 'Partial',
-  overdue: 'Overdue',
-  cancelled: 'Cancelled',
-};
-
-export const EXPENSE_STATUS_LABELS = {
-  planned: 'Planned',
-  committed: 'Committed',
-  paid: 'Paid',
-  cancelled: 'Cancelled',
-};
-
-export const EXPENSE_CATEGORY_LABELS = {
-  material: 'Material',
-  labor: 'Labor',
-  subcontract: 'Subcontract',
-  travel: 'Travel',
-  other: 'Other',
-};
-
-export const WBS_STATUS_LABELS = {
-  not_started: 'Not Started',
-  in_progress: 'In Progress',
-  completed: 'Completed',
-  blocked: 'Blocked',
-};
-
-export const BOM_CATEGORY_LABELS = {
-  plc: 'PLC',
-  hmi: 'HMI',
-  drive: 'Drive / VFD',
-  drive_vfd: 'Drive / VFD',
-  sensor: 'Sensor / Instrument',
-  sensor_instrument: 'Sensor / Instrument',
-  meter: 'Meter',
-  panel: 'Panel / Enclosure',
-  panel_enclosure: 'Panel / Enclosure',
-  cable: 'Cable / Wiring',
-  cable_wiring: 'Cable / Wiring',
-  network: 'Network / Comms',
-  network_comms: 'Network / Comms',
-  software: 'Software / License',
-  software_license: 'Software / License',
-  service: 'Service / Labor',
-  service_labor: 'Service / Labor',
-  it_hardware: 'IT Hardware',
-  'IT-HW': 'IT Hardware',
-  other: 'Other',
-};
+export const CATEGORY_LABELS = en.documents.category;
+export const DELIVERABLE_TYPE_LABELS = en.deliverables.type;
+export const DELIVERABLE_STATUS_LABELS = en.deliverables.status;
+export const INVOICE_STATUS_LABELS = en.financials.invoiceStatus;
+export const EXPENSE_STATUS_LABELS = en.financials.expenseStatus;
+export const EXPENSE_CATEGORY_LABELS = en.financials.expenseCategory;
+export const WBS_STATUS_LABELS = en.wbs.status;
+export const BOM_CATEGORY_LABELS = en.bom.category;
 
 export const CURRENCIES = ['SAR', 'AED', 'USD', 'EUR', 'GBP', 'EGP', 'JPY', 'CNY'];
 
