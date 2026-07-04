@@ -66,7 +66,6 @@ export default {
       notes: 'Notes',
       risks: 'Risks',
       vendors: 'Vendors & POs',
-      bom_reconcile: 'BOM Reconcile',
     },
   },
   documents: {
