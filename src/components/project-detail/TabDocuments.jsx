@@ -156,10 +156,6 @@ export default function TabDocuments({ projectId, project }) {
           <span className="text-xs text-slate-400">{filtered.length} document{filtered.length !== 1 ? 's' : ''}</span>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setBomSkillDoc({})}
-            className="flex items-center gap-1 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white font-semibold text-sm rounded">
-            <Cpu className="w-4 h-4" /> Import BOM
-          </button>
           <button onClick={() => { setShowForm(v => !v); setForm(EMPTY_FORM); setFile(null); }}
             className="flex items-center gap-1 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold text-sm rounded">
             <Upload className="w-4 h-4" /> Upload Document
@@ -299,12 +295,14 @@ export default function TabDocuments({ projectId, project }) {
                                     className="flex items-center gap-1 px-2.5 py-1 text-xs border border-slate-300 rounded hover:bg-slate-100 text-slate-600">
                                     <ExternalLink className="w-3 h-3" /> Open
                                   </a>
-                                  <button onClick={() => handleExtract(doc)} disabled={extractingId === doc.id}
-                                    className="flex items-center gap-1 px-2.5 py-1 text-xs border border-amber-300 rounded hover:bg-amber-50 text-amber-700 font-medium disabled:opacity-60">
-                                    {extractingId === doc.id
-                                      ? <Loader2 className="w-3 h-3 animate-spin" />
-                                      : <Wand2 className="w-3 h-3" />} Extract
-                                  </button>
+                                  {(doc.category === 'po' || doc.category === 'delivery_note') && (
+                                    <button onClick={() => handleExtract(doc)} disabled={extractingId === doc.id}
+                                      className="flex items-center gap-1 px-2.5 py-1 text-xs border border-amber-300 rounded hover:bg-amber-50 text-amber-700 font-medium disabled:opacity-60">
+                                      {extractingId === doc.id
+                                        ? <Loader2 className="w-3 h-3 animate-spin" />
+                                        : <Wand2 className="w-3 h-3" />} Extract
+                                    </button>
+                                  )}
                                   {['engineering', 'drawing', 'submittal', 'other', 'bom', 'charter'].includes(doc.category) && (
                                     <button onClick={() => setBomSkillDoc(doc)}
                                       className="flex items-center gap-1 px-2.5 py-1 text-xs border border-amber-300 rounded hover:bg-amber-50 text-amber-700 font-medium">
