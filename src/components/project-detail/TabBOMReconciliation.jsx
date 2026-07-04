@@ -8,7 +8,7 @@ import { base44 } from '@/api/base44Client';
 import {
   CheckCircle2, AlertTriangle, XCircle, MinusCircle,
   ChevronDown, ChevronRight, RefreshCw, Flag, Search,
-  FileSearch, Info, TrendingUp, TrendingDown, Layers
+  FileSearch, Info, TrendingUp, TrendingDown
 } from 'lucide-react';
 import BOMExtractionPreviewModal from './BOMExtractionPreviewModal';
 

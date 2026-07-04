@@ -3,7 +3,6 @@
  * Step 1: Upload → Step 2: Mapping Review → Step 3: Preview/Edit → Step 4: Save
  */
 import { useState } from 'react';
-import { base44 } from '@/api/base44Client';
 import { Upload, X } from 'lucide-react';
 import BomStepUpload from './BomStepUpload';
 import BomStepMapping from './BomStepMapping';

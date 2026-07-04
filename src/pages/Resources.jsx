@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Users, AlertTriangle, TrendingUp, Clock, ChevronDown, ChevronRight } from 'lucide-react';
-import ProgressRing from '@/components/projects/ProgressRing';
 
 const CAPACITY_HOURS_PER_WEEK = 40; // assumed weekly capacity per person
 

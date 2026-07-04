@@ -3,9 +3,8 @@
  * Shows each logical field → detected column, confidence, sample values.
  * User can override via dropdown.
  */
-import { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
-import { CheckCircle2, AlertTriangle, ChevronDown, Info, Loader2 } from 'lucide-react';
+import { useState } from 'react';
+import { AlertTriangle, Info } from 'lucide-react';
 
 const LOGICAL_FIELDS = [
   { key: 'description', label: 'Description', required: true },

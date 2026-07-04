@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { formatDate, formatCurrency, BOM_CATEGORY_LABELS } from '@/lib/constants';
 import { Plus, Package, Pencil, Trash2, Save, X, CheckCircle, Wand2, Loader2, Check } from 'lucide-react';
 import PanelWrapper from '@/components/ui/PanelWrapper';
 

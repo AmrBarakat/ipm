@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { base44 } from '@/api/base44Client';
 import { formatDate } from '@/lib/constants';
-import { Plus, ChevronRight, ChevronDown, Trash2, Pencil, Save, X, Layers, AlertTriangle, Link, Wand2, BookOpen, Check } from 'lucide-react';
+import { Plus, ChevronRight, ChevronDown, Trash2, Pencil, Save, X, Layers, AlertTriangle, Wand2, BookOpen, Check } from 'lucide-react';
 import PanelWrapper from '@/components/ui/PanelWrapper';
 import ScheduleAssistantModal from './ScheduleAssistantModal';
 import ProjectPlanTemplateModal from './ProjectPlanTemplateModal';

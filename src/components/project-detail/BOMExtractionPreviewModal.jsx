@@ -2,15 +2,14 @@
  * BOM Extraction Preview Modal
  * Spec: BOM_Base44_Complete_Specification_v2.md — Parts L, M, N, O
  */
-import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
 import * as XLSX from 'xlsx';
 import {
   X, Loader2, CheckCircle2, FileSearch, AlertTriangle,
   ChevronDown, ChevronRight, Check, Settings, Layers,
-  GripVertical, Undo2, FileText, Save, Trash2
+  GripVertical, FileText, Save, Trash2
 } from 'lucide-react';
-import { BOM_CATEGORY_LABELS } from '@/lib/constants';
 import BOMTemplateEditor from '@/components/bom/BOMTemplateEditor';
 import { toast } from 'sonner';
 

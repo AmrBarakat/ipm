@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { base44 } from '@/api/base44Client';
 import { formatCurrency, formatDate } from '@/lib/constants';
-import { Package, AlertTriangle, FileText, Loader2, Truck, CheckCircle2, Clock } from 'lucide-react';
+import { Package, AlertTriangle, FileText, Loader2, Truck, CheckCircle2 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 
 const PO_STATUS_LABELS = {

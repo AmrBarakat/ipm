@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { base44 } from '@/api/base44Client';
-import { formatCurrency, formatDate, STATUS_LABELS, STATUS_COLORS } from '@/lib/constants';
+import { formatCurrency, STATUS_LABELS, STATUS_COLORS } from '@/lib/constants';
 import { AlertTriangle, ArrowUpRight, ArrowDownRight, Flag } from 'lucide-react';
 import SkeletonTable from '@/components/ui/SkeletonTable';
 import EmptyState from '@/components/ui/EmptyState';

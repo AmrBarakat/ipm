@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { base44 } from '@/api/base44Client';
 import { formatDate, formatCurrency, EXPENSE_CATEGORY_LABELS } from '@/lib/constants';
-import { FileText, CreditCard, CheckCircle, AlertCircle, ClipboardList, BarChart2, PieChart, Wallet, Package, Tag, Truck, ShoppingCart, TrendingUp, Clock } from 'lucide-react';
+import { FileText, CreditCard, CheckCircle, AlertCircle, ClipboardList, BarChart2, PieChart, Wallet, Package, Tag, Truck, ShoppingCart, TrendingUp } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import StatusProgressChart from '@/components/project-detail/StatusProgressChart';
 import SpendingSummaryDashboard from '@/components/project-detail/SpendingSummaryDashboard';

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { formatDate, formatCurrency, STATUS_LABELS, TYPE_LABELS, PRIORITY_LABELS, DELIVERABLE_STATUS_LABELS } from '@/lib/constants';
+import { formatDate, formatCurrency, STATUS_LABELS, TYPE_LABELS, PRIORITY_LABELS } from '@/lib/constants';
 import { X, FileDown, Loader2, CheckCircle2, Clock, AlertTriangle, Flag, Package, Shield } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 

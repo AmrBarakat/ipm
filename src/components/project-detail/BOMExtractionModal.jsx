@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { base44 } from '@/api/base44Client';
-import { X, Loader2, CheckCircle, Trash2, ChevronDown } from 'lucide-react';
+import { X, Loader2, CheckCircle, Trash2 } from 'lucide-react';
 
 const CATEGORIES = ['plc', 'hmi', 'drive', 'sensor', 'meter', 'panel', 'cable', 'network', 'software', 'service', 'other'];
 

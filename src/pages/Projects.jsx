@@ -10,7 +10,6 @@ import {
 import { Plus, Search, FolderOpen, Filter, Trash2, RefreshCw, CheckSquare, Square, ChevronDown, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import ProjectSummaryWidget from '@/components/projects/ProjectSummaryWidget';
-import ProgressRing from '@/components/projects/ProgressRing';
 import { useTranslation } from '@/hooks/useTranslation';
 import SkeletonCard from '@/components/ui/SkeletonCard';
 

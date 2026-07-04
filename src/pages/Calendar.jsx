@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
-import { formatDate } from '@/lib/constants';
 import { CalendarDays, ChevronLeft, ChevronRight, Flag, CheckSquare, Filter, X } from 'lucide-react';
 
 const TASK_STATUS_COLORS = {

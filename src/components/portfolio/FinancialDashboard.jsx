@@ -1,13 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
 import { base44 } from '@/api/base44Client';
 import { formatCurrency, TYPE_LABELS } from '@/lib/constants';
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+import { Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   LineChart, Line, ComposedChart, ResponsiveContainer,
   PieChart, Pie, Cell } from
 'recharts';
 import {
-  TrendingUp, TrendingDown, DollarSign, Wallet,
+  TrendingUp, DollarSign, Wallet,
   ReceiptText, ArrowUpCircle, ArrowDownCircle, Activity } from
 'lucide-react';
 

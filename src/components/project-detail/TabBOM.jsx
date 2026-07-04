@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
-import { formatCurrency, formatDate, BOM_CATEGORY_LABELS } from '@/lib/constants';
-import { Plus, Package, Trash2, Filter, Tag, Truck, ShoppingCart, TrendingUp, CheckCircle, Clock, Edit2, X, Check, ChevronDown, ChevronRight, Layers } from 'lucide-react';
+import { formatCurrency, BOM_CATEGORY_LABELS } from '@/lib/constants';
+import { Plus, Package, Trash2, Filter, Tag, Truck, ShoppingCart, TrendingUp, CheckCircle, Clock, X, Check, ChevronDown, ChevronRight, Layers } from 'lucide-react';
 import PanelWrapper from '@/components/ui/PanelWrapper';
 import SkeletonTable from '@/components/ui/SkeletonTable';
 import EmptyState from '@/components/ui/EmptyState';

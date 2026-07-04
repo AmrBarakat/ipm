@@ -3,7 +3,7 @@
  */
 import { useState, useRef, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { Upload, FileSpreadsheet, Loader2, AlertTriangle } from 'lucide-react';
+import { FileSpreadsheet, Loader2, AlertTriangle } from 'lucide-react';
 
 export default function BomStepUpload({ projectId, initialDocument, onRecognized }) {
   const [dragging, setDragging] = useState(false);

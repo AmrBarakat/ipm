@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { base44 } from '@/api/base44Client';
 import { formatDate, formatBytes, CATEGORY_LABELS } from '@/lib/constants';
 import {
-  FileText, Upload, ExternalLink, Pencil, Trash2, Save, X,
+  FileText, Upload, ExternalLink, Pencil, Trash2, Save,
   Cpu, Filter, Link2, ChevronDown, ChevronRight, FileCheck
 } from 'lucide-react';
 import ProjectPlanExtractModal from './ProjectPlanExtractModal';

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { X, Plus, Trash2, Save, BookTemplate, Wand2, ChevronDown, ChevronRight, Flag, Layers, Check, AlertCircle } from 'lucide-react';
+import { X, Plus, Trash2, Save, Wand2, ChevronDown, ChevronRight, Flag, Layers, Check } from 'lucide-react';
 
 const inp = 'border border-slate-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white w-full';
 

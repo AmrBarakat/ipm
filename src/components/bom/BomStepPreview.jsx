@@ -4,7 +4,7 @@
  */
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { Loader2, AlertTriangle, ChevronRight, ChevronDown, Trash2, Check, Layers } from 'lucide-react';
+import { Loader2, AlertTriangle, ChevronRight, ChevronDown, Trash2, Layers } from 'lucide-react';
 
 const CATEGORY_LABELS = {
   plc: 'Equipment / PLC', hmi: 'HMI', drive: 'Drive', sensor: 'Sensor',
