@@ -66,6 +66,8 @@ export default {
       notes: 'Notes',
       risks: 'Risks',
       vendors: 'Vendors & POs',
+      procurement: 'Procurement',
+      changeOrders: 'Change Orders',
     },
   },
   documents: {

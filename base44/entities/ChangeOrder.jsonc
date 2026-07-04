@@ -1,0 +1,80 @@
+{
+  "name": "ChangeOrder",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to the Project this change order belongs to"
+    },
+    "title": {
+      "type": "string",
+      "description": "Short title of the change order"
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed description of the change"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "scope",
+        "cost",
+        "schedule",
+        "scope_cost",
+        "scope_schedule",
+        "all"
+      ],
+      "default": "scope",
+      "description": "Kind of change: scope, cost, schedule, or combinations"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "submitted",
+        "approved",
+        "rejected",
+        "implemented"
+      ],
+      "default": "pending"
+    },
+    "impact_cost": {
+      "type": "number",
+      "default": 0,
+      "description": "Cost impact of the change (can be negative)"
+    },
+    "impact_days": {
+      "type": "number",
+      "default": 0,
+      "description": "Schedule impact in days (can be negative)"
+    },
+    "co_cost": {
+      "type": "number",
+      "default": 0,
+      "description": "Internal cost of the change order"
+    },
+    "co_selling": {
+      "type": "number",
+      "default": 0,
+      "description": "Selling price quoted to the client"
+    },
+    "submitted_by": {
+      "type": "string"
+    },
+    "approved_by": {
+      "type": "string"
+    },
+    "submitted_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "approved_date": {
+      "type": "string",
+      "format": "date"
+    }
+  },
+  "required": [
+    "project_id",
+    "title"
+  ]
+}
