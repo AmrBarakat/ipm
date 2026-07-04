@@ -54,49 +54,17 @@ Deno.serve(async (req) => {
     const byId = {};
     wbs.forEach((w) => { byId[w.id] = w; });
 
-    // Parent (rollup) rows: their stored dates should span their children's
-    // actual min-start → max-end. Where they don't (stale, or missing), propose
-    // a deterministic rollup — no AI needed, confidence 'high'.
     const childMap = {};
     wbs.forEach((w) => { if (w.parent_id) { (childMap[w.parent_id] ||= []).push(w); } });
-    const rollups = [];
-    wbs.forEach((w) => {
-      const kids = childMap[w.id] || [];
-      if (kids.length === 0) return;
-      const childStarts = kids.map((c) => c.planned_start).filter(Boolean).sort();
-      const childEnds = kids.map((c) => c.planned_end).filter(Boolean).sort();
-      if (childStarts.length === 0 || childEnds.length === 0) return;
-      const minStart = childStarts[0];
-      const maxEnd = childEnds[childEnds.length - 1];
-      if (w.planned_start === minStart && w.planned_end === maxEnd) return; // already correct
-      const dur = Math.max(1, Math.round((new Date(maxEnd) - new Date(minStart)) / 86400000));
-      const preds = (w.predecessor_ids || []).map((id) => byId[id]).filter(Boolean);
-      rollups.push({
-        wbs_id: w.id,
-        wbs_code: w.wbs_code || '',
-        item_name: w.name,
-        predecessors: preds.map((p) => p.wbs_code || p.name).join(', '),
-        proposed_start: minStart,
-        proposed_end: maxEnd,
-        estimated_duration_days: dur,
-        reason: `rolled up from ${kids.length} child activit${kids.length === 1 ? 'y' : 'ies'}`,
-        confidence: 'high',
-        had_planned_start: !!w.planned_start,
-        is_rollup: true,
-      });
-    });
+    const hasChildren = (id) => (childMap[id] || []).length > 0;
 
-    // Needs an AI duration estimate: missing planned_start and/or planned_end,
-    // OR a zero-duration item (planned_start === planned_end) which draws no bar.
-    // Parent rows handled above are excluded so they aren't double-processed.
-    const rollupIds = new Set(rollups.map((r) => r.wbs_id));
+    // Leaves that need an AI duration estimate: no children, and missing
+    // planned_start and/or planned_end, OR zero-duration (start === end).
+    // Parents are NEVER AI-estimated — they roll up from their children below.
     const undated = wbs.filter((w) =>
-      !rollupIds.has(w.id) &&
+      !hasChildren(w.id) &&
       (!w.planned_start || !w.planned_end || (w.planned_start && w.planned_end && w.planned_start === w.planned_end))
     );
-    if (rollups.length === 0 && undated.length === 0) {
-      return Response.json({ estimates: [], message: 'All WBS items already have durations.' });
-    }
 
     // Calibration: dated activities with a real duration (name + day-count) so the
     // model matches this project's real pace instead of guessing in a vacuum.
@@ -193,22 +161,32 @@ Deno.serve(async (req) => {
         return Response.json({ error: 'AI estimation failed: ' + (err.message || err) }, { status: 502 });
       }
 
-      // Derive proposed start/end for each estimate.
+      // Guarantee every undated leaf gets an estimate: use the LLM's value when
+      // present, otherwise fall back to the project's average dated duration so
+      // the model can never silently drop an activity.
+      const estMap = new Map((estimates || []).map((e) => [e.wbs_id, e]));
+      const avgDays = dated.length
+        ? Math.max(1, Math.round(dated.reduce((s, d) => s + d.days, 0) / dated.length))
+        : 3;
+
       const projectStart = project?.start_date || null;
-      aiResults = estimates
-        .map((e) => {
-          const item = byId[e.wbs_id];
-          if (!item) return null;
+      aiResults = undated
+        .map((item) => {
+          const e = estMap.get(item.id) || {
+            estimated_duration_days: avgDays,
+            reason: `fallback: project average (~${avgDays} day${avgDays === 1 ? '' : 's'})`,
+            confidence: 'low',
+          };
           const dur = Math.max(1, Math.round(e.estimated_duration_days || 1));
 
           let start;
           if (item.planned_start) {
             start = new Date(item.planned_start);
           } else {
-            const preds = (item.predecessor_ids || []).map((id) => byId[id]).filter(Boolean);
-            const predEnds = preds.map((p) => p.planned_end ? new Date(p.planned_end) : null).filter(Boolean);
-            if (predEnds.length) {
-              start = new Date(Math.max(...predEnds.map((d) => d.getTime())));
+            const preds0 = (item.predecessor_ids || []).map((id) => byId[id]).filter(Boolean);
+            const predEnds0 = preds0.map((p) => p.planned_end ? new Date(p.planned_end) : null).filter(Boolean);
+            if (predEnds0.length) {
+              start = new Date(Math.max(...predEnds0.map((d) => d.getTime())));
               start.setDate(start.getDate() + 1); // day after latest predecessor finish
             } else {
               start = projectStart ? new Date(projectStart) : new Date();
@@ -242,8 +220,61 @@ Deno.serve(async (req) => {
             had_planned_start: !!item.planned_start,
             is_rollup: false,
           };
-        })
-        .filter(Boolean);
+        });
+    }
+
+    // Resolve each item's effective dates: actual if present, else AI-proposed.
+    const proposedBy = {};
+    aiResults.forEach((r) => { proposedBy[r.wbs_id] = { start: r.proposed_start, end: r.proposed_end }; });
+    const dateOf = (w) => {
+      if (w.planned_start && w.planned_end) return { start: w.planned_start, end: w.planned_end };
+      return proposedBy[w.id] || null;
+    };
+
+    // Parent rollups: span of children's effective (actual-or-proposed) dates.
+    // Process deepest-first so a parent whose children are themselves parents
+    // (with newly proposed dates) rolls up correctly in a single pass.
+    const depthOf = {};
+    const depth = (id) => {
+      if (depthOf[id] != null) return depthOf[id];
+      const w = byId[id];
+      depthOf[id] = w && w.parent_id ? 1 + depth(w.parent_id) : 0;
+      return depthOf[id];
+    };
+    const rollups = [];
+    wbs
+      .filter((w) => hasChildren(w.id))
+      .sort((a, b) => depth(b.id) - depth(a.id))
+      .forEach((w) => {
+        const kids = childMap[w.id] || [];
+        const kidDates = kids.map(dateOf).filter(Boolean);
+        if (kidDates.length === 0) return; // no child has any date yet
+        const starts = kidDates.map((d) => d.start).sort();
+        const ends = kidDates.map((d) => d.end).sort();
+        const minStart = starts[0];
+        const maxEnd = ends[ends.length - 1];
+        // Expose this parent's resolved span so its own parent can roll up too.
+        proposedBy[w.id] = { start: minStart, end: maxEnd };
+        if (w.planned_start === minStart && w.planned_end === maxEnd) return; // already correct
+        const dur = Math.max(1, Math.round((new Date(maxEnd) - new Date(minStart)) / 86400000));
+        const preds = (w.predecessor_ids || []).map((id) => byId[id]).filter(Boolean);
+        rollups.push({
+          wbs_id: w.id,
+          wbs_code: w.wbs_code || '',
+          item_name: w.name,
+          predecessors: preds.map((p) => p.wbs_code || p.name).join(', '),
+          proposed_start: minStart,
+          proposed_end: maxEnd,
+          estimated_duration_days: dur,
+          reason: `rolled up from ${kids.length} child activit${kids.length === 1 ? 'y' : 'ies'}`,
+          confidence: 'high',
+          had_planned_start: !!w.planned_start,
+          is_rollup: true,
+        });
+      });
+
+    if (rollups.length === 0 && aiResults.length === 0) {
+      return Response.json({ estimates: [], message: 'All WBS items already have durations.' });
     }
 
     return Response.json({
