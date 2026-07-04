@@ -68,6 +68,7 @@ export default {
       vendors: 'Vendors & POs',
       procurement: 'Procurement',
       changeOrders: 'Change Orders',
+      assistant: 'Assistant',
     },
   },
   documents: {

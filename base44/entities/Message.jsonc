@@ -1,0 +1,26 @@
+{
+  "name": "Message",
+  "type": "object",
+  "properties": {
+    "conversation_id": {
+      "type": "string",
+      "description": "Reference to the Conversation this message belongs to"
+    },
+    "role": {
+      "type": "string",
+      "enum": [
+        "user",
+        "assistant"
+      ],
+      "description": "Who authored the message"
+    },
+    "content": {
+      "type": "string",
+      "description": "Message body. For assistant turns, a JSON string of { answer, suggested_actions, risk_flags }"
+    }
+  },
+  "required": [
+    "conversation_id",
+    "content"
+  ]
+}

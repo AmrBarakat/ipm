@@ -1,0 +1,17 @@
+{
+  "name": "Conversation",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to the Project this conversation belongs to"
+    },
+    "title": {
+      "type": "string",
+      "description": "Short title for the conversation"
+    }
+  },
+  "required": [
+    "title"
+  ]
+}
