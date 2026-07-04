@@ -1,9 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { X, FileText, Sheet, Loader2 } from 'lucide-react';
 import { exportSectionsPDF, exportSectionsExcel } from '@/lib/reportExport';
 
-export default function PreviewModal({ bundle, data, subtitle, onClose }) {
-  const sections = useMemo(() => bundle.buildSections(data), [bundle, data]);
+export default function PreviewModal({ bundle, sections, subtitle, onClose }) {
   const [busy, setBusy] = useState(null);
   const fileBase = `${(bundle.id || 'report').replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}`;
 
