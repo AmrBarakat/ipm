@@ -39,8 +39,8 @@ const inp = 'border border-slate-200 rounded px-2 py-1.5 text-xs focus:outline-n
 
 export default function TabTasks({ projectId }) {
   const { data: tasks = [], isLoading } = useEntityList('Task', { project_id: projectId }, '-created_date', 300);
-  const taskMutation = useEntityMutation('Task');
-  const wbsMutation = useEntityMutation('WBSItem');
+  const taskMutation = useEntityMutation('Task', ['WBSItem']);
+  const wbsMutation = useEntityMutation('WBSItem', ['Task']);
   const [syncing, setSyncing] = useState(false);
   const [addingCol, setAddingCol] = useState(null);
   const [newTitle, setNewTitle] = useState('');

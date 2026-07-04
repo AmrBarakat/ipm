@@ -53,8 +53,13 @@ export function useEntityInfiniteList(entityName, filterObj, sort, pageSize = 25
  *   await create(data)    // { action: 'create', data }
  *   await update(data)    // { action: 'update', id, data }
  *   await remove(data)    // { action: 'delete', id }
+ *
+ * relatedKeys: optional array of extra entity names whose queries should also be
+ *   invalidated on success — for tightly linked entities so a screen showing both
+ *   refetches together. e.g. editing a WBS item must refresh Tasks that carry
+ *   wbs:/milestone_id tags derived from it: useEntityMutation('WBSItem', ['Task']).
  */
-export function useEntityMutation(entityName) {
+export function useEntityMutation(entityName, relatedKeys = []) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ action, id, data }) => {
@@ -66,6 +71,7 @@ export function useEntityMutation(entityName) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [entityName] });
+      relatedKeys.forEach((key) => queryClient.invalidateQueries({ queryKey: [key] }));
     },
     onError: (error, variables) => {
       toast({

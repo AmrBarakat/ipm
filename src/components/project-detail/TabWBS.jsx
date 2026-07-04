@@ -64,7 +64,7 @@ async function syncProjectProgress(projectId, items, tree, byId) {
 export default function TabWBS({ projectId, project, onProgressChange }) {
   const { data: wbsData = [], isLoading } = useEntityList('WBSItem', { project_id: projectId }, 'wbs_code', 500);
   const { data: milestones = [] } = useEntityList('Milestone', { project_id: projectId }, 'planned_date', 100);
-  const wbsMutation = useEntityMutation('WBSItem');
+  const wbsMutation = useEntityMutation('WBSItem', ['Task']);
   const msMutation = useEntityMutation('Milestone');
   const queryClient = useQueryClient();
   const [items, setItems] = useState([]);

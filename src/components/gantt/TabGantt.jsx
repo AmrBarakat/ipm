@@ -22,7 +22,7 @@ import ScheduleAssistantModal from '@/components/project-detail/ScheduleAssistan
 export default function TabGantt({ projectId, project }) {
   const { data: qWbs = [], isLoading: loadingWbs } = useEntityList('WBSItem', { project_id: projectId }, 'wbs_code', 2000);
   const { data: qMilestones = [], isLoading: loadingMs } = useEntityList('Milestone', { project_id: projectId }, 'planned_date', 500);
-  const wbsMutation = useEntityMutation('WBSItem');
+  const wbsMutation = useEntityMutation('WBSItem', ['Task']);
   const msMutation = useEntityMutation('Milestone');
   const queryClient = useQueryClient();
 
