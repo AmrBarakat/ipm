@@ -4,6 +4,7 @@ import { base44 } from '@/api/base44Client';
 import { useEntityList, useEntityMutation } from '@/hooks/useEntity';
 import { formatDate } from '@/lib/constants';
 import { Plus, Send, Loader2, Bot, User, AlertTriangle, Lightbulb, MessageSquare, Sparkles } from 'lucide-react';
+import ScheduleProposedChanges from '@/components/project-detail/ScheduleProposedChanges';
 
 function parseAssistant(content) {
   try {
@@ -150,7 +151,7 @@ export default function TabAssistant({ projectId }) {
               <p className="text-sm max-w-sm">Ask anything — e.g. “Which tasks are on the critical path?” or “What’s at risk if engineering slips 5 days?”</p>
             </div>
           ) : (
-            messages.map((m) => <MessageBubble key={m.id} message={m} />)
+            messages.map((m) => <MessageBubble key={m.id} message={m} projectId={projectId} />)
           )}
           {sending && (
             <div className="flex items-center gap-2 text-sm text-slate-400">
@@ -187,7 +188,7 @@ export default function TabAssistant({ projectId }) {
   );
 }
 
-function MessageBubble({ message }) {
+function MessageBubble({ message, projectId }) {
   const isUser = message.role === 'user';
   const parsed = !isUser ? parseAssistant(message.content) : null;
 
@@ -206,6 +207,17 @@ function MessageBubble({ message }) {
             <p className="whitespace-pre-wrap">{message.content}</p>
           )}
         </div>
+
+        {/* Proposed schedule changes — review + apply (assistant only) */}
+        {parsed && parsed.proposed_changes?.length > 0 && (
+          <ScheduleProposedChanges
+            proposedChanges={parsed.proposed_changes}
+            impact={parsed.impact}
+            conflictsFound={parsed.conflicts_found}
+            conflictsResolved={parsed.conflicts_resolved}
+            projectId={projectId}
+          />
+        )}
 
         {/* Suggested actions + risk flags chips (assistant only) */}
         {parsed && (parsed.suggested_actions?.length > 0 || parsed.risk_flags?.length > 0) && (
