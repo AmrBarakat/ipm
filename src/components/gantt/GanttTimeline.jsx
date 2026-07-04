@@ -187,6 +187,22 @@ export default function GanttTimeline({
             );
           }
           const item = row.data;
+          // Date-less items stay visible (excluded from CPM math) but render as a
+          // clearly-flagged "Unscheduled" placeholder instead of a misleading stub.
+          if (!item.planned_start || !item.planned_end) {
+            return (
+              <div key={row.id} className="relative" style={{ height: ROW_H }}>
+                <div
+                  className="absolute z-10 rounded border border-dashed border-slate-300 bg-slate-100/80 flex items-center px-1.5 text-[10px] text-slate-500 italic select-none cursor-pointer"
+                  style={{ left: 8, width: 112, top: 8, height: 18 }}
+                  onDoubleClick={() => onOpenEditor(row)}
+                  title={`${item.wbs_code} ${item.name} · Unscheduled — double-click to set dates`}
+                >
+                  Unscheduled
+                </div>
+              </div>
+            );
+          }
           const barX = xFor(item.planned_start);
           const barW = Math.max(6, daysBetween(item.planned_start, item.planned_end) * dayWidth);
           const isCritical = showCritical && criticalIds.has(item.id);

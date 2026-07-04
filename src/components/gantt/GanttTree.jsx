@@ -96,6 +96,9 @@ export default function GanttTree({
                     {isCritical && !isDelayed && <span className="text-rose-500 shrink-0 font-bold leading-none">●</span>}
                     <span className="font-mono text-slate-400 shrink-0">{row.data.wbs_code}</span>
                     <span className={`flex-1 min-w-0 whitespace-normal break-words leading-tight line-clamp-2 ${isCritical ? 'text-rose-800 font-medium' : 'text-slate-700'}`}>{row.data.name}</span>
+                    {(!row.data.planned_start || !row.data.planned_end) && (
+                      <span className="shrink-0 ml-1 px-1 py-0.5 rounded bg-slate-100 text-slate-400 text-[9px] font-medium border border-slate-200">No dates</span>
+                    )}
                   </>
                 ) : (
                   <>
