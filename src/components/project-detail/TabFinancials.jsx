@@ -6,6 +6,8 @@ import { Plus, TrendingUp, TrendingDown, AlertTriangle, Pencil, Trash2, Save, X,
 import ExpenseCategoryChart from '@/components/project-detail/ExpenseCategoryChart';
 import BaselineManager from '@/components/project-detail/BaselineManager';
 import SpendingTrendChart from '@/components/project-detail/SpendingTrendChart';
+import SkeletonTable from '@/components/ui/SkeletonTable';
+import EmptyState from '@/components/ui/EmptyState';
 
 const INV_STATUS_COLORS = {
   planned: 'bg-slate-100 text-slate-600',
@@ -152,7 +154,7 @@ export default function TabFinancials({ projectId, project }) {
   const exceedsBudget = budget > 0 && plannedExpenses > budget;
   const hasWarning = exceedsInvoiced || exceedsBudget;
 
-  if (loading) return <Spinner />;
+  if (loading) return <SkeletonTable columns={5} rows={6} />;
 
   return (
     <div className="space-y-6">
@@ -267,7 +269,14 @@ export default function TabFinancials({ projectId, project }) {
           </form>
         )}
         {invoices.length === 0 ? (
-          <div className="bg-white rounded-lg shadow-sm py-8 text-center text-slate-400 text-sm">No invoices yet.</div>
+          <EmptyState
+            icon={<TrendingUp className="w-12 h-12 opacity-40" />}
+            title="No invoices yet"
+            message="Add an invoice to start billing this project against its contract value."
+            actions={[
+              { label: 'Add Invoice', primary: true, icon: <Plus className="w-4 h-4" />, onClick: () => setAddingInv(true) },
+            ]}
+          />
         ) : (
           <PanelWrapper title="Invoices" exportData={invoices} exportCols={[
             { key: 'description', label: 'Description' },
@@ -344,7 +353,14 @@ export default function TabFinancials({ projectId, project }) {
           </form>
         )}
         {collections.length === 0 ? (
-          <div className="bg-white rounded-lg shadow-sm py-8 text-center text-slate-400 text-sm">No collections yet.</div>
+          <EmptyState
+            icon={<Banknote className="w-12 h-12 opacity-40" />}
+            title="No collections yet"
+            message="Record a received payment to track collections against invoiced amounts."
+            actions={[
+              { label: 'Add Collection', primary: true, icon: <Plus className="w-4 h-4" />, onClick: () => setAddingCol(true) },
+            ]}
+          />
         ) : (
           <PanelWrapper title="Collections" exportData={collections} exportCols={[
             { key: 'description', label: 'Description' }, { key: 'amount', label: 'Amount' },
@@ -420,7 +436,14 @@ export default function TabFinancials({ projectId, project }) {
           </form>
         )}
         {expenses.length === 0 ? (
-          <div className="bg-white rounded-lg shadow-sm py-8 text-center text-slate-400 text-sm">No expenses yet.</div>
+          <EmptyState
+            icon={<TrendingDown className="w-12 h-12 opacity-40" />}
+            title="No expenses yet"
+            message="Add an expense to track planned and actual project costs."
+            actions={[
+              { label: 'Add Expense', primary: true, icon: <Plus className="w-4 h-4" />, onClick: () => setAddingExp(true) },
+            ]}
+          />
         ) : (
           <PanelWrapper title="Expenses" exportData={expenses} exportCols={[
             { key: 'description', label: 'Description' }, { key: 'category', label: 'Category' },
@@ -480,6 +503,3 @@ export default function TabFinancials({ projectId, project }) {
 }
 
 const inp = 'border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white w-full';
-function Spinner() {
-  return <div className="flex justify-center py-12"><div className="w-7 h-7 border-4 border-slate-200 border-t-amber-500 rounded-full animate-spin" /></div>;
-}

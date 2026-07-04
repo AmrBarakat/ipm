@@ -3,6 +3,8 @@ import { base44 } from '@/api/base44Client';
 import { formatCurrency, formatDate, BOM_CATEGORY_LABELS } from '@/lib/constants';
 import { Plus, Package, Trash2, Filter, Tag, Truck, ShoppingCart, TrendingUp, CheckCircle, Clock, Edit2, X, Check, ChevronDown, ChevronRight, Layers } from 'lucide-react';
 import PanelWrapper from '@/components/ui/PanelWrapper';
+import SkeletonTable from '@/components/ui/SkeletonTable';
+import EmptyState from '@/components/ui/EmptyState';
 
 const DELIVERY_COLORS = {
   pending: 'bg-slate-100 text-slate-600',
@@ -251,7 +253,7 @@ export default function TabBOM({ projectId }) {
     return Object.entries(map).sort((a, b) => b[1].plannedCost - a[1].plannedCost);
   }, [allTopLevel]);
 
-  if (loading) return <Spinner />;
+  if (loading) return <SkeletonTable columns={6} rows={6} />;
 
   return (
     <div className="space-y-5">
@@ -414,10 +416,14 @@ export default function TabBOM({ projectId }) {
 
       {/* Table */}
       {items.length === 0 ? (
-        <div className="text-center py-12 text-slate-400">
-          <Package className="w-10 h-10 mx-auto mb-2 opacity-30" />
-          <p className="text-sm">No BOM items yet.</p>
-        </div>
+        <EmptyState
+          icon={<Package className="w-12 h-12 opacity-40" />}
+          title="No BOM items yet"
+          message="Add items manually here, or import and extract a BOM from a document in the Documents tab."
+          actions={[
+            { label: 'Add Item', primary: true, icon: <Plus className="w-4 h-4" />, onClick: () => setAdding(true) },
+          ]}
+        />
       ) : (
         <PanelWrapper title="Bill of Materials"
           exportData={filtered.map(i => ({
@@ -769,8 +775,4 @@ function KpiCard({ label, value, icon, color }) {
       </div>
     </div>
   );
-}
-
-function Spinner() {
-  return <div className="flex justify-center py-12"><div className="w-7 h-7 border-4 border-slate-200 border-t-amber-500 rounded-full animate-spin" /></div>;
 }

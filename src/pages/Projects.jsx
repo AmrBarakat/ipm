@@ -12,6 +12,7 @@ import { useNavigate } from 'react-router-dom';
 import ProjectSummaryWidget from '@/components/projects/ProjectSummaryWidget';
 import ProgressRing from '@/components/projects/ProgressRing';
 import { useTranslation } from '@/hooks/useTranslation';
+import SkeletonCard from '@/components/ui/SkeletonCard';
 
 const ALL = 'all';
 
@@ -84,8 +85,9 @@ export default function Projects() {
   }
 
   if (loading) return (
-    <div className="flex items-center justify-center py-20">
-      <div className="w-8 h-8 border-4 border-slate-200 border-t-amber-500 rounded-full animate-spin" />
+    <div className="space-y-6">
+      <div className="h-8 w-56 bg-slate-200 rounded animate-pulse" />
+      <SkeletonCard count={6} />
     </div>
   );
 

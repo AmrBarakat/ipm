@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { Plus, Pencil, X, Trash2, RefreshCw, Layers, Check, Save } from 'lucide-react';
+import { Plus, Pencil, X, Trash2, RefreshCw, Layers, Check, Save, ListTodo } from 'lucide-react';
+import EmptyState from '@/components/ui/EmptyState';
 
 // Map WBS status -> Task status
 const WBS_TO_TASK_STATUS = {
@@ -165,7 +166,19 @@ export default function TabTasks({ projectId }) {
   const byCol = {};
   COLUMNS.forEach(c => { byCol[c.id] = tasks.filter(t => t.status === c.id); });
 
-  if (loading) return <Spinner />;
+  if (loading) return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+      {COLUMNS.map(c => (
+        <div key={c.id} className="rounded-lg border-t-4 border-slate-200 p-3 min-h-[200px]">
+          <div className="h-3 w-20 bg-slate-200 rounded animate-pulse mb-3" />
+          <div className="space-y-2">
+            <div className="h-16 bg-slate-100 rounded animate-pulse" />
+            <div className="h-16 bg-slate-100 rounded animate-pulse" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 
   return (
     <div>
@@ -233,6 +246,17 @@ export default function TabTasks({ projectId }) {
         </div>
       )}
 
+      {tasks.length === 0 && !addingCol ? (
+        <EmptyState
+          icon={<ListTodo className="w-12 h-12 opacity-40" />}
+          title="No tasks yet"
+          message="Add a task to the board, or sync tasks from the project's WBS items."
+          actions={[
+            { label: 'Add a task', primary: true, icon: <Plus className="w-4 h-4" />, onClick: () => { setAddingCol('todo'); setNewTitle(''); setNewPriority('medium'); setNewAssignee(''); } },
+            { label: 'Sync from WBS', icon: <Layers className="w-4 h-4" />, onClick: syncFromWBS },
+          ]}
+        />
+      ) : (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-start">
         {COLUMNS.map(col => (
           <div key={col.id} className={`rounded-lg border-t-4 ${col.color} p-3 min-h-[200px]`}>
@@ -325,11 +349,8 @@ export default function TabTasks({ projectId }) {
             </div>
           </div>
         ))}
-      </div>
-    </div>
-  );
-}
-
-function Spinner() {
-  return <div className="flex justify-center py-12"><div className="w-7 h-7 border-4 border-slate-200 border-t-amber-500 rounded-full animate-spin" /></div>;
-}
+        </div>
+        )}
+        </div>
+        );
+        }

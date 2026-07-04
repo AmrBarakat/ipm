@@ -3,6 +3,8 @@ import { base44 } from '@/api/base44Client';
 import { formatDate } from '@/lib/constants';
 import { Plus, Flag, Pencil, Trash2, Save, X, Layers, Check } from 'lucide-react';
 import PanelWrapper from '@/components/ui/PanelWrapper';
+import SkeletonTable from '@/components/ui/SkeletonTable';
+import EmptyState from '@/components/ui/EmptyState';
 
 const STATUS_COLORS = {
   pending:     'bg-slate-100 text-slate-600',
@@ -114,7 +116,7 @@ export default function TabMilestones({ projectId }) {
     load();
   }
 
-  if (loading) return <Spinner />;
+  if (loading) return <SkeletonTable columns={4} rows={5} />;
 
   return (
     <div>
@@ -178,10 +180,14 @@ export default function TabMilestones({ projectId }) {
       )}
 
       {milestones.length === 0 ? (
-        <div className="text-center py-12 text-slate-400">
-          <Flag className="w-10 h-10 mx-auto mb-2 opacity-30" />
-          <p className="text-sm">No milestones yet.</p>
-        </div>
+        <EmptyState
+          icon={<Flag className="w-12 h-12 opacity-40" />}
+          title="No milestones yet"
+          message="Add a milestone manually to start tracking key project checkpoints and weights."
+          actions={[
+            { label: 'Add Milestone', primary: true, icon: <Plus className="w-4 h-4" />, onClick: () => setAdding(true) },
+          ]}
+        />
       ) : (
         <PanelWrapper title="Milestones" exportData={milestones} exportCols={[
           { key: 'title', label: 'Title' }, { key: 'status', label: 'Status' },
@@ -290,6 +296,3 @@ export default function TabMilestones({ projectId }) {
 }
 
 const inp = 'border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white w-full';
-function Spinner() {
-  return <div className="flex justify-center py-12"><div className="w-7 h-7 border-4 border-slate-200 border-t-amber-500 rounded-full animate-spin" /></div>;
-}
