@@ -1,12 +1,13 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useEntityList, useEntityMutation } from '@/hooks/useEntity';
 import { useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
-import { formatCurrency, formatDate, BOM_CATEGORY_LABELS, isTopLevelBOM } from '@/lib/constants';
+import { formatCurrency, formatDate } from '@/lib/constants';
+import TabProcurement from '@/components/project-detail/TabProcurement';
 import {
   Plus, Truck, Package, AlertTriangle, CheckCircle2,
   Pencil, Trash2, Save, X, ChevronDown, ChevronRight,
-  FileText, RefreshCw, ShoppingCart, Check, AlertCircle
+  FileText, RefreshCw, ShoppingCart
 } from 'lucide-react';
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -68,7 +69,7 @@ export default function TabVendors({ projectId, project }) {
       </div>
 
       {activeSubTab === 'pos'         && <POsPanel projectId={projectId} project={project} />}
-      {activeSubTab === 'procurement' && <ProcurementPanel projectId={projectId} project={project} />}
+      {activeSubTab === 'procurement' && <TabProcurement projectId={projectId} project={project} />}
     </div>
   );
 }
@@ -407,185 +408,6 @@ function POsPanel({ projectId, project }) {
             );
           })}
         </div>
-      )}
-    </div>
-  );
-}
-
-// ── Procurement Panel ────────────────────────────────────────────────────────
-
-function ProcurementPanel({ projectId, project }) {
-  const { data: all = [], isLoading } = useEntityList('BOMItem', { project_id: projectId }, 'supplier', 500);
-  // Exclude panel child rows — the panel is procured as one unit; its internal
-  // components are never listed individually.
-  const items = useMemo(() => all.filter(i => isTopLevelBOM(i) && (i.order_status || (i.ordered ? 'ordered' : 'not_ordered')) === 'not_ordered'), [all]);
-  const [selectedIds, setSelectedIds] = useState(new Set());
-  const [collapsedSuppliers, setCollapsedSuppliers] = useState(new Set());
-
-  useEffect(() => { setSelectedIds(new Set(items.map(i => i.id))); }, [items]);
-
-  const grouped = useMemo(() => {
-    const map = {};
-    items.forEach(i => {
-      const sup = i.supplier || '(No Supplier)';
-      if (!map[sup]) map[sup] = [];
-      map[sup].push(i);
-    });
-    return Object.entries(map).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [items]);
-
-  function toggleItem(id) {
-    setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  }
-
-  function toggleSupplierAll(supplier, supplierItems) {
-    const allSel = supplierItems.every(i => selectedIds.has(i.id));
-    setSelectedIds(prev => {
-      const n = new Set(prev);
-      if (allSel) supplierItems.forEach(i => n.delete(i.id));
-      else supplierItems.forEach(i => n.add(i.id));
-      return n;
-    });
-  }
-
-  function toggleSupplierCollapse(supplier) {
-    setCollapsedSuppliers(prev => { const n = new Set(prev); n.has(supplier) ? n.delete(supplier) : n.add(supplier); return n; });
-  }
-
-  function toggleAll() {
-    setSelectedIds(selectedIds.size === items.length ? new Set() : new Set(items.map(i => i.id)));
-  }
-
-  const totalValue = items.reduce((s, i) => s + (Number(i.planned_cost_price) || Number(i.cost_price) || 0) * (Number(i.quantity) || 1), 0);
-  const selectedValue = items.filter(i => selectedIds.has(i.id)).reduce((s, i) => s + (Number(i.planned_cost_price) || Number(i.cost_price) || 0) * (Number(i.quantity) || 1), 0);
-
-  if (isLoading) return <Spinner />;
-
-  return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Kpi label="Items to Order" value={items.length} color="border-amber-400" icon={<ShoppingCart className="w-5 h-5" />} />
-        <Kpi label="Suppliers" value={grouped.length} color="border-blue-400" icon={<Package className="w-5 h-5" />} />
-        <Kpi label="Total Value" value={formatCurrency(totalValue, project?.currency || 'SAR')} color="border-slate-400" icon={<FileText className="w-5 h-5" />} />
-        <Kpi label="Selected Value" value={formatCurrency(selectedValue, project?.currency || 'SAR')} color="border-emerald-400" icon={<CheckCircle2 className="w-5 h-5" />} />
-      </div>
-
-      {items.length === 0 ? (
-        <div className="text-center py-16 bg-white rounded-lg shadow-sm border border-slate-100">
-          <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-4">
-            <ShoppingCart className="w-8 h-8 text-emerald-400" />
-          </div>
-          <h3 className="font-semibold text-slate-700 text-lg mb-1">All items are ordered!</h3>
-          <p className="text-slate-400 text-sm">No BOM items with "Not Ordered" status found.</p>
-        </div>
-      ) : (
-        <>
-          <div className="flex items-center justify-between">
-            <button onClick={toggleAll} className="flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900">
-              <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${selectedIds.size === items.length ? 'bg-amber-400 border-amber-400' : 'border-slate-300'}`}>
-                {selectedIds.size === items.length && <Check className="w-2.5 h-2.5 text-slate-900" />}
-              </div>
-              <span>{selectedIds.size === items.length ? 'Deselect All' : 'Select All'} ({items.length} items)</span>
-            </button>
-            <div className="flex items-center gap-2 text-xs text-slate-400">
-              <AlertCircle className="w-3.5 h-3.5" /> Unordered BOM items grouped by supplier
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            {grouped.map(([supplier, supplierItems]) => {
-              const isCollapsed = collapsedSuppliers.has(supplier);
-              const allSel = supplierItems.every(i => selectedIds.has(i.id));
-              const someSel = supplierItems.some(i => selectedIds.has(i.id));
-              const selItems = supplierItems.filter(i => selectedIds.has(i.id));
-              const supTotal = selItems.reduce((s, i) => s + (Number(i.planned_cost_price) || Number(i.cost_price) || 0) * (Number(i.quantity) || 1), 0);
-
-              return (
-                <div key={supplier} className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
-                  <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 border-b border-slate-200">
-                    <button onClick={() => toggleSupplierAll(supplier, supplierItems)} className="flex items-center justify-center shrink-0">
-                      <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${allSel ? 'bg-amber-400 border-amber-400' : someSel ? 'bg-amber-200 border-amber-400' : 'border-slate-300'}`}>
-                        {allSel && <Check className="w-2.5 h-2.5 text-slate-900" />}
-                        {someSel && !allSel && <div className="w-1.5 h-1.5 bg-amber-500 rounded-sm" />}
-                      </div>
-                    </button>
-                    <button onClick={() => toggleSupplierCollapse(supplier)} className="flex items-center gap-2 flex-1 text-left">
-                      {isCollapsed ? <ChevronRight className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
-                      <Package className="w-4 h-4 text-amber-500 shrink-0" />
-                      <span className="font-semibold text-slate-800">{supplier}</span>
-                      <span className="text-xs text-slate-400 ml-1">{supplierItems.length} item{supplierItems.length !== 1 ? 's' : ''}</span>
-                    </button>
-                    <div className="flex items-center gap-3 shrink-0">
-                      {selItems.length > 0 && (
-                        <span className="text-xs text-slate-500 hidden sm:block">
-                          {selItems.length} selected · <span className="font-semibold text-slate-700">{formatCurrency(supTotal, project?.currency || 'SAR')}</span>
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {!isCollapsed && (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-xs min-w-[700px]">
-                        <thead className="bg-slate-100 text-slate-500 uppercase">
-                          <tr>
-                            <th className="px-3 py-2 w-8"></th>
-                            <th className="px-3 py-2 text-left">Description</th>
-                            <th className="px-3 py-2 text-left">Part No.</th>
-                            <th className="px-3 py-2 text-left">Category</th>
-                            <th className="px-3 py-2 text-right">Qty</th>
-                            <th className="px-3 py-2 text-left">Unit</th>
-                            <th className="px-3 py-2 text-right">Unit Cost</th>
-                            <th className="px-3 py-2 text-right">Total Cost</th>
-                            <th className="px-3 py-2 text-left">Exp. Delivery</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {supplierItems.map((item, idx) => {
-                            const isChecked = selectedIds.has(item.id);
-                            const unitCost = Number(item.planned_cost_price) || Number(item.cost_price) || 0;
-                            const qty = Number(item.quantity) || 1;
-                            return (
-                              <tr key={item.id} onClick={() => toggleItem(item.id)}
-                                className={`border-t border-slate-100 cursor-pointer transition ${isChecked ? 'bg-amber-50' : idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'} hover:bg-amber-50/70`}>
-                                <td className="px-3 py-2">
-                                  <div className={`w-4 h-4 rounded border-2 flex items-center justify-center mx-auto transition-colors ${isChecked ? 'bg-amber-400 border-amber-400' : 'border-slate-300'}`}>
-                                    {isChecked && <Check className="w-2.5 h-2.5 text-slate-900" />}
-                                  </div>
-                                </td>
-                                <td className="px-3 py-2 font-medium text-slate-800 max-w-[200px]"><div className="truncate">{item.description || '—'}</div></td>
-                                <td className="px-3 py-2 font-mono text-slate-500">{item.manufacturer_part_number || '—'}</td>
-                                <td className="px-3 py-2">
-                                  <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-semibold">
-                                    {BOM_CATEGORY_LABELS[item.category] || item.category || '—'}
-                                  </span>
-                                </td>
-                                <td className="px-3 py-2 text-right font-semibold text-slate-700">{qty}</td>
-                                <td className="px-3 py-2 text-slate-500">{item.unit || 'pcs'}</td>
-                                <td className="px-3 py-2 text-right text-slate-700">{unitCost > 0 ? formatCurrency(unitCost, project?.currency || 'SAR') : '—'}</td>
-                                <td className="px-3 py-2 text-right font-semibold text-slate-800">{unitCost > 0 ? formatCurrency(unitCost * qty, project?.currency || 'SAR') : '—'}</td>
-                                <td className="px-3 py-2 text-slate-500">{formatDate(item.expected_delivery_date)}</td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                        <tfoot className="border-t-2 border-slate-200 bg-slate-50">
-                          <tr>
-                            <td colSpan={7} className="px-3 py-2 text-slate-500 text-xs font-semibold">Supplier Total</td>
-                            <td className="px-3 py-2 text-right font-bold text-slate-800">
-                              {formatCurrency(supplierItems.reduce((s, i) => s + (Number(i.planned_cost_price) || Number(i.cost_price) || 0) * (Number(i.quantity) || 1), 0), project?.currency || 'SAR')}
-                            </td>
-                            <td></td>
-                          </tr>
-                        </tfoot>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </>
       )}
     </div>
   );

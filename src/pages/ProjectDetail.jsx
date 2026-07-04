@@ -18,7 +18,6 @@ const TabNotes = lazy(() => import('@/components/project-detail/TabNotes'));
 const TabRisks = lazy(() => import('@/components/project-detail/TabRisks'));
 const TabVendors = lazy(() => import('@/components/project-detail/TabVendors'));
 const TabDeliverables = lazy(() => import('@/components/project-detail/TabDeliverables'));
-const TabProcurement = lazy(() => import('@/components/project-detail/TabProcurement'));
 const TabChangeOrders = lazy(() => import('@/components/project-detail/TabChangeOrders'));
 const TabAssistant = lazy(() => import('@/components/project-detail/TabAssistant'));
 
@@ -30,7 +29,7 @@ const TabSpinner = () => (
 
 const TAB_GROUPS = [
   { id: 'plan',       label: 'PLAN',       tabs: ['overview', 'gantt', 'wbs', 'tasks', 'milestones', 'deliverables'] },
-  { id: 'commercial', label: 'COMMERCIAL', tabs: ['bom', 'financials', 'procurement', 'changeOrders', 'vendors'] },
+  { id: 'commercial', label: 'COMMERCIAL', tabs: ['bom', 'financials', 'changeOrders', 'vendors'] },
   { id: 'governance', label: 'GOVERNANCE', tabs: ['documents', 'notes', 'risks', 'assistant'] },
 ];
 const DEFAULT_TAB = 'overview';
@@ -199,7 +198,7 @@ export default function ProjectDetail() {
                 >
                   <span className="flex items-center gap-1">
                     {t(`projectDetail.tabs.${tabId}`)}
-                    {tabId === 'procurement' && overduePOCount > 0 && (
+                    {tabId === 'vendors' && overduePOCount > 0 && (
                       <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 text-[10px] font-bold text-white bg-red-500 rounded-full">{overduePOCount}</span>
                     )}
                   </span>
@@ -222,7 +221,6 @@ export default function ProjectDetail() {
             {activeTab === 'risks'      && <TabRisks      projectId={id} />}
             {activeTab === 'deliverables' && <TabDeliverables projectId={id} />}
             {activeTab === 'vendors'    && <TabVendors    projectId={id} project={project} />}
-            {activeTab === 'procurement'  && <TabProcurement  projectId={id} project={project} />}
             {activeTab === 'changeOrders' && <TabChangeOrders projectId={id} project={project} />}
             {activeTab === 'assistant'   && <TabAssistant   projectId={id} project={project} />}
             </div>
