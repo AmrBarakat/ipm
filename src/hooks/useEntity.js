@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery, keepPreviousData } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 
 /**
@@ -19,6 +19,28 @@ export function useEntityList(entityName, filterObj, sort, limit) {
       return await entity.list(sort, limit);
     },
   });
+}
+
+/**
+ * Paginated ("load more") list using useInfiniteQuery.
+ * filterObj is sent server-side; pageSize items per page, skip = pageParam.
+ * Returns { items, hasNextPage, fetchNextPage, isFetchingNextPage, isLoading, isFetching, ...query }
+ */
+export function useEntityInfiniteList(entityName, filterObj, sort, pageSize = 25) {
+  const queryKey = [entityName, 'infinite', filterObj, sort, pageSize];
+  const query = useInfiniteQuery({
+    queryKey,
+    queryFn: async ({ pageParam = 0 }) => {
+      const entity = base44.entities[entityName];
+      return await entity.filter(filterObj || {}, sort, pageSize, pageParam);
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, _allPages, lastPageParam) =>
+      lastPage.length === pageSize ? lastPageParam + pageSize : undefined,
+    placeholderData: keepPreviousData,
+  });
+  const items = query.data?.pages.flat() ?? [];
+  return { ...query, items };
 }
 
 /**
