@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Download, Loader2, Sheet, FileText } from 'lucide-react';
+import { Download, Loader2, Sheet, FileText, Image as ImageIcon } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -289,6 +289,32 @@ export default function GanttExportButton({
     }
   }
 
+  async function exportPNG() {
+    setLoading(true);
+    setOpen(false);
+    try {
+      const el = chartContainerRef?.current;
+      if (!el) return;
+      const prevOverflow = el.style.overflow;
+      el.style.overflow = 'visible';
+      const canvas = await html2canvas(el, {
+        scale: 4,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        windowWidth: el.scrollWidth,
+        windowHeight: el.scrollHeight,
+      });
+      el.style.overflow = prevOverflow;
+      const link = document.createElement('a');
+      link.download = `${baseName}.png`;
+      link.href = canvas.toDataURL('image/png', 1.0);
+      link.click();
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div className="relative">
       <button
@@ -297,7 +323,7 @@ export default function GanttExportButton({
         className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-slate-200 rounded hover:bg-slate-100 text-slate-600 font-medium disabled:opacity-50"
       >
         {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-        {loading ? 'Generating…' : `Export (${zoom?.label || ''})`}
+        {loading ? 'Generating…' : 'Export Gantt'}
       </button>
       {open && !loading && (
         <div className="absolute right-0 mt-1 w-44 bg-white border border-slate-200 rounded shadow-lg z-50 py-1">
@@ -306,6 +332,9 @@ export default function GanttExportButton({
           </button>
           <button onClick={exportPDF} className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-slate-50 text-slate-700">
             <FileText className="w-3.5 h-3.5 text-red-500" /> PDF (full report)
+          </button>
+          <button onClick={exportPNG} className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-slate-50 text-slate-700">
+            <ImageIcon className="w-3.5 h-3.5 text-blue-500" /> PNG image
           </button>
         </div>
       )}

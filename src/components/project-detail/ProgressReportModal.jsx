@@ -127,6 +127,20 @@ export default function ProgressReportModal({ project, onClose }) {
   const wbsLinkedToSelected = wbsItems.filter(i => selectedMsIds.has(i.milestone_id));
   const completedWBS = wbsLinkedToSelected.filter(i => i.status === 'completed').length;
 
+  // ── Upcoming & overdue snapshots ────────────────────────────────────────
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const isOverdue = (d, status) => d && status !== 'completed' && new Date(d) < today;
+  const upcomingMilestones = milestones
+    .filter(m => m.planned_date && m.status !== 'completed' && new Date(m.planned_date) >= today)
+    .sort((a, b) => new Date(a.planned_date) - new Date(b.planned_date))
+    .slice(0, 5);
+  const overdueMilestones = milestones.filter(m => isOverdue(m.planned_date, m.status));
+  const overdueWBS = wbsItems.filter(w => isOverdue(w.planned_end, w.status));
+  const overdueItems = [
+    ...overdueMilestones.map(m => ({ type: 'Milestone', label: m.title, date: m.planned_date })),
+    ...overdueWBS.map(w => ({ type: 'WBS', label: `${w.wbs_code || ''} ${w.name || ''}`.trim(), date: w.planned_end })),
+  ];
+
   // ── PDF Generation ────────────────────────────────────────────────────────
   async function generate() {
     setGenerating(true);
@@ -213,6 +227,38 @@ export default function ProgressReportModal({ project, onClose }) {
       lines.forEach((l, li) => doc.text(l, kx + kpiW / 2, y + 14.5 + li * 3.5, { align: 'center' }));
     });
     y += 24;
+
+    // ── Upcoming milestones ─────────────────────────────────────────────────
+    if (upcomingMilestones.length > 0) {
+      checkPage(20);
+      sectionTitle(doc, `Upcoming Milestones (${upcomingMilestones.length})`, margin, y); y += 8;
+      tableHeader(doc, margin, y, colW, ['Milestone', 'Planned Date', 'Status'], [0.50, 0.25, 0.25]);
+      y += 7;
+      upcomingMilestones.forEach((m, i) => {
+        checkPage(8);
+        tableRow(doc, margin, y, colW, [0.50, 0.25, 0.25], [
+          truncate(m.title, 40), formatDate(m.planned_date), (m.status || '—').replace(/_/g, ' '),
+        ], i % 2 === 0);
+        y += 7;
+      });
+      y += 4;
+    }
+
+    // ── Overdue items ───────────────────────────────────────────────────────
+    if (overdueItems.length > 0) {
+      checkPage(20);
+      sectionTitle(doc, `Overdue Items (${overdueItems.length})`, margin, y); y += 8;
+      tableHeader(doc, margin, y, colW, ['Type', 'Item', 'Due Date'], [0.18, 0.62, 0.20]);
+      y += 7;
+      overdueItems.forEach((it, i) => {
+        checkPage(8);
+        tableRow(doc, margin, y, colW, [0.18, 0.62, 0.20], [
+          it.type, truncate(it.label, 50), formatDate(it.date),
+        ], i % 2 === 0);
+        y += 7;
+      });
+      y += 4;
+    }
 
     // ── Milestones section ───────────────────────────────────────────────────
     if (selectedMs.length > 0) {
@@ -404,6 +450,46 @@ export default function ProgressReportModal({ project, onClose }) {
                 <div className="text-xs text-slate-400">{k.label}</div>
               </div>
             ))}
+          </div>
+
+          {/* Status snapshot: upcoming & overdue */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+              <div className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5" /> Upcoming Milestones ({upcomingMilestones.length})
+              </div>
+              {upcomingMilestones.length === 0 ? (
+                <p className="text-xs text-slate-400 italic">No upcoming milestones.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {upcomingMilestones.map(m => (
+                    <div key={m.id} className="flex items-center justify-between gap-2 text-xs">
+                      <span className="text-slate-700 truncate">{m.title}</span>
+                      <span className="text-slate-500 shrink-0">{formatDate(m.planned_date)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+              <div className="text-xs font-semibold text-red-700 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5" /> Overdue Items ({overdueItems.length})
+              </div>
+              {overdueItems.length === 0 ? (
+                <p className="text-xs text-slate-400 italic">Nothing overdue.</p>
+              ) : (
+                <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                  {overdueItems.map((it, i) => (
+                    <div key={i} className="flex items-center justify-between gap-2 text-xs">
+                      <span className="text-slate-700 truncate">
+                        <span className="text-[10px] font-bold text-red-500 mr-1">{it.type}</span>{it.label}
+                      </span>
+                      <span className="text-red-500 shrink-0">{formatDate(it.date)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Milestone selection */}
