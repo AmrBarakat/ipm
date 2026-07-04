@@ -5,6 +5,7 @@ import { formatCurrency, formatDate, INVOICE_STATUS_LABELS, EXPENSE_CATEGORY_LAB
 import { Plus, TrendingUp, TrendingDown, AlertTriangle, Pencil, Trash2, Save, X, Banknote, AlertCircle } from 'lucide-react';
 import ExpenseCategoryChart from '@/components/project-detail/ExpenseCategoryChart';
 import BaselineManager from '@/components/project-detail/BaselineManager';
+import SpendingTrendChart from '@/components/project-detail/SpendingTrendChart';
 
 const INV_STATUS_COLORS = {
   planned: 'bg-slate-100 text-slate-600',
@@ -240,6 +241,9 @@ export default function TabFinancials({ projectId, project }) {
 
       {/* Baseline capture + Cost Variance vs earliest baseline */}
       {!loading && <BaselineManager projectId={projectId} project={project} />}
+
+      {/* Spending trend — actual vs baseline plan over project timeline */}
+      {!loading && <SpendingTrendChart expenses={expenses} project={project} />}
 
       {/* Invoices */}
       <div>
