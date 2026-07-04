@@ -5,6 +5,7 @@
  */
 import { useState, useEffect, useMemo } from 'react';
 import { base44 } from '@/api/base44Client';
+import { isTopLevelBOM } from '@/lib/constants';
 import {
   CheckCircle2, AlertTriangle, XCircle, MinusCircle,
   ChevronDown, ChevronRight, RefreshCw, Flag, Search,
@@ -61,7 +62,9 @@ export default function TabBOMReconciliation({ projectId }) {
       base44.entities.BOMItem.filter({ project_id: projectId }, '-created_date', 500),
     ]);
     setDocuments(docs);
-    setBomItems(items);
+    // Exclude panel child rows (parent_id) — outside the BOM tab a panel is one
+    // complete item, so its components are invisible to reconciliation counts.
+    setBomItems(items.filter(isTopLevelBOM));
     setLoading(false);
   }
 

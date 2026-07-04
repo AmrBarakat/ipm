@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useEntityList } from '@/hooks/useEntity';
-import { formatDate, formatCurrency, EXPENSE_CATEGORY_LABELS } from '@/lib/constants';
+import { formatDate, formatCurrency, EXPENSE_CATEGORY_LABELS, isTopLevelBOM } from '@/lib/constants';
 import { FileText, CreditCard, CheckCircle, AlertCircle, ClipboardList, BarChart2, PieChart, Wallet, Package, Tag, Truck, ShoppingCart, TrendingUp } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import StatusProgressChart from '@/components/project-detail/StatusProgressChart';
@@ -33,13 +33,15 @@ export default function TabOverview({ project, onRefresh }) {
   const plannedMarginPct = contractValue > 0 ? Math.round((plannedMargin / contractValue) * 100) : 0;
   const cashOnHand = totalReceived - actualCost;
 
-  // BOM KPIs
-  const bomCost = bomItems.reduce((s, i) => s + (i.cost_price || 0) * (i.quantity || 1), 0);
-  const bomSell = bomItems.reduce((s, i) => s + (i.selling_price || 0) * (i.quantity || 1), 0);
+  // BOM KPIs — exclude panel child rows (parent_id) so a panel is counted once
+  // and its cost isn't double-counted with its components.
+  const topBom = bomItems.filter(isTopLevelBOM);
+  const bomCost = topBom.reduce((s, i) => s + (i.cost_price || 0) * (i.quantity || 1), 0);
+  const bomSell = topBom.reduce((s, i) => s + (i.selling_price || 0) * (i.quantity || 1), 0);
   const bomMarginPct = bomSell > 0 ? Math.round(((bomSell - bomCost) / bomSell) * 100) : 0;
-  const alreadyOrdered = bomItems.filter(i => i.ordered).reduce((s, i) => s + (i.cost_price || 0) * (i.quantity || 1), 0);
-  const orderedCount = bomItems.filter(i => i.ordered).length;
-  const toOrderItems = bomItems.filter(i => !i.ordered && i.stock_status === 'non_stock');
+  const alreadyOrdered = topBom.filter(i => i.ordered).reduce((s, i) => s + (i.cost_price || 0) * (i.quantity || 1), 0);
+  const orderedCount = topBom.filter(i => i.ordered).length;
+  const toOrderItems = topBom.filter(i => !i.ordered && i.stock_status === 'non_stock');
   const toOrderValue = toOrderItems.reduce((s, i) => s + (i.cost_price || 0) * (i.quantity || 1), 0);
 
   // Projected Profit: Collections (received) minus committed/paid expenses actual cost
@@ -130,7 +132,7 @@ export default function TabOverview({ project, onRefresh }) {
             <KpiCard
               label="BOM Cost (Parts)"
               value={formatCurrency(bomCost, cur)}
-              sub={`${bomItems.length} line item${bomItems.length !== 1 ? 's' : ''}`}
+              sub={`${topBom.length} line item${topBom.length !== 1 ? 's' : ''}`}
               icon={<Package className="w-5 h-5" />}
               accent="blue"
             />

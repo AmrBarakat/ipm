@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { Plus, Package, Pencil, Trash2, Save, X, CheckCircle, Wand2, Loader2, Check } from 'lucide-react';
 import PanelWrapper from '@/components/ui/PanelWrapper';
+import { isTopLevelBOM } from '@/lib/constants';
 
 const STATUS_COLORS = {
   pending:     'bg-slate-100 text-slate-600',
@@ -118,7 +119,9 @@ export default function TabDeliverables({ projectId }) {
     if (!confirm('This will create deliverables from BOM items (panel, software & IT-HW as combined lines, others individually). Continue?')) return;
     setGenerating(true);
     try {
-      const bomItems = await base44.entities.BOMItem.filter({ project_id: projectId }, 'category', 500);
+      // Exclude panel child rows — a panel is one deliverable, its internal
+      // components are never listed as separate deliverables.
+      const bomItems = (await base44.entities.BOMItem.filter({ project_id: projectId }, 'category', 500)).filter(isTopLevelBOM);
 
       const toCreate = [];
 

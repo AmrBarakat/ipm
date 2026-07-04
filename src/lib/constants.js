@@ -37,6 +37,13 @@ export const EXPENSE_CATEGORY_LABELS = en.financials.expenseCategory;
 export const WBS_STATUS_LABELS = en.wbs.status;
 export const BOM_CATEGORY_LABELS = en.bom.category;
 
+// A BOMItem with a parent_id is a panel component (child row). Outside the BOM
+// tab a panel is treated as ONE complete item, so child rows are invisible to
+// every section except the BOM tab. Use this to exclude children from any
+// count, total, rollup, or list outside the BOM tab — the panel parent already
+// carries the panel's own cost/price/quantity as a single item.
+export const isTopLevelBOM = (i) => !!i && !i.parent_id;
+
 export const CURRENCIES = ['SAR', 'AED', 'USD', 'EUR', 'GBP', 'EGP', 'JPY', 'CNY'];
 
 export function formatCurrency(value, currency = 'SAR') {

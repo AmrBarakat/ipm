@@ -1,7 +1,7 @@
 import {
   isOverdue, daysOverdue, truncate, formatCurrency, formatDate,
 } from '@/lib/reportExport';
-import { BOM_CATEGORY_LABELS } from '@/lib/constants';
+import { BOM_CATEGORY_LABELS, isTopLevelBOM } from '@/lib/constants';
 
 const PO_STATUS_LABELS = {
   draft: 'Draft', issued: 'Issued', acknowledged: 'Acknowledged', in_transit: 'In Transit',
@@ -68,9 +68,10 @@ export default {
       })),
     });
 
-    // BOM reconciliation by category: ordered vs not-ordered vs received
+    // BOM reconciliation by category: ordered vs not-ordered vs received.
+    // Exclude panel child rows so a panel is counted once.
     const byCat = {};
-    (bomItems || []).forEach(i => {
+    (bomItems || []).filter(isTopLevelBOM).forEach(i => {
       const cat = BOM_CATEGORY_LABELS[i.category] || i.category || 'Other';
       if (!byCat[cat]) byCat[cat] = { total: 0, ordered: 0, notOrdered: 0, received: 0, pending: 0, value: 0 };
       byCat[cat].total++;

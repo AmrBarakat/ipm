@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useEntityList, useEntityMutation } from '@/hooks/useEntity';
 import { useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
-import { formatCurrency, formatDate, BOM_CATEGORY_LABELS } from '@/lib/constants';
+import { formatCurrency, formatDate, BOM_CATEGORY_LABELS, isTopLevelBOM } from '@/lib/constants';
 import {
   Plus, Truck, Package, AlertTriangle, CheckCircle2,
   Pencil, Trash2, Save, X, ChevronDown, ChevronRight,
@@ -416,7 +416,9 @@ function POsPanel({ projectId, project }) {
 
 function ProcurementPanel({ projectId, project }) {
   const { data: all = [], isLoading } = useEntityList('BOMItem', { project_id: projectId }, 'supplier', 500);
-  const items = useMemo(() => all.filter(i => (i.order_status || (i.ordered ? 'ordered' : 'not_ordered')) === 'not_ordered'), [all]);
+  // Exclude panel child rows — the panel is procured as one unit; its internal
+  // components are never listed individually.
+  const items = useMemo(() => all.filter(i => isTopLevelBOM(i) && (i.order_status || (i.ordered ? 'ordered' : 'not_ordered')) === 'not_ordered'), [all]);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [collapsedSuppliers, setCollapsedSuppliers] = useState(new Set());
 

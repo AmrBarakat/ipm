@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
-import { formatCurrency, formatDate } from '@/lib/constants';
+import { formatCurrency, formatDate, isTopLevelBOM } from '@/lib/constants';
 import { Camera, GitCompare, Snowflake, TrendingUp, TrendingDown } from 'lucide-react';
 
 /**
@@ -33,12 +33,14 @@ export default function BaselineManager({ projectId, project }) {
 
   useEffect(() => { load(); }, [load]);
 
-  // Current totals from live BOM items
-  const currentPlannedCost = bomItems.reduce(
+  // Current totals from live BOM items — exclude panel child rows (parent_id)
+  // so a panel is counted once and not double-counted with its components.
+  const topBom = bomItems.filter(isTopLevelBOM);
+  const currentPlannedCost = topBom.reduce(
     (s, i) => s + (Number(i.planned_cost_price) || Number(i.cost_price) || 0) * (Number(i.quantity) || 1),
     0
   );
-  const currentActualCost = bomItems.reduce(
+  const currentActualCost = topBom.reduce(
     (s, i) => s + (Number(i.actual_cost_price) || 0) * (Number(i.quantity) || 1),
     0
   );
@@ -50,7 +52,7 @@ export default function BaselineManager({ projectId, project }) {
     setCapturing(true);
     try {
       const user = await base44.auth.me().catch(() => null);
-      const line_items = bomItems.map(i => ({
+      const line_items = topBom.map(i => ({
         bom_item_id: i.id,
         description: i.description,
         manufacturer_part_number: i.manufacturer_part_number,
