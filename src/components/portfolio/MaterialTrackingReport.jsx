@@ -1,5 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
-import { base44 } from '@/api/base44Client';
+import { useState, useMemo } from 'react';
 import { formatCurrency, formatDate } from '@/lib/constants';
 import { Package, AlertTriangle, FileText, Loader2, Truck, CheckCircle2 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
@@ -32,23 +31,10 @@ function isPoOverdue(po) {
   return d < today;
 }
 
-export default function MaterialTrackingReport({ projects }) {
-  const [pos, setPos] = useState([]);
-  const [loading, setLoading] = useState(true);
+export default function MaterialTrackingReport({ projects, pos = [] }) {
   const [generating, setGenerating] = useState(false);
 
   const projectMap = useMemo(() => Object.fromEntries(projects.map(p => [p.id, p])), [projects]);
-
-  useEffect(() => {
-    async function load() {
-      setLoading(true);
-      const projectIds = new Set(projects.map(p => p.id));
-      const all = await base44.entities.PurchaseOrder.list('-created_date', 2000);
-      setPos(all.filter(po => projectIds.has(po.project_id)));
-      setLoading(false);
-    }
-    load();
-  }, [projects]);
 
   // Group POs by project (only projects that have POs)
   const groups = useMemo(() => {
@@ -192,12 +178,6 @@ export default function MaterialTrackingReport({ projects }) {
     doc.save(`Material_Tracking_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
     setGenerating(false);
   }
-
-  if (loading) return (
-    <div className="flex justify-center py-16">
-      <div className="w-8 h-8 border-4 border-slate-200 border-t-amber-500 rounded-full animate-spin" />
-    </div>
-  );
 
   return (
     <div className="space-y-5">

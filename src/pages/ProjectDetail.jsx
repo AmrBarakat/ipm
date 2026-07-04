@@ -2,9 +2,7 @@ import { useState, useEffect, lazy, Suspense } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { STATUS_COLORS, STATUS_LABELS, PRIORITY_COLORS, PRIORITY_LABELS, TYPE_LABELS, formatCurrency, formatDate } from '@/lib/constants';
-import { ArrowLeft, Pencil, FolderOpen, BarChart2 } from 'lucide-react';
-import ProjectPDFExport from '@/components/project-detail/ProjectPDFExport';
-import ProgressReportModal from '@/components/project-detail/ProgressReportModal';
+import { ArrowLeft, Pencil, FolderOpen } from 'lucide-react';
 import ProjectForm from '@/components/projects/ProjectForm';
 import { useTranslation } from '@/hooks/useTranslation';
 
@@ -48,7 +46,6 @@ export default function ProjectDetail() {
   const [activeGroup, setActiveGroup] = useState(DEFAULT_GROUP);
   const [lastTabByGroup, setLastTabByGroup] = useState({ [DEFAULT_GROUP]: DEFAULT_TAB });
   const [editing, setEditing] = useState(false);
-  const [showProgressReport, setShowProgressReport] = useState(false);
   const [overduePOCount, setOverduePOCount] = useState(0);
 
   function selectGroup(groupId) {
@@ -141,13 +138,6 @@ export default function ProjectDetail() {
             <div className="font-bold text-slate-800">{formatCurrency(project.contract_value, project.currency)}</div>
           </div>
           <button
-            onClick={() => setShowProgressReport(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded border border-amber-300 bg-amber-50 hover:bg-amber-100 text-sm text-amber-700 font-medium transition"
-          >
-            <BarChart2 className="w-4 h-4" /> {t('projectDetail.progressReport')}
-          </button>
-          <ProjectPDFExport project={project} />
-          <button
             onClick={() => setEditing(v => !v)}
             className="flex items-center gap-2 px-4 py-2 rounded border border-slate-300 hover:bg-slate-100 text-sm text-slate-700 font-medium transition"
           >
@@ -238,9 +228,6 @@ export default function ProjectDetail() {
             </div>
           </Suspense>
         </>
-      )}
-      {showProgressReport && (
-        <ProgressReportModal project={project} onClose={() => setShowProgressReport(false)} />
       )}
     </div>
   );

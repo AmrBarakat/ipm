@@ -1,5 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
-import { base44 } from '@/api/base44Client';
+import { useState, useMemo } from 'react';
 import { formatCurrency, TYPE_LABELS, STATUS_LABELS, STATUS_COLORS } from '@/lib/constants';
 import { TrendingUp, TrendingDown, Minus, ArrowUpDown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -18,29 +17,10 @@ function marginTier(pct) {
   return 'loss';
 }
 
-export default function ProfitMarginReport({ projects }) {
+export default function ProfitMarginReport({ projects, invoices = [], expenses = [], collections = [] }) {
   const navigate = useNavigate();
-  const [invoices,    setInvoices]    = useState([]);
-  const [expenses,    setExpenses]    = useState([]);
-  const [collections, setCollections] = useState([]);
-  const [loading,     setLoading]     = useState(true);
-  const [sortField,   setSortField]   = useState('margin_pct');
-  const [sortDir,     setSortDir]     = useState('asc'); // losses first by default
-
-  useEffect(() => {
-    if (!projects.length) { setLoading(false); return; }
-    const idSet = new Set(projects.map(p => p.id));
-    Promise.all([
-      base44.entities.Invoice.list('-planned_date', 2000),
-      base44.entities.Expense.list('-planned_date', 2000),
-      base44.entities.Collection.list('-received_date', 2000),
-    ]).then(([inv, exp, col]) => {
-      setInvoices(inv.filter(i => idSet.has(i.project_id)));
-      setExpenses(exp.filter(e => idSet.has(e.project_id)));
-      setCollections(col.filter(c => idSet.has(c.project_id)));
-      setLoading(false);
-    });
-  }, [projects]);
+  const [sortField, setSortField] = useState('margin_pct');
+  const [sortDir, setSortDir] = useState('asc'); // losses first by default
 
   const rows = useMemo(() => {
     return projects.map(p => {
@@ -89,12 +69,6 @@ export default function ProfitMarginReport({ projects }) {
 
   const SortIcon = ({ field }) => (
     <ArrowUpDown className={`w-3 h-3 inline ml-1 ${sortField === field ? 'text-amber-500' : 'text-slate-300'}`} />
-  );
-
-  if (loading) return (
-    <div className="flex justify-center py-16">
-      <div className="w-8 h-8 border-4 border-slate-200 border-t-amber-500 rounded-full animate-spin" />
-    </div>
   );
 
   const tierLabel = { high: '≥20%', medium: '10–20%', low: '0–10%', loss: 'Loss' };

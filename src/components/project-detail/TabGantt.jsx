@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
 import { formatDate } from '@/lib/constants';
 import { ChevronLeft, ChevronRight, Flag, ZoomIn, ZoomOut, Calendar, AlertTriangle, Layers, Check, X, RefreshCw, Maximize2, Minimize2 } from 'lucide-react';
-import GanttExportButton from '@/components/project-detail/GanttExportButton';
 
 const MILESTONE_STATUS_COLORS = {
   pending:     'bg-slate-400',
@@ -485,17 +484,6 @@ export default function TabGantt({ projectId, project }) {
             className="px-3 py-1.5 text-xs border border-slate-200 rounded hover:bg-slate-100 text-slate-600 font-medium">
             Today
           </button>
-          <GanttExportButton
-            project={project}
-            zoom={zoom}
-            viewStart={viewStart}
-            viewEnd={viewEnd}
-            milestones={milestones}
-            wbsItems={wbsItems}
-            wbsRows={wbsRows}
-            wbsImpact={wbsImpact}
-            chartContainerRef={chartContainerRef}
-          />
           <button onClick={() => setFullscreen(v => !v)}
             className="p-1.5 border border-slate-200 rounded hover:bg-slate-100 text-slate-600"
             title={fullscreen ? 'Exit fullscreen' : 'Expand fullscreen'}>
