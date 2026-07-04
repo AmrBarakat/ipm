@@ -15,12 +15,15 @@ export default function TabProcurement({ projectId, project }) {
     // Exclude engineering / service line items (non-material, not procured via PO)
     const pn = (i.manufacturer_part_number || '').trim().toLowerCase();
     if (i.category === 'service' || pn === 'engineering') return false;
+    // Locally hidden via procurement delete — restored on "Sync with BOM"
+    if (hiddenIds.has(i.id)) return false;
     return true;
-  }), [all]);
+  }), [all, hiddenIds]);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [collapsedSuppliers, setCollapsedSuppliers] = useState(new Set());
   const [bulkEdit, setBulkEdit] = useState(null);
   const [syncing, setSyncing] = useState(false);
+  const [hiddenIds, setHiddenIds] = useState(new Set());
   const queryClient = useQueryClient();
 
   // Auto-select all unordered items whenever the list refreshes
@@ -82,17 +85,18 @@ export default function TabProcurement({ projectId, project }) {
   async function syncWithBOM() {
     setSyncing(true);
     await queryClient.invalidateQueries({ queryKey: ['BOMItem'] });
+    setHiddenIds(new Set()); // restore any locally-hidden items
     setSyncing(false);
   }
 
+  // Procurement delete is local-only: it hides items from this view without
+  // removing them from the BOM. Use "Sync with BOM" to bring them back.
   async function bulkDelete() {
     if (selectedIds.size === 0) return;
-    if (!confirm(`Delete ${selectedIds.size} selected item(s)? This removes them from the BOM.`)) return;
-    const ids = [...selectedIds];
+    if (!confirm(`Remove ${selectedIds.size} selected item(s) from procurement? They stay in the BOM — use "Sync with BOM" to restore.`)) return;
+    setHiddenIds(prev => new Set([...prev, ...selectedIds]));
     setSelectedIds(new Set());
     setBulkEdit(null);
-    await base44.entities.BOMItem.deleteMany({ id: { $in: ids } });
-    queryClient.invalidateQueries({ queryKey: ['BOMItem'] });
   }
 
   // KPIs
