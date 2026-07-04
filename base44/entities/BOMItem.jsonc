@@ -114,11 +114,22 @@
     "delivery_status": {
       "type": "string",
       "enum": [
-        "pending",
-        "partially_received",
-        "received"
+        "not_delivered",
+        "partially_delivered",
+        "delivered"
       ],
-      "default": "pending"
+      "default": "not_delivered",
+      "description": "Derived from delivered_qty vs total quantity"
+    },
+    "delivered_qty": {
+      "type": "number",
+      "default": 0,
+      "description": "Cumulative quantity received across all packing slips / delivery notes"
+    },
+    "remaining_qty": {
+      "type": "number",
+      "default": 0,
+      "description": "Total quantity minus delivered_qty (clamps at 0)"
     },
     "expected_delivery_date": {
       "type": "string",

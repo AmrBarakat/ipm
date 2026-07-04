@@ -2,7 +2,7 @@
  * Renders a structured summary table stored on a Note (po_summary / dn_summary).
  * Used by TabNotes for notes whose note_type !== 'plain'.
  */
-function actionColor(action) {
+function statusColor(action) {
   if (action === 'Ordered') return 'text-blue-600 font-semibold';
   if (action === 'Delivered') return 'text-emerald-600 font-semibold';
   if (action === 'Partially Delivered') return 'text-amber-600 font-semibold';
@@ -11,7 +11,8 @@ function actionColor(action) {
 
 export default function SummaryNoteTable({ tableData }) {
   if (!tableData || !Array.isArray(tableData.rows)) return null;
-  const { document_number, document_date, rows } = tableData;
+  const { document_type, document_number, document_date, rows } = tableData;
+  const isPO = document_type === 'po';
 
   return (
     <div className="border border-slate-200 rounded-lg overflow-hidden">
@@ -25,8 +26,20 @@ export default function SummaryNoteTable({ tableData }) {
             <tr>
               <th className="px-3 py-2 text-left">BOM Item</th>
               <th className="px-3 py-2 text-left">Part #</th>
-              <th className="px-3 py-2 text-right">Qty</th>
-              <th className="px-3 py-2 text-left">Action</th>
+              {isPO ? (
+                <>
+                  <th className="px-3 py-2 text-right">Ordered Qty</th>
+                  <th className="px-3 py-2 text-left">Action</th>
+                </>
+              ) : (
+                <>
+                  <th className="px-3 py-2 text-right">Ordered</th>
+                  <th className="px-3 py-2 text-right">This Slip</th>
+                  <th className="px-3 py-2 text-right">Cumulative</th>
+                  <th className="px-3 py-2 text-right">Remaining</th>
+                  <th className="px-3 py-2 text-left">Status</th>
+                </>
+              )}
               <th className="px-3 py-2 text-left">Source</th>
             </tr>
           </thead>
@@ -35,10 +48,20 @@ export default function SummaryNoteTable({ tableData }) {
               <tr key={i} className="border-t border-slate-100">
                 <td className="px-3 py-1.5 text-slate-700">{r.bom_description || '—'}</td>
                 <td className="px-3 py-1.5 font-mono text-slate-500">{r.part_number || '—'}</td>
-                <td className="px-3 py-1.5 text-right">{r.quantity ?? '—'}</td>
-                <td className="px-3 py-1.5">
-                  <span className={actionColor(r.action)}>{r.action}</span>
-                </td>
+                {isPO ? (
+                  <>
+                    <td className="px-3 py-1.5 text-right">{r.ordered_qty ?? '—'}</td>
+                    <td className="px-3 py-1.5"><span className={statusColor(r.action)}>{r.action}</span></td>
+                  </>
+                ) : (
+                  <>
+                    <td className="px-3 py-1.5 text-right">{r.ordered_qty ?? '—'}</td>
+                    <td className="px-3 py-1.5 text-right">{r.delivered_this_slip ?? '—'}</td>
+                    <td className="px-3 py-1.5 text-right">{r.cumulative_delivered ?? '—'}</td>
+                    <td className="px-3 py-1.5 text-right">{r.remaining ?? '—'}</td>
+                    <td className="px-3 py-1.5"><span className={statusColor(r.action)}>{r.action}</span></td>
+                  </>
+                )}
                 <td className="px-3 py-1.5 font-mono text-slate-500">
                   {r.source_ref || '—'} <span className="text-slate-400">{r.source_date || ''}</span>
                 </td>

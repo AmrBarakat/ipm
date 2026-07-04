@@ -51,9 +51,9 @@ function normalizeOrderStatus(val) {
 
 function normalizeDeliveryStatus(val) {
   const v = String(val || '').toLowerCase();
-  if (v.includes('received') || v.includes('delivered')) return 'received';
-  if (v.includes('partial')) return 'partially_received';
-  return 'pending';
+  if (v.includes('received') || v.includes('delivered')) return 'delivered';
+  if (v.includes('partial')) return 'partially_delivered';
+  return 'not_delivered';
 }
 
 function mapItemToBOMRecord(item, projectId, documentId) {

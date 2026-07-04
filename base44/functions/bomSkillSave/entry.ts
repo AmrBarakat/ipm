@@ -74,7 +74,7 @@ Deno.serve(async (req) => {
         selling_price: row.selling_price ?? 0,
         stock_qty: row.stock_qty ?? 0,
         order_status: row.order_status || 'not_ordered',
-        delivery_status: row.delivery_status || 'pending',
+        delivery_status: row.delivery_status || 'not_delivered',
         currency: 'SAR',
       }));
       const newItems = await base44.asServiceRole.entities.BOMItem.bulkCreate(batch);
@@ -100,7 +100,7 @@ Deno.serve(async (req) => {
       selling_price: child.selling_price ?? 0,
       stock_qty: 0,
       order_status: 'not_ordered',
-      delivery_status: 'pending',
+      delivery_status: 'not_delivered',
       currency: 'SAR',
     }));
     for (let i = 0; i < childPayloads.length; i += BATCH) {

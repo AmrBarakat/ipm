@@ -64,7 +64,7 @@ export default function BOMExtractionModal({ document, projectId, onClose, onApp
       selling_price: Number(rest.selling_price) || 0,
       stock_status: 'non_stock',
       order_status: 'not_ordered',
-      delivery_status: 'pending',
+      delivery_status: 'not_delivered',
     }));
     setStep('applying');
     await base44.entities.BOMItem.bulkCreate(toCreate);

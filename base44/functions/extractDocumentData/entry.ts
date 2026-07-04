@@ -80,12 +80,13 @@ For PURCHASE ORDER documents extract:
 - status: one of: draft, issued, acknowledged, in_transit, partially_delivered, delivered, cancelled
 - notes: string
 
-For DELIVERY NOTE documents extract:
-- dn_number: string
+For DELIVERY NOTE / PACKING SLIP / PACKING LIST documents extract:
+- dn_number: string (the packing slip or delivery note number, e.g. PCKS-00002655)
 - received_date: date string YYYY-MM-DD
 - received_by: string
 - condition: one of: good, damaged, partial
 - notes: string
+IMPORTANT: Documents titled "Packing slip" or "Packing list" are delivery documents — classify them as delivery_note, NOT "other".
 
 Also extract these general fields that apply to all document types:
 - document_title: string
@@ -94,10 +95,20 @@ Also extract these general fields that apply to all document types:
 - parties: array of strings (company names, parties involved)
 - currency: string (e.g. SAR, USD)
 - total_amount: number (any total amount found)
-- line_items: array of objects with part_number, description, quantity, unit, unit_price, total fields
+- line_items: array of objects with these fields:
+  - item_number: string (the supplier's internal warehouse/item number if present — NOT the real part number)
+  - part_number: string (the real manufacturer part code, usually embedded in the description inside square brackets like [TQ.TWDFCW30K] or [ES.TQ.TM221CE40T]; extract the code inside the brackets)
+  - description: string (full line description including any bracketed code)
+  - ordered_qty: number (quantity ordered)
+  - delivered_qty: number (quantity delivered/received on this slip)
+  - remaining_qty: number (remaining to deliver, if shown)
+  - quantity: number (same as ordered_qty for POs, delivered_qty for delivery notes)
+  - unit: string
+  - unit_price: number
+  - total: number
 
 Return a JSON object with:
-- document_type: detected type (invoice, contract, po, delivery_note, other)
+- document_type: detected type (invoice, contract, po, delivery_note, other). Packing slips and packing lists are delivery_note.
 - confidence: number 0-1 how confident you are in the extraction
 - general: object with general fields above
 - specific: object with type-specific fields above
@@ -125,7 +136,11 @@ Return a JSON object with:
               type: 'object',
               properties: {
                 part_number: { type: 'string' },
+                item_number: { type: 'string' },
                 description: { type: 'string' },
+                ordered_qty: { type: 'number' },
+                delivered_qty: { type: 'number' },
+                remaining_qty: { type: 'number' },
                 quantity: { type: 'number' },
                 unit: { type: 'string' },
                 unit_price: { type: 'number' },

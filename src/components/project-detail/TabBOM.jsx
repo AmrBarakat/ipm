@@ -9,9 +9,9 @@ import SkeletonTable from '@/components/ui/SkeletonTable';
 import EmptyState from '@/components/ui/EmptyState';
 
 const DELIVERY_COLORS = {
-  pending: 'bg-slate-100 text-slate-600',
-  partially_received: 'bg-amber-100 text-amber-800',
-  received: 'bg-emerald-100 text-emerald-700',
+  not_delivered: 'bg-slate-100 text-slate-600',
+  partially_delivered: 'bg-amber-100 text-amber-800',
+  delivered: 'bg-emerald-100 text-emerald-700',
 };
 
 const ORDER_COLORS = {
@@ -23,7 +23,7 @@ const EMPTY_FORM = {
   description: '', category: 'other', quantity: 1, stock_qty: 0, unit: 'pcs',
   planned_cost_price: '', actual_cost_price: '', selling_price: '', currency: 'SAR',
   supplier: '', manufacturer_part_number: '',
-  order_status: 'not_ordered', delivery_status: 'pending', expected_delivery_date: '',
+  order_status: 'not_ordered', delivery_status: 'not_delivered', expected_delivery_date: '',
 };
 
 const inp = 'border border-transparent rounded px-1.5 py-1 text-xs focus:outline-none focus:border-amber-400 focus:bg-white bg-transparent w-full hover:bg-slate-100 transition-colors';
@@ -226,8 +226,8 @@ export default function TabBOM({ projectId }) {
   const totalActualCost = allTopLevel.reduce((s, i) => s + (Number(i.actual_cost_price) || 0) * (Number(i.quantity) || 1), 0);
   const totalSell = allTopLevel.reduce((s, i) => s + (Number(i.selling_price) || 0) * (Number(i.quantity) || 1), 0);
   const orderedCount = allTopLevel.filter(i => (i.order_status || (i.ordered ? 'ordered' : 'not_ordered')) === 'ordered').length;
-  const receivedCount = allTopLevel.filter(i => i.delivery_status === 'received').length;
-  const pendingDelivery = allTopLevel.filter(i => i.delivery_status === 'pending' || i.delivery_status === 'partially_received').length;
+  const deliveredCount = allTopLevel.filter(i => i.delivery_status === 'delivered').length;
+  const pendingDelivery = allTopLevel.filter(i => i.delivery_status === 'not_delivered' || i.delivery_status === 'partially_delivered').length;
 
   const byCategory = useMemo(() => {
     const map = {};
@@ -270,7 +270,7 @@ export default function TabBOM({ projectId }) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KpiCard label="Ordered" value={orderedCount} icon={<Truck className="w-5 h-5" />} color="border-blue-400" />
         <KpiCard label="Not Ordered" value={totalItems - orderedCount} icon={<ShoppingCart className="w-5 h-5" />} color="border-slate-400" />
-        <KpiCard label="Received" value={receivedCount} icon={<CheckCircle className="w-5 h-5" />} color="border-emerald-400" />
+        <KpiCard label="Delivered" value={deliveredCount} icon={<CheckCircle className="w-5 h-5" />} color="border-emerald-400" />
         <KpiCard label="Pending Delivery" value={pendingDelivery} icon={<Clock className="w-5 h-5" />} color="border-amber-400" />
       </div>
 
@@ -289,9 +289,9 @@ export default function TabBOM({ projectId }) {
           </select>
           <select value={filterDelivery} onChange={e => setFilterDelivery(e.target.value)} className={selCls}>
             <option value="">All Delivery</option>
-            <option value="pending">Pending</option>
-            <option value="partially_received">Partially Received</option>
-            <option value="received">Received</option>
+            <option value="not_delivered">Not Delivered</option>
+            <option value="partially_delivered">Partially Delivered</option>
+            <option value="delivered">Delivered</option>
           </select>
           {suppliers.length > 0 && (
             <select value={filterSupplier} onChange={e => setFilterSupplier(e.target.value)} className={selCls}>
@@ -337,9 +337,9 @@ export default function TabBOM({ projectId }) {
               onChange={e => setBulkEdit(e.target.value ? { field: 'delivery_status', value: e.target.value } : null)}
             >
               <option value="">Delivery Status…</option>
-              <option value="pending">Pending</option>
-              <option value="partially_received">Partially Received</option>
-              <option value="received">Received</option>
+              <option value="not_delivered">Not Delivered</option>
+              <option value="partially_delivered">Partially Delivered</option>
+              <option value="delivered">Delivered</option>
             </select>
           </div>
 
@@ -442,7 +442,9 @@ export default function TabBOM({ projectId }) {
             total_planned: (Number(i.planned_cost_price) || Number(i.cost_price) || 0) * (Number(i.quantity) || 1),
             total_actual: (Number(i.actual_cost_price) || 0) * (Number(i.quantity) || 1),
             order_status: i.order_status || (i.ordered ? 'ordered' : 'not_ordered'),
-            delivery_status: i.delivery_status || 'pending',
+            delivery_status: i.delivery_status || 'not_delivered',
+            delivered_qty: i.delivered_qty || 0,
+            remaining: Math.max(0, (Number(i.quantity) || 0) - (Number(i.delivered_qty) || 0)),
             expected_delivery: i.expected_delivery_date || '',
           }))}
           exportCols={[
@@ -452,7 +454,7 @@ export default function TabBOM({ projectId }) {
             { key: 'order_qty', label: 'Order Qty' }, { key: 'unit', label: 'Unit' },
             { key: 'planned_cost_unit', label: 'Planned Cost/Unit' }, { key: 'actual_cost_unit', label: 'Actual Cost/Unit' },
             { key: 'total_planned', label: 'Total Planned' }, { key: 'total_actual', label: 'Total Actual' },
-            { key: 'order_status', label: 'Order Status' }, { key: 'delivery_status', label: 'Delivery' },
+            { key: 'order_status', label: 'Order Status' }, { key: 'delivery_status', label: 'Delivery' }, { key: 'remaining', label: 'Remaining' },
             { key: 'expected_delivery', label: 'Expected Delivery' },
           ]}
         >
@@ -502,6 +504,7 @@ export default function TabBOM({ projectId }) {
                     <th className="px-3 py-3 text-right">Sell Value</th>
                     <th className="px-3 py-3 text-left">Order</th>
                     <th className="px-3 py-3 text-left">Delivery</th>
+                    <th className="px-3 py-3 text-right">Remaining</th>
                     <th className="px-3 py-3 text-left">Exp. Delivery</th>
                     <th className="px-3 py-3 w-8"></th>
                   </tr>
@@ -616,11 +619,14 @@ export default function TabBOM({ projectId }) {
                                     </select>
                                   </td>
                                   <td className="px-1 py-1">
-                                    <select className={`text-xs px-2 py-1 rounded font-semibold border-0 cursor-pointer ${DELIVERY_COLORS[item.delivery_status] || 'bg-slate-100 text-slate-600'}`} value={item.delivery_status || 'pending'} onChange={e => handleSelectChange(item, 'delivery_status', e.target.value)}>
-                                      <option value="pending">Pending</option>
-                                      <option value="partially_received">Partially Received</option>
-                                      <option value="received">Received</option>
+                                    <select className={`text-xs px-2 py-1 rounded font-semibold border-0 cursor-pointer ${DELIVERY_COLORS[item.delivery_status] || 'bg-slate-100 text-slate-600'}`} value={item.delivery_status || 'not_delivered'} onChange={e => handleSelectChange(item, 'delivery_status', e.target.value)}>
+                                      <option value="not_delivered">Not Delivered</option>
+                                      <option value="partially_delivered">Partially Delivered</option>
+                                      <option value="delivered">Delivered</option>
                                     </select>
+                                  </td>
+                                  <td className="px-1 py-1 text-right">
+                                    <span className="text-xs font-semibold text-slate-600">{Math.max(0, (Number(item.quantity) || 0) - (Number(item.delivered_qty) || 0))}</span>
                                   </td>
                                   <td className="px-1 py-1">
                                     <input type="date" className={inp} value={item.expected_delivery_date || ''} onChange={e => updateField(item.id, 'expected_delivery_date', e.target.value)} onBlur={e => handleBlur(item, 'expected_delivery_date', e.target.value)} />
@@ -634,7 +640,7 @@ export default function TabBOM({ projectId }) {
                                 // Panel children expanded sub-table
                                 isPanel && isPanelExpanded && panelChildren.length > 0 && (
                                   <tr key={`${item.id}_children`}>
-                                    <td colSpan={14} className="p-0">
+                                    <td colSpan={15} className="p-0">
                                       <div className="bg-orange-50/60 border-t border-orange-100 pl-8">
                                         <table className="w-full text-xs">
                                           <thead className="bg-orange-100 text-orange-800">

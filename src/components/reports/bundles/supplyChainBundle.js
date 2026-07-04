@@ -76,7 +76,7 @@ export default {
       byCat[cat].total++;
       const ordered = (i.order_status || (i.ordered ? 'ordered' : 'not_ordered')) === 'ordered';
       if (ordered) byCat[cat].ordered++; else byCat[cat].notOrdered++;
-      if (i.delivery_status === 'received') byCat[cat].received++;
+      if (i.delivery_status === 'delivered') byCat[cat].received++;
       else if (ordered) byCat[cat].pending++;
       byCat[cat].value += (Number(i.planned_cost_price) || Number(i.cost_price) || 0) * (Number(i.quantity) || 1);
     });
@@ -88,7 +88,7 @@ export default {
         { header: 'Total Items', key: 'total', align: 'right', width: 0.12 },
         { header: 'Ordered', key: 'ordered', align: 'right', width: 0.12 },
         { header: 'Not Ordered', key: 'notOrdered', align: 'right', width: 0.13 },
-        { header: 'Received', key: 'received', align: 'right', width: 0.12 },
+        { header: 'Delivered', key: 'received', align: 'right', width: 0.12 },
         { header: 'Pending Delivery', key: 'pending', align: 'right', width: 0.13 },
         { header: 'Value', key: 'value', align: 'right', width: 0.16 },
       ],

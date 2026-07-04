@@ -48,7 +48,16 @@
               "part_number": {
                 "type": "string"
               },
-              "quantity": {
+              "ordered_qty": {
+                "type": "number"
+              },
+              "delivered_this_slip": {
+                "type": "number"
+              },
+              "cumulative_delivered": {
+                "type": "number"
+              },
+              "remaining": {
                 "type": "number"
               },
               "action": {

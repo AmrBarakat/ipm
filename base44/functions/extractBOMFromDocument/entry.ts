@@ -29,10 +29,10 @@ function normalizeCategory(value) {
 function normalizeDeliveryStatus(value) {
   const normalized = String(value || '').toLowerCase().trim();
 
-  if (normalized.includes('received')) return 'received';
-  if (normalized.includes('partial')) return 'partially_received';
+  if (normalized.includes('received')) return 'delivered';
+  if (normalized.includes('partial')) return 'partially_delivered';
 
-  return 'pending';
+  return 'not_delivered';
 }
 
 Deno.serve(async (req) => {

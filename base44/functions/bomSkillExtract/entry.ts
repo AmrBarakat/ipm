@@ -156,7 +156,7 @@ Deno.serve(async (req) => {
           selling_price: totalSell > 0 ? totalSell / 1 : null,
           stock_qty: 0,
           order_status: 'not_ordered',
-          delivery_status: 'pending',
+          delivery_status: 'not_delivered',
           is_panel: true,
           _group_name: group.name,
         };
@@ -180,7 +180,7 @@ Deno.serve(async (req) => {
             selling_price: c.unitSell,
             stock_qty: 0,
             order_status: 'not_ordered',
-            delivery_status: 'pending',
+            delivery_status: 'not_delivered',
             is_child: true,
           });
         });
@@ -220,7 +220,7 @@ Deno.serve(async (req) => {
           selling_price: item.unitSell,
           stock_qty: 0,
           order_status: 'not_ordered',
-          delivery_status: 'pending',
+          delivery_status: 'not_delivered',
           is_panel: false,
           is_child: false,
         });

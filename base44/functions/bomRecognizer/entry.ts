@@ -409,7 +409,7 @@ function aggregateGroups(groups, config) {
         selling_price: totalSell,
         stock_qty: 0,
         order_status: 'not_ordered',
-        delivery_status: 'pending',
+        delivery_status: 'not_delivered',
         is_panel: true,
         _children_raw: group.items,
       };
@@ -429,7 +429,7 @@ function aggregateGroups(groups, config) {
           selling_price: c.unitSell,
           stock_qty: 0,
           order_status: 'not_ordered',
-          delivery_status: 'pending',
+          delivery_status: 'not_delivered',
           is_child: true,
         });
       });
@@ -462,7 +462,7 @@ function aggregateGroups(groups, config) {
         _total_sell_sum: item.totalSell,
         stock_qty: 0,
         order_status: 'not_ordered',
-        delivery_status: 'pending',
+        delivery_status: 'not_delivered',
       });
     }
   }

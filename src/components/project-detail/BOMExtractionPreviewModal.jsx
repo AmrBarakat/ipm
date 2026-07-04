@@ -793,13 +793,12 @@ export default function BOMExtractionPreviewModal({ document, projectId, onClose
 
                                 {/* DELIVERY STATUS */}
                                 <td className="px-1 py-1.5 w-24">
-                                  <select value={item.delivery_status || 'Pending'}
+                                  <select value={item.delivery_status || 'not_delivered'}
                                     onChange={e => updateItemField(item.preview_id, 'delivery_status', e.target.value)}
                                     className={INP}>
-                                    <option>Pending</option>
-                                    <option>In Transit</option>
-                                    <option>Delivered</option>
-                                    <option>On Hold</option>
+                                    <option value="not_delivered">Not Delivered</option>
+                                    <option value="partially_delivered">Partially Delivered</option>
+                                    <option value="delivered">Delivered</option>
                                   </select>
                                 </td>
 
