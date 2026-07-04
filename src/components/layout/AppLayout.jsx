@@ -1,7 +1,24 @@
+import { useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import AppHeader from './AppHeader';
+import { base44 } from '@/api/base44Client';
+import { useTranslation } from '@/hooks/useTranslation';
+import { applyTheme } from '@/lib/theme';
 
 export default function AppLayout() {
+  const { setLocale } = useTranslation();
+
+  // Apply persisted per-user settings (language + theme) on app load.
+  useEffect(() => {
+    base44.auth.me()
+      .then(user => {
+        const s = user.settings || {};
+        if (s.language) setLocale(s.language);
+        applyTheme(s.theme || 'light');
+      })
+      .catch(() => {});
+  }, [setLocale]);
+
   return (
     <div className="min-h-screen bg-slate-100 text-slate-800">
       <AppHeader />

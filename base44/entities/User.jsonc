@@ -7,6 +7,72 @@
         "admin",
         "user"
       ]
+    },
+    "settings": {
+      "type": "object",
+      "description": "Per-user app settings persisted via auth.updateMe",
+      "properties": {
+        "default_currency": {
+          "type": "string",
+          "default": "SAR"
+        },
+        "default_ev_method": {
+          "type": "string",
+          "enum": [
+            "weighted_milestones",
+            "0-100",
+            "earned_value"
+          ],
+          "default": "weighted_milestones"
+        },
+        "default_fiscal_calendar": {
+          "type": "string",
+          "enum": [
+            "calendar",
+            "fiscal_apr",
+            "fiscal_jul"
+          ],
+          "default": "calendar"
+        },
+        "notifications": {
+          "type": "object",
+          "properties": {
+            "milestone_completion": {
+              "type": "boolean",
+              "default": true
+            },
+            "shipment_delays": {
+              "type": "boolean",
+              "default": true
+            },
+            "invoice_due": {
+              "type": "boolean",
+              "default": true
+            },
+            "risk_mitigation": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        },
+        "language": {
+          "type": "string",
+          "enum": [
+            "en",
+            "ar"
+          ],
+          "default": "en"
+        },
+        "theme": {
+          "type": "string",
+          "enum": [
+            "light",
+            "dark",
+            "system"
+          ],
+          "default": "light"
+        }
+      }
     }
   },
   "required": [
