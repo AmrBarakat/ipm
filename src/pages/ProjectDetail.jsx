@@ -28,10 +28,13 @@ const TabSpinner = () => (
   </div>
 );
 
-const TABS = [
-  'overview', 'gantt', 'wbs', 'tasks', 'milestones', 'deliverables',
-  'bom', 'financials', 'documents', 'notes', 'risks', 'vendors', 'bom_reconcile',
+const TAB_GROUPS = [
+  { id: 'plan',       label: 'PLAN',       tabs: ['overview', 'gantt', 'wbs', 'tasks', 'milestones', 'deliverables'] },
+  { id: 'commercial', label: 'COMMERCIAL', tabs: ['bom', 'financials', 'vendors', 'bom_reconcile'] },
+  { id: 'governance', label: 'GOVERNANCE', tabs: ['documents', 'notes', 'risks'] },
 ];
+const DEFAULT_TAB = 'overview';
+const DEFAULT_GROUP = 'plan';
 
 export default function ProjectDetail() {
   const { id } = useParams();
@@ -39,9 +42,21 @@ export default function ProjectDetail() {
   const { t } = useTranslation();
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState(DEFAULT_TAB);
+  const [activeGroup, setActiveGroup] = useState(DEFAULT_GROUP);
+  const [lastTabByGroup, setLastTabByGroup] = useState({ [DEFAULT_GROUP]: DEFAULT_TAB });
   const [editing, setEditing] = useState(false);
   const [showProgressReport, setShowProgressReport] = useState(false);
+
+  function selectGroup(groupId) {
+    setActiveGroup(groupId);
+    setActiveTab(lastTabByGroup[groupId] || TAB_GROUPS.find(g => g.id === groupId).tabs[0]);
+  }
+
+  function selectTab(tabId) {
+    setActiveTab(tabId);
+    setLastTabByGroup(prev => ({ ...prev, [activeGroup]: tabId }));
+  }
 
   useEffect(() => { loadProject(); }, [id]);
 
@@ -144,20 +159,39 @@ export default function ProjectDetail() {
       {/* Tabs */}
       {!editing && (
         <>
-          <div className="flex gap-1 border-b border-slate-200 mb-6 overflow-x-auto">
-            {TABS.map(tabId => (
-              <button
-                key={tabId}
-                onClick={() => setActiveTab(tabId)}
-                className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition -mb-px ${
-                  activeTab === tabId
-                    ? 'border-amber-500 text-amber-600'
-                    : 'border-transparent text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                {t(`projectDetail.tabs.${tabId}`)}
-              </button>
-            ))}
+          <div className="mb-4">
+            {/* Group selector */}
+            <div className="flex gap-2 mb-3">
+              {TAB_GROUPS.map(g => (
+                <button
+                  key={g.id}
+                  onClick={() => selectGroup(g.id)}
+                  className={`px-4 py-2 rounded text-xs font-bold tracking-wide transition ${
+                    activeGroup === g.id
+                      ? 'bg-amber-500 text-slate-900 shadow-sm'
+                      : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                  }`}
+                >
+                  {g.label}
+                </button>
+              ))}
+            </div>
+            {/* Tabs within the active group */}
+            <div className="flex gap-1 border-b border-slate-200 overflow-x-auto">
+              {TAB_GROUPS.find(g => g.id === activeGroup).tabs.map(tabId => (
+                <button
+                  key={tabId}
+                  onClick={() => selectTab(tabId)}
+                  className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition -mb-px ${
+                    activeTab === tabId
+                      ? 'border-amber-500 text-amber-600'
+                      : 'border-transparent text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  {t(`projectDetail.tabs.${tabId}`)}
+                </button>
+              ))}
+            </div>
           </div>
 
           <Suspense fallback={<TabSpinner />}>
