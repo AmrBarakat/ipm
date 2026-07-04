@@ -19,7 +19,7 @@ export default function ProjectPDFExport({ project }) {
       base44.entities.WBSItem.filter({ project_id: project.id }, 'wbs_code', 500),
     ]);
 
-    // WBS rollup helpers
+    // ── WBS weighted rollup ───────────────────────────────────────────────
     const wbsById = Object.fromEntries(wbsItems.map(i => [i.id, i]));
     const wbsTree = {};
     wbsItems.forEach(i => {
@@ -27,6 +27,7 @@ export default function ProjectPDFExport({ project }) {
       if (!wbsTree[pid]) wbsTree[pid] = [];
       wbsTree[pid].push(i);
     });
+    // Child progress weighted by each item's weight, rolled up to parents.
     function rollupProgress(id) {
       const children = wbsTree[id] || [];
       if (children.length === 0) return wbsById[id]?.progress || 0;
@@ -34,24 +35,28 @@ export default function ProjectPDFExport({ project }) {
       const tw = cp.reduce((s, c) => s + c.w, 0);
       return Math.round(cp.reduce((s, c) => s + c.p * c.w, 0) / (tw || 1));
     }
-    function getMilestoneProgress(milestoneId) {
-      const linked = wbsItems.filter(i => i.milestone_id === milestoneId);
-      if (linked.length === 0) return null;
-      const tw = linked.reduce((s, i) => s + (i.weight || 1), 0);
-      const weighted = linked.reduce((s, i) => s + rollupProgress(i.id) * (i.weight || 1), 0);
-      return Math.round(weighted / (tw || 1));
-    }
+    // Roots weighted-averaged for overall WBS progress.
+    const roots = wbsTree['__root__'] || [];
+    const rootOverall = (() => {
+      if (roots.length === 0) return 0;
+      const tw = roots.reduce((s, r) => s + (r.weight || 1), 0);
+      return Math.round(roots.reduce((s, r) => s + rollupProgress(r.id) * (r.weight || 1), 0) / (tw || 1));
+    })();
 
     const cur = project.currency || 'SAR';
 
-    // Financial calcs
-    const plannedInvoiced = invoices.filter(i => i.status !== 'cancelled').reduce((s, i) => s + (i.planned_amount || 0), 0);
-    const actualInvoiced = invoices.filter(i => ['invoiced','paid','partial','overdue'].includes(i.status)).reduce((s, i) => s + (i.actual_amount || i.planned_amount || 0), 0);
-    const totalReceived = collections.reduce((s, c) => s + (c.amount || 0), 0);
-    const plannedExpenses = expenses.filter(e => e.status !== 'cancelled').reduce((s, e) => s + (e.planned_amount || 0), 0);
-    const actualExpenses = expenses.filter(e => ['committed','paid'].includes(e.status)).reduce((s, e) => s + (e.actual_amount || e.planned_amount || 0), 0);
-    const netCash = totalReceived - actualExpenses;
+    // ── Financial summary calcs ───────────────────────────────────────────
+    const invoiced = invoices
+      .filter(i => ['invoiced', 'paid', 'partial', 'overdue'].includes(i.status))
+      .reduce((s, i) => s + (i.actual_amount || i.planned_amount || 0), 0);
+    const collected = collections.reduce((s, c) => s + (c.amount || 0), 0);
+    const spent = expenses
+      .filter(e => ['committed', 'paid'].includes(e.status))
+      .reduce((s, e) => s + (e.actual_amount || e.planned_amount || 0), 0);
+    const remaining = collected - spent;
+    const marginPct = invoiced > 0 ? Math.round(((invoiced - spent) / invoiced) * 100) : null;
 
+    // ── PDF layout ───────────────────────────────────────────────────────
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const W = 210;
     const margin = 14;
@@ -62,35 +67,35 @@ export default function ProjectPDFExport({ project }) {
       if (y + needed > 275) { doc.addPage(); y = 20; }
     }
 
-    // ── Header band ────────────────────────────────────────────────────────
+    // ── Cover header band ─────────────────────────────────────────────────
     doc.setFillColor(15, 23, 42); // slate-900
-    doc.rect(0, 0, W, 28, 'F');
+    doc.rect(0, 0, W, 30, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(16);
     doc.setFont(undefined, 'bold');
-    doc.text('Project Report', margin, 11);
+    doc.text('Project Report', margin, 12);
     doc.setFontSize(9);
     doc.setFont(undefined, 'normal');
-    doc.text(`Generated: ${new Date().toLocaleDateString('en-GB')}`, margin, 18);
+    doc.text(`Generated: ${new Date().toLocaleDateString('en-GB')}`, margin, 19);
     doc.setFontSize(11);
     doc.setFont(undefined, 'bold');
-    doc.text(`${project.code}  —  ${project.name}`, margin, 25);
+    doc.text(`${project.code}  —  ${project.name}`, margin, 26);
     doc.setTextColor(0, 0, 0);
-    y = 36;
+    y = 38;
 
-    // ── Project info row ──────────────────────────────────────────────────
+    // ── Cover: project name, client, status, overall progress, contract value ──
     doc.setFontSize(8);
     doc.setFont(undefined, 'normal');
     doc.setTextColor(100, 116, 139);
     const infoItems = [
       ['Client', project.client || '—'],
-      ['Type', TYPE_LABELS[project.project_type] || project.project_type],
       ['Status', STATUS_LABELS[project.status] || project.status],
+      ['Type', TYPE_LABELS[project.project_type] || project.project_type],
       ['Priority', PRIORITY_LABELS[project.priority] || project.priority],
       ['Start', formatDate(project.start_date)],
       ['Due', formatDate(project.target_completion_date)],
       ['Location', project.location || '—'],
-      ['PM', project.project_manager || '—'],
+      ['Project Manager', project.project_manager || '—'],
     ];
     const colCount = 4;
     const iColW = colW / colCount;
@@ -106,45 +111,79 @@ export default function ProjectPDFExport({ project }) {
       doc.setTextColor(30, 41, 59);
       doc.text(String(val), x, iy + 4.5);
     });
-    y += Math.ceil(infoItems.length / colCount) * 10 + 6;
+    y += Math.ceil(infoItems.length / colCount) * 10 + 4;
 
-    // ── Progress ──────────────────────────────────────────────────────────
-    checkPage(20);
-    sectionTitle(doc, 'Progress', margin, y);
-    y += 7;
+    // Overall progress bar
+    checkPage(18);
     const progress = project.progress || 0;
+    doc.setFontSize(8);
+    doc.setFont(undefined, 'bold');
+    doc.setTextColor(71, 85, 105);
+    doc.text('Overall Progress', margin, y);
+    doc.setFont(undefined, 'normal');
+    doc.setTextColor(30, 41, 59);
+    doc.text(`${progress}%`, margin + colW, y, { align: 'right' });
+    y += 3;
     doc.setFillColor(226, 232, 240);
     doc.roundedRect(margin, y, colW, 5, 2, 2, 'F');
     doc.setFillColor(245, 158, 11); // amber-500
     doc.roundedRect(margin, y, colW * progress / 100, 5, 2, 2, 'F');
+    y += 10;
+
+    // Contract value highlight
+    checkPage(12);
+    doc.setFillColor(248, 250, 252);
+    doc.roundedRect(margin, y - 4, colW, 10, 2, 2, 'F');
     doc.setFontSize(8);
     doc.setFont(undefined, 'bold');
-    doc.setTextColor(30, 41, 59);
-    doc.text(`${progress}% complete`, margin + colW + 2, y + 4);
-    y += 12;
+    doc.setTextColor(71, 85, 105);
+    doc.text('Contract Value', margin + 2, y + 1);
+    doc.setFontSize(11);
+    doc.setTextColor(15, 23, 42);
+    doc.text(formatCurrency(project.contract_value, cur), margin + colW - 2, y + 1, { align: 'right' });
+    y += 14;
 
-    // ── Financial Summary ─────────────────────────────────────────────────
+    // ── Milestones table ─────────────────────────────────────────────────
+    if (milestones.length > 0) {
+      checkPage(20);
+      sectionTitle(doc, `Milestones (${milestones.length})`, margin, y);
+      y += 7;
+
+      const mCols = [0.40, 0.18, 0.18, 0.14, 0.10];
+      tableHeader(doc, margin, y, colW, mCols, ['Title', 'Planned Date', 'Actual Date', 'Status', 'Progress']);
+      y += 7;
+
+      milestones.forEach((m, i) => {
+        checkPage(8);
+        if (i % 2 === 0) { doc.setFillColor(248, 250, 252); doc.rect(margin, y - 4, colW, 7, 'F'); }
+        const vals = [
+          truncate(m.title, 38),
+          formatDate(m.planned_date),
+          m.completed_date ? formatDate(m.completed_date) : '—',
+          m.status ? m.status.replace(/_/g, ' ') : '—',
+          `${m.progress ?? 0}%`,
+        ];
+        renderTableRow(doc, margin, y, colW, mCols, vals);
+        y += 7;
+      });
+      y += 4;
+    }
+
+    // ── Financial summary: invoiced, collected, spent, remaining, margin ──
     checkPage(50);
     sectionTitle(doc, 'Financial Summary', margin, y);
     y += 7;
 
     const finRows = [
-      ['Contract Value',    formatCurrency(project.contract_value, cur)],
-      ['Planned Invoiced',  formatCurrency(plannedInvoiced, cur)],
-      ['Actual Invoiced',   formatCurrency(actualInvoiced, cur)],
-      ['Total Received',    formatCurrency(totalReceived, cur)],
-      ['Planned Expenses',  formatCurrency(plannedExpenses, cur)],
-      ['Actual Expenses',   formatCurrency(actualExpenses, cur)],
-      ['Net Cash',          formatCurrency(netCash, cur)],
+      ['Invoiced',   formatCurrency(invoiced, cur)],
+      ['Collected',  formatCurrency(collected, cur)],
+      ['Spent',      formatCurrency(spent, cur)],
+      ['Remaining',  formatCurrency(remaining, cur)],
+      ['Margin',     marginPct === null ? '—' : `${marginPct}%`],
     ];
-
     finRows.forEach(([label, val], i) => {
       checkPage(8);
-      const bg = i % 2 === 0;
-      if (bg) {
-        doc.setFillColor(248, 250, 252);
-        doc.rect(margin, y - 4, colW, 7, 'F');
-      }
+      if (i % 2 === 0) { doc.setFillColor(248, 250, 252); doc.rect(margin, y - 4, colW, 7, 'F'); }
       doc.setFontSize(8.5);
       doc.setFont(undefined, 'normal');
       doc.setTextColor(71, 85, 105);
@@ -156,53 +195,42 @@ export default function ProjectPDFExport({ project }) {
     });
     y += 4;
 
-    // ── Milestones ────────────────────────────────────────────────────────
-    if (milestones.length > 0) {
-      checkPage(20);
-      sectionTitle(doc, `Milestones (${milestones.length})`, margin, y);
+    // ── WBS progress section (weighted rollup) ────────────────────────────
+    if (wbsItems.length > 0) {
+      checkPage(22);
+      sectionTitle(doc, `WBS Progress  ·  Overall ${rootOverall}%`, margin, y);
       y += 7;
 
-      tableHeader(doc, margin, y, colW, ['Title', 'Planned Date', 'Completed Date', 'Status', 'Progress']);
+      const wCols = [0.16, 0.50, 0.16, 0.18];
+      tableHeader(doc, margin, y, colW, wCols, ['WBS', 'Name', 'Weight', 'Progress']);
       y += 7;
 
-      milestones.forEach((m, i) => {
+      // Sort by wbs_code for stable hierarchy order
+      const sortedWbs = [...wbsItems].sort((a, b) => (a.wbs_code || '').localeCompare(b.wbs_code || '', undefined, { numeric: true }));
+      sortedWbs.forEach((item, i) => {
         checkPage(8);
         if (i % 2 === 0) { doc.setFillColor(248, 250, 252); doc.rect(margin, y - 4, colW, 7, 'F'); }
-        const cols = [0.38, 0.17, 0.17, 0.15, 0.13];
+        const depth = (item.wbs_code || '').split('.').length - 1;
+        const indent = Math.min(depth, 4) * 3;
+        const rolled = rollupProgress(item.id);
         const vals = [
-          truncate(m.title, 35),
-          formatDate(m.planned_date),
-          m.completed_date ? formatDate(m.completed_date) : '—',
-          m.status?.replace(/_/g, ' ') || '—',
-          `${getMilestoneProgress(m.id) ?? m.progress ?? 0}%`,
+          item.wbs_code || '—',
+          truncate(item.name, 46 - Math.min(depth, 4)),
+          String(item.weight ?? 1),
+          `${rolled}%`,
         ];
-        renderTableRow(doc, margin, y, colW, cols, vals);
-        y += 7;
-      });
-      y += 4;
-    }
-
-    // ── Invoice list ──────────────────────────────────────────────────────
-    if (invoices.length > 0) {
-      checkPage(20);
-      sectionTitle(doc, `Invoices (${invoices.length})`, margin, y);
-      y += 7;
-
-      tableHeader(doc, margin, y, colW, ['Description', 'Planned Date', 'Planned Amt', 'Actual Amt', 'Status']);
-      y += 7;
-
-      invoices.forEach((inv, i) => {
-        checkPage(8);
-        if (i % 2 === 0) { doc.setFillColor(248, 250, 252); doc.rect(margin, y - 4, colW, 7, 'F'); }
-        const cols = [0.35, 0.15, 0.17, 0.17, 0.16];
-        const vals = [
-          truncate(inv.description, 30),
-          formatDate(inv.planned_date),
-          formatCurrency(inv.planned_amount, cur),
-          inv.actual_amount != null ? formatCurrency(inv.actual_amount, cur) : '—',
-          inv.status || '—',
-        ];
-        renderTableRow(doc, margin, y, colW, cols, vals);
+        // Render with indentation on the name column
+        doc.setFontSize(7.5);
+        doc.setFont(undefined, 'normal');
+        doc.setTextColor(30, 41, 59);
+        let cx = margin + 2;
+        doc.text(String(vals[0]), cx, y); cx += colW * wCols[0];
+        doc.setFont(undefined, depth === 0 ? 'bold' : 'normal');
+        doc.text(String(vals[1]), cx + indent, y); cx += colW * wCols[1];
+        doc.setFont(undefined, 'normal');
+        doc.text(String(vals[2]), cx, y); cx += colW * wCols[2];
+        doc.setFont(undefined, 'bold');
+        doc.text(String(vals[3]), cx, y);
         y += 7;
       });
       y += 4;
@@ -246,13 +274,12 @@ function sectionTitle(doc, text, x, y) {
   doc.text(text, x + 5, y);
 }
 
-function tableHeader(doc, x, y, colW, labels) {
+function tableHeader(doc, x, y, colW, colFracs, labels) {
   doc.setFillColor(15, 23, 42);
   doc.rect(x, y - 5, colW, 7, 'F');
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(7.5);
   doc.setFont(undefined, 'bold');
-  const colFracs = Array(labels.length).fill(1 / labels.length);
   let cx = x + 2;
   labels.forEach((l, i) => {
     doc.text(l, cx, y);
