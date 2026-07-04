@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { useState } from 'react';
+import { useEntityList, useEntityMutation } from '@/hooks/useEntity';
 import PanelWrapper from '@/components/ui/PanelWrapper';
 import { formatCurrency, formatDate, INVOICE_STATUS_LABELS, EXPENSE_CATEGORY_LABELS, EXPENSE_STATUS_LABELS } from '@/lib/constants';
 import { Plus, TrendingUp, TrendingDown, AlertTriangle, Pencil, Trash2, Save, X, Banknote, AlertCircle } from 'lucide-react';
@@ -21,10 +21,13 @@ const PAYMENT_METHOD_LABELS = {
 };
 
 export default function TabFinancials({ projectId, project }) {
-  const [invoices, setInvoices] = useState([]);
-  const [expenses, setExpenses] = useState([]);
-  const [collections, setCollections] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { data: invoices = [], isLoading: loadingInv } = useEntityList('Invoice', { project_id: projectId }, 'planned_date', 100);
+  const { data: expenses = [], isLoading: loadingExp } = useEntityList('Expense', { project_id: projectId }, 'planned_date', 100);
+  const { data: collections = [], isLoading: loadingCol } = useEntityList('Collection', { project_id: projectId }, '-received_date', 100);
+  const invoiceMutation = useEntityMutation('Invoice');
+  const expenseMutation = useEntityMutation('Expense');
+  const collectionMutation = useEntityMutation('Collection');
+  const loading = loadingInv || loadingExp || loadingCol;
 
   const [addingInv, setAddingInv] = useState(false);
   const [addingExp, setAddingExp] = useState(false);
@@ -41,43 +44,25 @@ export default function TabFinancials({ projectId, project }) {
   const [editExpForm, setEditExpForm] = useState({});
   const [editColForm, setEditColForm] = useState({});
 
-  useEffect(() => { load(); }, [projectId]);
-
-  async function load() {
-    setLoading(true);
-    const [inv, exp, col] = await Promise.all([
-      base44.entities.Invoice.filter({ project_id: projectId }, 'planned_date', 100),
-      base44.entities.Expense.filter({ project_id: projectId }, 'planned_date', 100),
-      base44.entities.Collection.filter({ project_id: projectId }, '-received_date', 100),
-    ]);
-    setInvoices(inv);
-    setExpenses(exp);
-    setCollections(col);
-    setLoading(false);
-  }
-
   async function createInvoice(e) {
     e.preventDefault();
-    await base44.entities.Invoice.create({ ...invForm, project_id: projectId, planned_amount: Number(invForm.planned_amount) || 0 });
+    await invoiceMutation.mutateAsync({ action: 'create', data: { ...invForm, project_id: projectId, planned_amount: Number(invForm.planned_amount) || 0 } });
     setInvForm({ description: '', planned_amount: '', planned_date: '' });
     setAddingInv(false);
-    load();
   }
 
   async function createExpense(e) {
     e.preventDefault();
-    await base44.entities.Expense.create({ ...expForm, project_id: projectId, planned_amount: Number(expForm.planned_amount) || 0 });
+    await expenseMutation.mutateAsync({ action: 'create', data: { ...expForm, project_id: projectId, planned_amount: Number(expForm.planned_amount) || 0 } });
     setExpForm({ description: '', category: 'material', planned_amount: '', planned_date: '', vendor: '' });
     setAddingExp(false);
-    load();
   }
 
   async function createCollection(e) {
     e.preventDefault();
-    await base44.entities.Collection.create({ ...colForm, project_id: projectId, amount: Number(colForm.amount) || 0 });
+    await collectionMutation.mutateAsync({ action: 'create', data: { ...colForm, project_id: projectId, amount: Number(colForm.amount) || 0 } });
     setColForm({ description: '', amount: '', received_date: '', payment_method: 'bank_transfer', reference_number: '' });
     setAddingCol(false);
-    load();
   }
 
   function startEditInv(inv) {
@@ -97,12 +82,12 @@ export default function TabFinancials({ projectId, project }) {
       planned_amount: Number(editInvForm.planned_amount) || 0,
       actual_amount: editInvForm.actual_amount !== '' ? Number(editInvForm.actual_amount) : null,
     };
-    await base44.entities.Invoice.update(id, data);
-    setEditingInv(null); load();
+    await invoiceMutation.mutateAsync({ action: 'update', id, data });
+    setEditingInv(null);
   }
   async function deleteInv(id) {
     if (!confirm('Delete this invoice?')) return;
-    await base44.entities.Invoice.delete(id); load();
+    await invoiceMutation.mutateAsync({ action: 'delete', id });
   }
 
   function startEditExp(exp) {
@@ -124,12 +109,12 @@ export default function TabFinancials({ projectId, project }) {
       planned_amount: Number(editExpForm.planned_amount) || 0,
       actual_amount: editExpForm.actual_amount !== '' ? Number(editExpForm.actual_amount) : null,
     };
-    await base44.entities.Expense.update(id, data);
-    setEditingExp(null); load();
+    await expenseMutation.mutateAsync({ action: 'update', id, data });
+    setEditingExp(null);
   }
   async function deleteExp(id) {
     if (!confirm('Delete this expense?')) return;
-    await base44.entities.Expense.delete(id); load();
+    await expenseMutation.mutateAsync({ action: 'delete', id });
   }
 
   function startEditCol(col) {
@@ -137,12 +122,12 @@ export default function TabFinancials({ projectId, project }) {
     setEditColForm({ description: col.description, amount: col.amount, received_date: col.received_date || '', payment_method: col.payment_method || 'bank_transfer', reference_number: col.reference_number || '' });
   }
   async function saveCol(id) {
-    await base44.entities.Collection.update(id, { ...editColForm, amount: Number(editColForm.amount) || 0 });
-    setEditingCol(null); load();
+    await collectionMutation.mutateAsync({ action: 'update', id, data: { ...editColForm, amount: Number(editColForm.amount) || 0 } });
+    setEditingCol(null);
   }
   async function deleteCol(id) {
     if (!confirm('Delete this collection?')) return;
-    await base44.entities.Collection.delete(id); load();
+    await collectionMutation.mutateAsync({ action: 'delete', id });
   }
 
   // Invoice KPIs

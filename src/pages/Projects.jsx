@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { base44 } from '@/api/base44Client';
+import { useEntityList, useEntityMutation } from '@/hooks/useEntity';
 import {
   formatCurrency, formatDate,
   STATUS_LABELS, STATUS_COLORS,
@@ -16,8 +16,8 @@ const ALL = 'all';
 
 export default function Projects() {
   const navigate = useNavigate();
-  const [projects, setProjects] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { data: projects = [], isLoading: loading } = useEntityList('Project', null, '-updated_date', 200);
+  const projectMutation = useEntityMutation('Project');
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState(ALL);
   const [filterType, setFilterType] = useState(ALL);
@@ -25,13 +25,6 @@ export default function Projects() {
   const [selected, setSelected] = useState(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
   const [showStatusMenu, setShowStatusMenu] = useState(false);
-
-  useEffect(() => {
-    base44.entities.Project.list('-updated_date', 200).then(p => {
-      setProjects(p);
-      setLoading(false);
-    });
-  }, []);
 
   const filtered = projects.filter(p => {
     const q = search.toLowerCase();
@@ -69,19 +62,23 @@ export default function Projects() {
   async function bulkDelete() {
     if (!confirm(`Delete ${selected.size} project(s)? This cannot be undone.`)) return;
     setBulkLoading(true);
-    await Promise.all([...selected].map(id => base44.entities.Project.delete(id)));
-    setProjects(prev => prev.filter(p => !selected.has(p.id)));
-    setSelected(new Set());
-    setBulkLoading(false);
+    try {
+      await Promise.all([...selected].map(id => projectMutation.mutateAsync({ action: 'delete', id })));
+      setSelected(new Set());
+    } finally {
+      setBulkLoading(false);
+    }
   }
 
   async function bulkSetStatus(status) {
     setBulkLoading(true);
     setShowStatusMenu(false);
-    await Promise.all([...selected].map(id => base44.entities.Project.update(id, { status })));
-    setProjects(prev => prev.map(p => selected.has(p.id) ? { ...p, status } : p));
-    setSelected(new Set());
-    setBulkLoading(false);
+    try {
+      await Promise.all([...selected].map(id => projectMutation.mutateAsync({ action: 'update', id, data: { status } })));
+      setSelected(new Set());
+    } finally {
+      setBulkLoading(false);
+    }
   }
 
   if (loading) return (
