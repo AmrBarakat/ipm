@@ -13,6 +13,7 @@ import NewProject from '@/pages/NewProject';
 import ProjectDetail from '@/pages/ProjectDetail';
 import Resources from '@/pages/Resources';
 import Reports from '@/pages/Reports';
+import Calendar from '@/pages/Calendar';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -43,6 +44,7 @@ const AuthenticatedApp = () => {
         <Route path="/projects/:id" element={<ProjectDetail />} />
         <Route path="/resources" element={<Resources />} />
         <Route path="/reports" element={<Reports />} />
+        <Route path="/calendar" element={<Calendar />} />
         {/* More routes will be added here */}
       </Route>
       <Route path="*" element={<PageNotFound />} />

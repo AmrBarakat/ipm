@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
-import { Bell, Search, Plus, Factory, FolderOpen, BarChart2, LayoutDashboard, Users, FileText, Package } from 'lucide-react';
+import { Bell, Search, Plus, Factory, FolderOpen, BarChart2, LayoutDashboard, Users, FileText, Package, CalendarDays } from 'lucide-react';
 import { formatDate } from '@/lib/constants';
 
 export default function AppHeader() {
@@ -209,6 +209,9 @@ export default function AppHeader() {
           </Link>
           <Link to="/projects" className="px-3 py-2 rounded text-sm hover:bg-slate-700 transition hidden md:flex items-center gap-1">
             <FolderOpen className="w-4 h-4" /><span>Projects</span>
+          </Link>
+          <Link to="/calendar" className="px-3 py-2 rounded text-sm hover:bg-slate-700 transition hidden md:flex items-center gap-1">
+            <CalendarDays className="w-4 h-4" /><span>Calendar</span>
           </Link>
           <Link to="/reports" className="px-3 py-2 rounded text-sm hover:bg-slate-700 transition hidden md:flex items-center gap-1">
             <BarChart2 className="w-4 h-4" /><span>Reports</span>
