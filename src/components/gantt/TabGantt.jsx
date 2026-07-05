@@ -342,7 +342,7 @@ export default function TabGantt({ projectId, project }) {
   const innerWidth = leftWidth + totalDays * dayWidth;
   const startForChart = effectiveStart;
   const chart = (
-    <div ref={containerRef} className="flex flex-col h-full">
+    <div ref={containerRef} className="flex flex-col h-[calc(100vh-18rem)] min-h-[400px]">
       <GanttToolbar
         scaleKey={scaleKey} setScaleKey={setScaleKey}
         onPan={pan} onFit={fitToProject} onToday={jumpToToday} onJumpStart={jumpToStart}
