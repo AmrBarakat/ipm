@@ -18,7 +18,7 @@ const MILESTONE_COLORS = {
 export default function GanttTimeline({
   rows, timelineStart, totalDays, dayWidth, scrollTop, viewportH, exporting,
   showDeps, showCritical, criticalIds, float, wbsById, projectStart,
-  onMoveItem, onResizeItem, onOpenEditor,
+  onMoveItem, onOpenEditor,
 }) {
   const timelineW = totalDays * dayWidth;
   const totalH = rows.length * ROW_H;
@@ -40,13 +40,18 @@ export default function GanttTimeline({
 
   const onBarMouseDown = useCallback((e, row, mode) => {
     if (mode === 'dblclick') return;
-    e.preventDefault(); e.stopPropagation();
     const item = row.data;
+    // Only draggable when BOTH dates exist — guards against Invalid Date.
+    if (!item.planned_start || !item.planned_end) return;
+    e.preventDefault(); e.stopPropagation();
     dragRef.current = {
       id: item.id, mode,
       startX: e.clientX,
-      origStart: item.planned_start, origEnd: item.planned_end,
-      rowId: row.id,
+      origStart: item.planned_start,
+      origEnd: item.planned_end,
+      moved: false,
+      lastStart: item.planned_start,
+      lastEnd: item.planned_end,
     };
     document.body.style.cursor = mode === 'move' ? 'grabbing' : 'ew-resize';
     document.body.style.userSelect = 'none';
@@ -58,30 +63,38 @@ export default function GanttTimeline({
       if (!drag) return;
       const deltaPx = e.clientX - drag.startX;
       const deltaDays = Math.round(deltaPx / dayWidth);
+      // Always derive from the ORIGINAL snapshot — never from the live value.
       let newStart = drag.origStart, newEnd = drag.origEnd;
       if (drag.mode === 'move') {
         newStart = toISO(addDays(drag.origStart, deltaDays));
         newEnd = toISO(addDays(drag.origEnd, deltaDays));
       } else if (drag.mode === 'resize-left') {
         const cand = toISO(addDays(drag.origStart, deltaDays));
-        if (cand < drag.origEnd) newStart = cand;
+        newStart = cand < drag.origEnd ? cand : drag.origEnd; // min 1 day
       } else if (drag.mode === 'resize-right') {
         const cand = toISO(addDays(drag.origEnd, deltaDays));
-        if (cand > drag.origStart) newEnd = cand;
+        newEnd = cand > drag.origStart ? cand : drag.origStart; // min 1 day
       }
-      onMoveItem(drag.id, newStart, newEnd, drag.mode === 'move');
+      if (newStart === drag.lastStart && newEnd === drag.lastEnd) return; // no change this frame
+      drag.lastStart = newStart; drag.lastEnd = newEnd;
+      drag.moved = true;
+      // commit=false → optimistic only; cascade only for whole-bar moves.
+      onMoveItem(drag.id, newStart, newEnd, drag.mode, false);
     }
     function up() {
       const drag = dragRef.current;
       if (!drag) return;
       dragRef.current = null;
       document.body.style.cursor = ''; document.body.style.userSelect = '';
-      onResizeItem(drag.id); // finalize / persist
+      // Only persist if something actually changed.
+      if (drag.moved) {
+        onMoveItem(drag.id, drag.lastStart, drag.lastEnd, drag.mode, true);
+      }
     }
     window.addEventListener('mousemove', move);
     window.addEventListener('mouseup', up);
     return () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); };
-  }, [dayWidth, onMoveItem, onResizeItem]);
+  }, [dayWidth, onMoveItem]);
 
   // Dependency arrows (all rows — absolute coords; not affected by virtualization)
   const arrows = [];

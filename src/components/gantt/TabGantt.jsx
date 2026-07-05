@@ -178,24 +178,35 @@ export default function TabGantt({ projectId, project }) {
     requestAnimationFrame(() => { if (scrollRef.current) { scrollRef.current.scrollLeft = 0; scrollRef.current.scrollTop = 0; } });
   }
 
-  // ── Drag move/resize: optimistic + persist on mouseup ──────────────────────
-  const onMoveItem = useCallback((id, newStart, newEnd, cascade) => {
+  // ── Drag move/resize: optimistic during drag, persist on commit ────────────
+  const dragBaseRef = useRef(null); // committed start of the dragged item, captured at drag start
+
+  const onMoveItem = useCallback((id, newStart, newEnd, mode, commit) => {
+    const cascade = mode === 'move';
     setWbsItems(prev => {
-      const prevMoved = prev.find(i => i.id === id);
+      const target = prev.find(i => i.id === id);
+      if (!target) return prev;
+      // Capture the pre-drag committed start once, so cascade delta is stable
+      // across every frame of a continuous drag.
+      if (dragBaseRef.current?.id !== id) {
+        const committed = committedRef.current.find(x => x.id === id) || target;
+        dragBaseRef.current = { id, baseStart: committed.planned_start };
+      }
       let updated = prev.map(i => i.id === id ? { ...i, planned_start: newStart, planned_end: newEnd } : i);
-      if (cascade && prevMoved) {
-        // incremental shift from this drag (bar's previous position → new)
-        const delta = daysBetween(prevMoved.planned_start, newStart);
+      if (cascade) {
+        const delta = daysBetween(dragBaseRef.current.baseStart, newStart);
         if (delta !== 0) {
           const byId = Object.fromEntries(updated.map(i => [i.id, { ...i }]));
           const succ = {};
           for (const it of updated) for (const p of (it.predecessor_ids || [])) { (succ[p] ||= []).push(it.id); }
           const q = [...(succ[id] || [])]; const seen = new Set([id]);
+          // Shift successors from THEIR committed baseline by the same delta.
+          const committedById = Object.fromEntries(committedRef.current.map(i => [i.id, i]));
           while (q.length) {
             const sid = q.shift(); if (seen.has(sid)) continue; seen.add(sid);
-            const it = byId[sid]; if (!it) continue;
-            if (it.planned_start) it.planned_start = toISO(addDays(it.planned_start, delta));
-            if (it.planned_end) it.planned_end = toISO(addDays(it.planned_end, delta));
+            const it = byId[sid]; const base = committedById[sid]; if (!it || !base) continue;
+            if (base.planned_start) it.planned_start = toISO(addDays(base.planned_start, delta));
+            if (base.planned_end) it.planned_end = toISO(addDays(base.planned_end, delta));
             for (const s2 of (succ[sid] || [])) if (!seen.has(s2)) q.push(s2);
           }
           updated = Object.values(byId);
@@ -203,26 +214,30 @@ export default function TabGantt({ projectId, project }) {
       }
       return updated;
     });
-  }, []);
 
-  const onResizeItem = useCallback(() => {
-    // Persist all changed items vs committed
-    const changed = wbsItems.filter(i => {
-      const c = committedRef.current.find(x => x.id === i.id);
-      return c && (i.planned_start !== c.planned_start || i.planned_end !== c.planned_end);
-    });
-    if (!changed.length) return;
-    const updates = changed.map(i => ({ id: i.id, planned_start: i.planned_start, planned_end: i.planned_end }));
-    // A drag cascade (moved item + shifted successors) must land together — apply
-    // atomically via the backend so a partial failure rolls back the whole cascade
-    // instead of leaving the schedule with broken dependency dates.
-    base44.functions.invoke('applyWBSBatch', { wbs_updates: updates })
-      .then(() => queryClient.invalidateQueries({ queryKey: ['WBSItem'] }))
-      .catch((err) => {
-        setWbsItems(committedRef.current); // revert the drag — backend rolled back atomically
-        toast.error(err?.response?.data?.error || 'Schedule save failed — no changes were saved.');
-      });
-  }, [wbsItems, queryClient]);
+    if (commit) {
+      dragBaseRef.current = null;
+      // Persist on the next tick so we read the just-applied optimistic state.
+      setTimeout(() => {
+        setWbsItems(curr => {
+          const changed = curr.filter(i => {
+            const c = committedRef.current.find(x => x.id === i.id);
+            return c && (i.planned_start !== c.planned_start || i.planned_end !== c.planned_end);
+          });
+          if (changed.length) {
+            const updates = changed.map(i => ({ id: i.id, planned_start: i.planned_start, planned_end: i.planned_end }));
+            base44.functions.invoke('applyWBSBatch', { wbs_updates: updates })
+              .then(() => queryClient.invalidateQueries({ queryKey: ['WBSItem'] }))
+              .catch((err) => {
+                setWbsItems(committedRef.current); // atomic rollback on backend failure
+                toast.error(err?.response?.data?.error || 'Schedule save failed — no changes were saved.');
+              });
+          }
+          return curr;
+        });
+      }, 0);
+    }
+  }, [queryClient]);
 
   // ── Tree reorder / reparent ────────────────────────────────────────────────
   function onReorder(dragId, targetId, position) {
@@ -368,7 +383,7 @@ export default function TabGantt({ projectId, project }) {
               scrollTop={scrollTop} viewportH={viewportH - HEADER_H} exporting={!!exporting}
               showDeps={showDeps} showCritical={showCritical} criticalIds={cpm.criticalIds} float={cpm.float}
               wbsById={wbsById} projectStart={project?.start_date || null}
-              onMoveItem={onMoveItem} onResizeItem={onResizeItem} onOpenEditor={setEditorRow}
+              onMoveItem={onMoveItem} onOpenEditor={setEditorRow}
             />
           </div>
         </div>

@@ -27,7 +27,13 @@ export default function GanttEditorModal({ row, allWbs, onSave, onClose }) {
   }
 
   function save() {
-    onSave(row, form);
+    // Clamp end ≥ start for WBS tasks so a drag/editor never produces an
+    // inverted duration (end before start).
+    const out = { ...form };
+    if (!isMilestone && out.planned_start && out.planned_end && out.planned_end < out.planned_start) {
+      out.planned_end = out.planned_start;
+    }
+    onSave(row, out);
     onClose();
   }
 
