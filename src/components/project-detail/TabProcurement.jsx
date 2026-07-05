@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useEntityList } from '@/hooks/useEntity';
 import { useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
-import { formatCurrency, formatDate, BOM_CATEGORY_LABELS } from '@/lib/constants';
+import { formatCurrency, formatDate, BOM_CATEGORY_LABELS, BOM_CATEGORY_OPTIONS } from '@/lib/constants';
 import { ShoppingCart, Package, ChevronDown, ChevronRight, Check, AlertCircle, X, Save, Trash2, RefreshCw } from 'lucide-react';
 
 // Items eligible for procurement: not ordered, top-level (not panel children),
@@ -244,7 +244,7 @@ export default function TabProcurement({ projectId, project }) {
                 onChange={e => setBulkEdit(e.target.value ? { field: 'category', value: e.target.value } : null)}
               >
                 <option value="">Category…</option>
-                {Object.entries(BOM_CATEGORY_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                {BOM_CATEGORY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
 
               <input type="date"

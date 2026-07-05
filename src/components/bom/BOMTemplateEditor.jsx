@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { BOM_CATEGORY_LABELS } from '@/lib/constants';
+import { BOM_CATEGORY_LABELS, BOM_CATEGORY_OPTIONS } from '@/lib/constants';
 import { X, Save, Plus, Trash2, Star, StarOff, FileText } from 'lucide-react';
 
 const inp = 'border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white w-full';
@@ -202,7 +202,7 @@ export default function BOMTemplateEditor({ onClose, onTemplateSelected }) {
                     <label className="text-xs text-slate-500 block mb-1">Default Category</label>
                     <select value={form.default_category} onChange={e => setForm(f => ({ ...f, default_category: e.target.value }))} className={inp}>
                       <option value="">Auto-detect</option>
-                      {Object.entries(BOM_CATEGORY_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                      {BOM_CATEGORY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                   </div>
                   <div>

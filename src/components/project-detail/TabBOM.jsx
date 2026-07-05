@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useEntityList, useEntityMutation } from '@/hooks/useEntity';
 import { useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
-import { formatCurrency, BOM_CATEGORY_LABELS } from '@/lib/constants';
+import { formatCurrency, BOM_CATEGORY_LABELS, BOM_CATEGORY_OPTIONS } from '@/lib/constants';
 import { Plus, Package, Trash2, Filter, Tag, Truck, ShoppingCart, TrendingUp, CheckCircle, Clock, X, Check, ChevronDown, ChevronRight, Layers } from 'lucide-react';
 import PanelWrapper from '@/components/ui/PanelWrapper';
 import SkeletonTable from '@/components/ui/SkeletonTable';
@@ -292,7 +292,7 @@ export default function TabBOM({ projectId }) {
           <Filter className="w-4 h-4 text-slate-400" />
           <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className={selCls}>
             <option value="">All Categories</option>
-            {Object.entries(BOM_CATEGORY_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            {BOM_CATEGORY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
           <select value={filterOrderStatus} onChange={e => setFilterOrderStatus(e.target.value)} className={selCls}>
             <option value="">All Order Status</option>
@@ -349,7 +349,7 @@ export default function TabBOM({ projectId }) {
               onChange={e => setBulkEdit(e.target.value ? { field: 'category', value: e.target.value } : null)}
             >
               <option value="">Category…</option>
-              {Object.entries(BOM_CATEGORY_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              {BOM_CATEGORY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
 
@@ -387,7 +387,7 @@ export default function TabBOM({ projectId }) {
         <form onSubmit={create} className="bg-amber-50 border border-amber-200 rounded-lg p-4 grid grid-cols-2 md:grid-cols-4 gap-3">
           <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Description *" className={addInp + ' col-span-2'} required />
           <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} className={addInp}>
-            {Object.entries(BOM_CATEGORY_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            {BOM_CATEGORY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
           <input value={form.supplier} onChange={e => setForm(f => ({ ...f, supplier: e.target.value }))} placeholder="Supplier" className={addInp} />
           <input value={form.manufacturer_part_number} onChange={e => setForm(f => ({ ...f, manufacturer_part_number: e.target.value }))} placeholder="Part Number" className={addInp} />
@@ -459,7 +459,7 @@ export default function TabBOM({ projectId }) {
           {/* Group items by category */}
           {(() => {
             // Build ordered category groups from filtered items
-            const catOrder = Object.keys(BOM_CATEGORY_LABELS);
+            const catOrder = BOM_CATEGORY_OPTIONS.map(o => o.value);
             const groups = {};
             filtered.forEach(item => {
               const cat = item.category || 'other';
@@ -574,7 +574,7 @@ export default function TabBOM({ projectId }) {
                                   </td>
                                   <td className="px-1 py-1">
                                     <select className={inp + ' cursor-pointer'} value={item.category || 'other'} onChange={e => handleSelectChange(item, 'category', e.target.value)}>
-                                      {Object.entries(BOM_CATEGORY_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                                      {BOM_CATEGORY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                                     </select>
                                   </td>
                                   <td className="px-1 py-1">

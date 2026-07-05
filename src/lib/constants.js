@@ -37,6 +37,24 @@ export const EXPENSE_CATEGORY_LABELS = en.financials.expenseCategory;
 export const WBS_STATUS_LABELS = en.wbs.status;
 export const BOM_CATEGORY_LABELS = en.bom.category;
 
+// Canonical category options for dropdowns — one entry per entity enum value,
+// unique labels (no aliases). BOM_CATEGORY_LABELS stays as the full display
+// lookup (incl. import-pipeline alias keys like drive_vfd) so imported items
+// still render their label, but selects never show duplicates.
+export const BOM_CATEGORY_OPTIONS = [
+  { value: 'plc', label: en.bom.category.plc },
+  { value: 'hmi', label: en.bom.category.hmi },
+  { value: 'drive', label: en.bom.category.drive },
+  { value: 'sensor', label: en.bom.category.sensor },
+  { value: 'meter', label: en.bom.category.meter },
+  { value: 'panel', label: en.bom.category.panel },
+  { value: 'network', label: en.bom.category.network },
+  { value: 'software_license', label: en.bom.category.software_license },
+  { value: 'service', label: en.bom.category.service },
+  { value: 'it_hardware', label: en.bom.category.it_hardware },
+  { value: 'other', label: en.bom.category.other },
+];
+
 // A BOMItem with a parent_id is a panel component (child row). Outside the BOM
 // tab a panel is treated as ONE complete item, so child rows are invisible to
 // every section except the BOM tab. Use this to exclude children from any
