@@ -136,6 +136,16 @@ export default {
       blocked: 'Blocked',
     },
   },
+  scheduleAssistant: {
+    headerTitle: 'Scheduling Assistant',
+    headerSubtitle: 'Full-lifecycle schedule analysis & recommendations',
+    runAnalysis: 'Run Smart Analysis',
+    smartAnalysis: 'Smart Analysis',
+    analyzing: 'Analyzing the full project lifecycle — schedule, procurement, risks & cost.',
+    applySchedule: 'Apply Schedule',
+    insights: 'Insights',
+    applyTables: 'Review & Apply',
+  },
   bom: {
     category: {
       plc: 'PLC',

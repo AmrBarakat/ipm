@@ -9,7 +9,7 @@ export default function GanttToolbar({
   criticalCount, projectDuration, projectFinish,
   fullscreen, toggleFullscreen,
   onExportPNG, onExportPDF, onExportExcel, exporting,
-  onEstimate, onOptimize
+  onSmartAnalysis
 }) {
   const fmtFinish = projectFinish ? projectFinish.toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
   return (
@@ -71,14 +71,9 @@ export default function GanttToolbar({
             <AlertTriangle className="w-3.5 h-3.5" /> Critical ({criticalCount})
           </span>
         </label>
-        <div className="flex items-center border border-amber-300 rounded overflow-hidden">
-          
-
-          
-          <button onClick={onOptimize} className="flex items-center gap-1 px-2.5 py-1.5 text-xs hover:bg-amber-50 text-amber-700 font-medium" title="AI: optimize schedule (delays & dependencies)">
-            <Wand2 className="w-3.5 h-3.5" /> AI: Optimize
-          </button>
-        </div>
+        <button onClick={onSmartAnalysis} className="flex items-center gap-1 px-3 py-1.5 text-xs border border-amber-300 rounded hover:bg-amber-50 text-amber-700 font-medium" title="Smart schedule analysis & recommendations">
+          <Wand2 className="w-3.5 h-3.5" /> Smart Analysis
+        </button>
         <div className="flex items-center border border-slate-200 rounded overflow-hidden">
           <button onClick={onExportPNG} disabled={exporting} className="flex items-center gap-1 px-2.5 py-1.5 text-xs hover:bg-slate-100 text-slate-600 border-r border-slate-200 disabled:opacity-50" title="Export PNG">
             {exporting === 'png' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Image className="w-3.5 h-3.5" />} PNG
