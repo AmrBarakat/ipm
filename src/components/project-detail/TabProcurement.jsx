@@ -329,7 +329,6 @@ export default function TabProcurement({ projectId, project }) {
                             <th className="px-3 py-2 text-left">Category</th>
                             <th className="px-3 py-2 text-left">Status</th>
                             <th className="px-3 py-2 text-right">Qty</th>
-                            <th className="px-3 py-2 text-left">Unit</th>
                             <th className="px-3 py-2 text-right">Unit Cost</th>
                             <th className="px-3 py-2 text-right">Total Cost</th>
                             <th className="px-3 py-2 text-left">Exp. Delivery</th>
@@ -368,7 +367,6 @@ export default function TabProcurement({ projectId, project }) {
                                   ); })()}
                                 </td>
                                 <td className="px-3 py-2 text-right font-semibold text-slate-700">{qty}</td>
-                                <td className="px-3 py-2 text-slate-500">{item.unit || 'pcs'}</td>
                                 <td className="px-3 py-2 text-right text-slate-700">{unitCost > 0 ? formatCurrency(unitCost, project?.currency || 'SAR') : '—'}</td>
                                 <td className="px-3 py-2 text-right font-semibold text-slate-800">{unitCost > 0 ? formatCurrency(unitCost * qty, project?.currency || 'SAR') : '—'}</td>
                                 <td className="px-3 py-2 text-slate-500">{formatDate(item.expected_delivery_date)}</td>
@@ -378,7 +376,7 @@ export default function TabProcurement({ projectId, project }) {
                         </tbody>
                         <tfoot className="border-t-2 border-slate-200 bg-slate-50">
                           <tr>
-                            <td colSpan={8} className="px-3 py-2 text-slate-500 text-xs font-semibold">Supplier Total</td>
+                            <td colSpan={7} className="px-3 py-2 text-slate-500 text-xs font-semibold">Supplier Total</td>
                             <td className="px-3 py-2 text-right font-bold text-slate-800">
                               {formatCurrency(
                                 supplierItems.reduce((s, i) => s + (Number(i.planned_cost_price) || Number(i.cost_price) || 0) * (Number(i.quantity) || 1), 0),

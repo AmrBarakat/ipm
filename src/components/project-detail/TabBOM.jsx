@@ -449,7 +449,7 @@ export default function TabBOM({ projectId }) {
             { key: 'description', label: 'Description' }, { key: 'category', label: 'Category' },
             { key: 'supplier', label: 'Supplier' }, { key: 'part_no', label: 'Part No.' },
             { key: 'qty', label: 'Qty' }, { key: 'stock_qty', label: 'Stock Qty' },
-            { key: 'order_qty', label: 'Order Qty' }, { key: 'unit', label: 'Unit' },
+            { key: 'order_qty', label: 'Order Qty' },
             { key: 'planned_cost_unit', label: 'Planned Cost/Unit' }, { key: 'actual_cost_unit', label: 'Actual Cost/Unit' },
             { key: 'total_planned', label: 'Total Planned' }, { key: 'total_actual', label: 'Total Actual' },
             { key: 'order_status', label: 'Order Status' }, { key: 'delivery_status', label: 'Delivery' }, { key: 'remaining', label: 'Remaining' },
@@ -643,7 +643,6 @@ export default function TabBOM({ projectId }) {
                                               <th className="px-3 py-1.5 text-left">Description</th>
                                               <th className="px-3 py-1.5 text-left">Supplier</th>
                                               <th className="px-3 py-1.5 text-right">Qty</th>
-                                              <th className="px-3 py-1.5 text-left">Unit</th>
                                               <th className="px-3 py-1.5 text-right">Unit Cost</th>
                                               <th className="px-3 py-1.5 text-right">Total Cost</th>
                                             </tr>
@@ -655,7 +654,6 @@ export default function TabBOM({ projectId }) {
                                                 <td className="px-3 py-1.5 text-slate-700">{child.description}</td>
                                                 <td className="px-3 py-1.5 text-slate-500">{child.supplier || '—'}</td>
                                                 <td className="px-3 py-1.5 text-right font-semibold">{child.quantity}</td>
-                                                <td className="px-3 py-1.5 text-slate-500">{child.unit || 'pcs'}</td>
                                                 <td className="px-3 py-1.5 text-right">{formatCurrency(child.planned_cost_price || 0, 'SAR')}</td>
                                                 <td className="px-3 py-1.5 text-right font-semibold">{formatCurrency((child.planned_cost_price || 0) * (child.quantity || 1), 'SAR')}</td>
                                               </tr>
@@ -663,7 +661,7 @@ export default function TabBOM({ projectId }) {
                                           </tbody>
                                           <tfoot className="border-t border-orange-200 bg-orange-100/60">
                                             <tr>
-                                              <td colSpan={6} className="px-3 py-1.5 text-xs text-orange-700 font-semibold">Total ({panelChildren.length} components)</td>
+                                              <td colSpan={5} className="px-3 py-1.5 text-xs text-orange-700 font-semibold">Total ({panelChildren.length} components)</td>
                                               <td className="px-3 py-1.5 text-right text-xs font-bold text-orange-800">
                                                 {formatCurrency(panelChildren.reduce((s, c) => s + (c.planned_cost_price || 0) * (c.quantity || 1), 0), 'SAR')}
                                               </td>

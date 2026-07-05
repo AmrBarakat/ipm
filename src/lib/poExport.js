@@ -60,10 +60,9 @@ export function generateVendorPOPDF(project, supplier, items, currency = 'SAR') 
   const cols = [
     { label: '#', w: 0.04, align: 'left' },
     { label: 'Part No.', w: 0.14, align: 'left' },
-    { label: 'Description', w: 0.35, align: 'left' },
+    { label: 'Description', w: 0.42, align: 'left' },
     { label: 'Category', w: 0.13, align: 'left' },
     { label: 'Qty', w: 0.06, align: 'right' },
-    { label: 'Unit', w: 0.07, align: 'left' },
     { label: 'Unit Cost', w: 0.10, align: 'right' },
     { label: 'Total', w: 0.11, align: 'right' },
   ];
@@ -106,7 +105,6 @@ export function generateVendorPOPDF(project, supplier, items, currency = 'SAR') 
       item.description || '—',
       BOM_CATEGORY_LABELS[item.category] || item.category || '—',
       qty,
-      item.unit || 'pcs',
       unitCost > 0 ? formatCurrency(unitCost, cur) : '—',
       total > 0 ? formatCurrency(total, cur) : '—',
     ], false, idx % 2 === 1);
