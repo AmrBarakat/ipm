@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
-import { useEntityList } from '@/hooks/useEntity';
+import { useQuery } from '@tanstack/react-query';
+import { base44 } from '@/api/base44Client';
 import { formatCurrency, STATUS_LABELS, STATUS_COLORS } from '@/lib/constants';
 import { AlertTriangle, ArrowUpRight, ArrowDownRight, Flag } from 'lucide-react';
 import SkeletonTable from '@/components/ui/SkeletonTable';
@@ -8,14 +9,16 @@ import EmptyState from '@/components/ui/EmptyState';
 const ACTIVE_STATUSES = ['planning', 'in_progress', 'commissioning'];
 const ATTENTION_VARIANCE_PCT = 5; // over budget by >5%
 
-function todayStr() { return new Date().toISOString().slice(0, 10); }
-
 export default function PortfolioHealthTable({ projects }) {
-  const { data: expenses = [], isLoading: eLoading, isError: eError, refetch: refetchE } = useEntityList('Expense', null, '-created_date', 1000);
-  const { data: milestones = [], isLoading: mLoading, isError: mError, refetch: refetchM } = useEntityList('Milestone', null, '-created_date', 1000);
-  const loading = eLoading || mLoading;
-  const isError = eError || mError;
-  const refetch = () => { refetchE(); refetchM(); };
+  const portfolioQuery = useQuery({
+    queryKey: ['portfolioSummary'],
+    queryFn: () => base44.functions.invoke('portfolioSummary').then((r) => r.data),
+    staleTime: 60_000,
+  });
+  const loading = portfolioQuery.isLoading;
+  const isError = portfolioQuery.isError;
+  const refetch = () => portfolioQuery.refetch();
+  const totalsByProject = portfolioQuery.data?.totalsByProject ?? {};
 
   const activeProjects = useMemo(
     () => projects.filter(p => ACTIVE_STATUSES.includes(p.status)),
@@ -23,46 +26,18 @@ export default function PortfolioHealthTable({ projects }) {
   );
 
   const rows = useMemo(() => {
-    const expByProject = {};
-    expenses.forEach(e => {
-      if (!expByProject[e.project_id]) expByProject[e.project_id] = [];
-      expByProject[e.project_id].push(e);
-    });
-    const milByProject = {};
-    milestones.forEach(m => {
-      if (!milByProject[m.project_id]) milByProject[m.project_id] = [];
-      milByProject[m.project_id].push(m);
-    });
-
-    const today = todayStr();
     return activeProjects.map(p => {
-      const pExp = expByProject[p.id] || [];
-      const pMil = milByProject[p.id] || [];
-
-      // Cost variance: actual vs planned from expenses
-      const plannedCost = pExp
-        .filter(e => e.status !== 'cancelled')
-        .reduce((s, e) => s + (e.planned_amount || 0), 0);
-      const actualCost = pExp
-        .filter(e => ['committed', 'paid'].includes(e.status))
-        .reduce((s, e) => s + (e.actual_amount || e.planned_amount || 0), 0);
+      const t = totalsByProject[p.id] || {};
+      const plannedCost = t.expensePlanned || 0;
+      const actualCost = t.expenseActual || 0;
       const costVariance = actualCost - plannedCost; // positive = over planned
       const variancePct = plannedCost > 0 ? (costVariance / plannedCost) * 100 : 0;
       const overBudget = costVariance > 0 && plannedCost > 0 && variancePct > ATTENTION_VARIANCE_PCT;
 
-      // Milestone progress
-      const total = pMil.length;
-      const completed = pMil.filter(m => m.status === 'completed').length;
-      const overdue = pMil.filter(m =>
-        m.status !== 'completed' && m.planned_date && m.planned_date < today
-      ).length;
-      const totalWeight = pMil.reduce((s, m) => s + (m.weight || 0), 0);
-      const completedWeight = pMil
-        .filter(m => m.status === 'completed')
-        .reduce((s, m) => s + (m.weight || 0), 0);
-      const milestoneProgress = totalWeight > 0
-        ? Math.round((completedWeight / totalWeight) * 100)
-        : total > 0 ? Math.round((completed / total) * 100) : 0;
+      const total = t.milestoneTotal || 0;
+      const completed = t.milestoneCompleted || 0;
+      const overdue = t.milestoneOverdue || 0;
+      const milestoneProgress = t.milestoneProgress || 0;
 
       const needsAttention = overBudget || overdue > 0;
 
@@ -85,7 +60,7 @@ export default function PortfolioHealthTable({ projects }) {
       if (b.costVariance !== a.costVariance) return b.costVariance - a.costVariance;
       return a.milestoneProgress - b.milestoneProgress;
     });
-  }, [activeProjects, expenses, milestones]);
+  }, [activeProjects, totalsByProject]);
 
   if (loading) return <SkeletonTable columns={6} rows={6} />;
 

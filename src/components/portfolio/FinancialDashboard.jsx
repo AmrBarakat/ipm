@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
-import { useEntityList } from '@/hooks/useEntity';
+import { useQuery } from '@tanstack/react-query';
+import { base44 } from '@/api/base44Client';
 import { formatCurrency, TYPE_LABELS } from '@/lib/constants';
 import { Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   LineChart, Line, ComposedChart, ResponsiveContainer,
@@ -54,16 +55,24 @@ export default function FinancialDashboard({ projects }) {
   const [dateTo, setDateTo] = useState('');
   const [view, setView] = useState('actual'); // actual | planned | both
 
-  // Fetch all financial data across all projects (cross-project pattern)
-  const { data: rawInvoices = [], isLoading: invLoading } = useEntityList('Invoice', null, '-planned_date', 2000);
-  const { data: rawCollections = [], isLoading: colLoading } = useEntityList('Collection', null, '-received_date', 2000);
-  const { data: rawExpenses = [], isLoading: expLoading } = useEntityList('Expense', null, '-planned_date', 2000);
+  // Single aggregated payload from the portfolioSummary backend function —
+  // replaces raw Invoice/Collection/Expense table loads. Records keep the
+  // fields/dates needed for the period-bucketed charts.
+  const portfolioQuery = useQuery({
+    queryKey: ['portfolioSummary'],
+    queryFn: () => base44.functions.invoke('portfolioSummary').then((r) => r.data),
+    staleTime: 60_000,
+  });
+  const loading = portfolioQuery.isLoading;
+  const summary = portfolioQuery.data;
+  const rawInvoices = summary?.records?.invoices ?? [];
+  const rawCollections = summary?.records?.collections ?? [];
+  const rawExpenses = summary?.records?.expenses ?? [];
 
   const idSet = useMemo(() => new Set(projects.map((p) => p.id)), [projects]);
   const invoices = useMemo(() => rawInvoices.filter((i) => idSet.has(i.project_id)), [rawInvoices, idSet]);
   const collections = useMemo(() => rawCollections.filter((c) => idSet.has(c.project_id)), [rawCollections, idSet]);
   const expenses = useMemo(() => rawExpenses.filter((e) => idSet.has(e.project_id)), [rawExpenses, idSet]);
-  const loading = invLoading || colLoading || expLoading;
 
   // Project id → type lookup
   const projectTypeMap = useMemo(() =>
