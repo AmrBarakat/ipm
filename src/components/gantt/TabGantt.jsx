@@ -31,11 +31,26 @@ export default function TabGantt({ projectId, project }) {
   const [wbsItems, setWbsItems] = useState([]);
   const [milestones, setMilestones] = useState([]);
   const committedRef = useRef([]);
+  const isDraggingRef = useRef(false); // suppress query refetches while a drag is in progress
   useEffect(() => {
+    // Don't clobber an in-progress optimistic drag with a background refetch
+    // (realtime subscription / window focus) — the drag commits on mouseup and
+    // re-invalidates, so the saved state lands afterward.
+    if (isDraggingRef.current) return;
     setWbsItems(qWbs);
     setMilestones(qMilestones);
     committedRef.current = qWbs;
   }, [qWbs, qMilestones]);
+
+  // Real-time: keep the Gantt in sync when WBS items or milestones change
+  // elsewhere (WBS tab, another user, automations) without a manual refresh.
+  useEffect(() => {
+    const unsubs = [
+      base44.entities.WBSItem?.subscribe?.(() => queryClient.invalidateQueries({ queryKey: ['WBSItem'] })),
+      base44.entities.Milestone?.subscribe?.(() => queryClient.invalidateQueries({ queryKey: ['Milestone'] })),
+    ];
+    return () => { unsubs.forEach(u => { try { u && u(); } catch (_) {} }); };
+  }, [queryClient]);
 
   const [scaleKey, setScaleKey] = useState('week');
   const [leftWidth, setLeftWidth] = useState(340);
@@ -184,6 +199,7 @@ export default function TabGantt({ projectId, project }) {
 
   const onMoveItem = useCallback((id, newStart, newEnd, mode, commit) => {
     const cascade = mode === 'move';
+    if (!commit) isDraggingRef.current = true;
     setWbsItems(prev => {
       const target = prev.find(i => i.id === id);
       if (!target) return prev;
@@ -217,6 +233,7 @@ export default function TabGantt({ projectId, project }) {
     });
 
     if (commit) {
+      isDraggingRef.current = false;
       dragBaseRef.current = null;
       // Persist on the next tick so we read the just-applied optimistic state.
       setTimeout(() => {
