@@ -519,7 +519,9 @@ function matchTemplateSignature(headerSignature, templates) {
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    try { await base44.auth.me(); } catch (_) {}
+    let user = null;
+    try { user = await base44.auth.me(); } catch (_) { user = null; }
+    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { file_url, project_id, existing_profile } = await req.json();
     if (!file_url) return Response.json({ error: 'file_url required' }, { status: 400 });

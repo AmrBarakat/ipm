@@ -8,10 +8,9 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    // auth.me() can raise a user-directory permission error for some roles;
-    // the writes below use the service role, so the user object isn't needed.
-    // Mirror bomSkillExtract: attempt softly, never abort on it.
-    try { await base44.auth.me(); } catch (_) {}
+    let user = null;
+    try { user = await base44.auth.me(); } catch (_) { user = null; }
+    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { project_id, preview_rows, conflict_resolutions, save_template, template_name, profile } = await req.json();
     if (!project_id || !preview_rows) return Response.json({ error: 'project_id and preview_rows required' }, { status: 400 });

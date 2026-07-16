@@ -472,8 +472,9 @@ Deno.serve(async (req) => {
   const startTime = Date.now();
   try {
     const base44 = createClientFromRequest(req);
-    // Auth is lenient — asServiceRole covers data access
-    try { await base44.auth.me(); } catch (_) {}
+    let user = null;
+    try { user = await base44.auth.me(); } catch (_) { user = null; }
+    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { plain_text, project_id, document_id, file_name, template } = await req.json();
     if (!plain_text || !project_id) {

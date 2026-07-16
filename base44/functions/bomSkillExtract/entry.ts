@@ -45,7 +45,9 @@ function get(row, field, fieldMap) {
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    try { await base44.auth.me(); } catch (_) {}
+    let user = null;
+    try { user = await base44.auth.me(); } catch (_) { user = null; }
+    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { file_url, profile, project_id } = await req.json();
     if (!file_url || !profile) return Response.json({ error: 'file_url and profile required' }, { status: 400 });
