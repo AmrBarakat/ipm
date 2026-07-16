@@ -8,6 +8,7 @@ import BaselineManager from '@/components/project-detail/BaselineManager';
 import SpendingTrendChart from '@/components/project-detail/SpendingTrendChart';
 import SkeletonTable from '@/components/ui/SkeletonTable';
 import EmptyState from '@/components/ui/EmptyState';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 const INV_STATUS_COLORS = {
   planned: 'bg-slate-100 text-slate-600',
@@ -33,6 +34,7 @@ export default function TabFinancials({ projectId, project }) {
   const invoiceMutation = useEntityMutation('Invoice');
   const expenseMutation = useEntityMutation('Expense');
   const collectionMutation = useEntityMutation('Collection');
+  const confirmDialog = useConfirm();
   const loading = loadingInv || loadingExp || loadingCol;
 
   const [addingInv, setAddingInv] = useState(false);
@@ -95,7 +97,7 @@ export default function TabFinancials({ projectId, project }) {
     setEditingInv(null);
   }
   async function deleteInv(id) {
-    if (!confirm('Delete this invoice?')) return;
+    if (!(await confirmDialog({ title: 'Delete invoice', description: 'Delete this invoice?', confirmText: 'Delete', destructive: true }))) return;
     await invoiceMutation.mutateAsync({ action: 'delete', id });
   }
 
@@ -122,7 +124,7 @@ export default function TabFinancials({ projectId, project }) {
     setEditingExp(null);
   }
   async function deleteExp(id) {
-    if (!confirm('Delete this expense?')) return;
+    if (!(await confirmDialog({ title: 'Delete expense', description: 'Delete this expense?', confirmText: 'Delete', destructive: true }))) return;
     await expenseMutation.mutateAsync({ action: 'delete', id });
   }
 
@@ -135,7 +137,7 @@ export default function TabFinancials({ projectId, project }) {
     setEditingCol(null);
   }
   async function deleteCol(id) {
-    if (!confirm('Delete this collection?')) return;
+    if (!(await confirmDialog({ title: 'Delete collection', description: 'Delete this collection?', confirmText: 'Delete', destructive: true }))) return;
     await collectionMutation.mutateAsync({ action: 'delete', id });
   }
 

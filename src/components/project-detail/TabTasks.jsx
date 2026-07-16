@@ -82,7 +82,7 @@ export default function TabTasks({ projectId }) {
   }
 
   async function deleteTask(id) {
-    if (!confirm('Delete this task?')) return;
+    if (!(await confirmDialog({ title: 'Delete task', description: 'Delete this task?', confirmText: 'Delete', destructive: true }))) return;
     await taskMutation.mutateAsync({ action: 'delete', id });
   }
 

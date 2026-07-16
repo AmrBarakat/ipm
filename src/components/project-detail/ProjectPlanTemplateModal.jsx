@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { X, Plus, Trash2, Save, Wand2, ChevronDown, ChevronRight, Flag, Layers, Check } from 'lucide-react';
 import { toLocalDate } from '@/lib/utils';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 const inp = 'border border-slate-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white w-full';
 
@@ -27,6 +28,7 @@ export default function ProjectPlanTemplateModal({ projectId, project, onClose, 
   const [applyResult, setApplyResult] = useState(null);
   const [msExpanded, setMsExpanded] = useState(true);
   const [wbsExpanded, setWbsExpanded] = useState(true);
+  const confirmDialog = useConfirm();
 
   useEffect(() => { loadTemplates(); }, []);
 
@@ -53,13 +55,13 @@ export default function ProjectPlanTemplateModal({ projectId, project, onClose, 
   }
 
   async function deleteTemplate(id) {
-    if (!confirm('Delete this template?')) return;
+    if (!(await confirmDialog({ title: 'Delete template', description: 'Delete this template?', confirmText: 'Delete', destructive: true }))) return;
     await base44.entities.ProjectPlanTemplate.delete(id);
     loadTemplates();
   }
 
   async function applyTemplate(template) {
-    if (!confirm(`Apply "${template.name}" to project "${project?.name}"? This will ADD items without deleting existing ones.`)) return;
+    if (!(await confirmDialog({ title: 'Apply template', description: `Apply "${template.name}" to project "${project?.name}"? This will ADD items without deleting existing ones.`, confirmText: 'Continue', destructive: false }))) return;
     setApplying(true);
     setApplyResult(null);
 

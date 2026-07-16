@@ -3,10 +3,12 @@ import { useEntityList, useEntityMutation } from '@/hooks/useEntity';
 import { base44 } from '@/api/base44Client';
 import { Plus, Trash2, StickyNote, Pencil, Save, X } from 'lucide-react';
 import SummaryNoteTable from '@/components/documents/SummaryNoteTable';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 export default function TabNotes({ projectId }) {
   const { data: notes = [], isLoading } = useEntityList('Note', { project_id: projectId }, '-created_date', 200);
   const mutation = useEntityMutation('Note');
+  const confirmDialog = useConfirm();
   const [adding, setAdding] = useState(false);
   const [body, setBody] = useState('');
   const [editingId, setEditingId] = useState(null);
@@ -43,7 +45,7 @@ export default function TabNotes({ projectId }) {
   }
 
   async function deleteNote(id) {
-    if (!confirm('Delete this note?')) return;
+    if (!(await confirmDialog({ title: 'Delete note', description: 'Delete this note?', confirmText: 'Delete', destructive: true }))) return;
     await mutation.mutateAsync({ action: 'delete', id });
   }
 

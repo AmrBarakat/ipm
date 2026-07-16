@@ -4,6 +4,7 @@ import { formatCurrency, formatDate } from '@/lib/constants';
 import { Plus, FileEdit, Trash2, Save, X, Pencil, TrendingUp, Percent } from 'lucide-react';
 import SkeletonTable from '@/components/ui/SkeletonTable';
 import EmptyState from '@/components/ui/EmptyState';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 const CO_STATUS_LABELS = {
   pending: 'Pending',
@@ -61,6 +62,7 @@ const num = 'border border-slate-200 rounded px-3 py-2 text-sm focus:outline-non
 export default function TabChangeOrders({ projectId, project }) {
   const { data: changeOrders = [], isLoading } = useEntityList('ChangeOrder', { project_id: projectId }, '-created_date', 200);
   const mutation = useEntityMutation('ChangeOrder');
+  const confirmDialog = useConfirm();
 
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -128,7 +130,7 @@ export default function TabChangeOrders({ projectId, project }) {
   }
 
   async function remove(id) {
-    if (!confirm('Delete this change order?')) return;
+    if (!(await confirmDialog({ title: 'Delete change order', description: 'Delete this change order?', confirmText: 'Delete', destructive: true }))) return;
     await mutation.mutateAsync({ action: 'delete', id });
   }
 

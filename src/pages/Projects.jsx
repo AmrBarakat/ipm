@@ -12,6 +12,7 @@ import { useNavigate } from 'react-router-dom';
 import ProjectSummaryWidget from '@/components/projects/ProjectSummaryWidget';
 import { useTranslation } from '@/hooks/useTranslation';
 import SkeletonCard from '@/components/ui/SkeletonCard';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 const ALL = 'all';
 const PAGE_SIZE = 25;
@@ -21,6 +22,7 @@ export default function Projects() {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const projectMutation = useEntityMutation('Project');
+  const confirmDialog = useConfirm();
 
   // Portfolio-wide summary (unfiltered) — kept as a single cached fetch for the widget.
   const { data: summaryProjects = [] } = useEntityList('Project', null, '-updated_date', 5000);
@@ -93,7 +95,7 @@ export default function Projects() {
   }
 
   async function bulkDelete() {
-    if (!confirm(t('projects.deleteConfirm', { n: selected.size }))) return;
+    if (!(await confirmDialog({ title: 'Delete projects', description: t('projects.deleteConfirm', { n: selected.size }), confirmText: 'Delete', destructive: true }))) return;
     setBulkLoading(true);
     try {
       await Promise.all([...selected].map(id => projectMutation.mutateAsync({ action: 'delete', id })));

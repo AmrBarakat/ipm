@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { BOM_CATEGORY_LABELS, BOM_CATEGORY_OPTIONS } from '@/lib/constants';
 import { X, Save, Plus, Trash2, Star, StarOff, FileText } from 'lucide-react';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 const inp = 'border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white w-full';
 const CURRENCIES = ['SAR', 'AED', 'USD', 'EUR', 'GBP'];
@@ -50,6 +51,7 @@ export default function BOMTemplateEditor({ onClose, onTemplateSelected }) {
   const [editing, setEditing] = useState(null); // null = list view, 'new' or template object = edit view
   const [form, setForm] = useState(EMPTY_TEMPLATE);
   const [saving, setSaving] = useState(false);
+  const confirmDialog = useConfirm();
 
   useEffect(() => { load(); }, []);
 
@@ -93,7 +95,7 @@ export default function BOMTemplateEditor({ onClose, onTemplateSelected }) {
   }
 
   async function deleteTemplate(id) {
-    if (!confirm('Delete this template?')) return;
+    if (!(await confirmDialog({ title: 'Delete template', description: 'Delete this template?', confirmText: 'Delete', destructive: true }))) return;
     await base44.entities.BOMTemplate.delete(id);
     load();
   }

@@ -6,6 +6,7 @@ import { Plus, Flag, Pencil, Trash2, Save, X, Layers, Check } from 'lucide-react
 import PanelWrapper from '@/components/ui/PanelWrapper';
 import SkeletonTable from '@/components/ui/SkeletonTable';
 import EmptyState from '@/components/ui/EmptyState';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 const STATUS_COLORS = {
   pending:     'bg-slate-100 text-slate-600',
@@ -46,6 +47,7 @@ export default function TabMilestones({ projectId }) {
   const { data: milestones = [], isLoading } = useEntityList('Milestone', { project_id: projectId }, ENTITY_QUERY.Milestone.sort, ENTITY_QUERY.Milestone.limit);
   const { data: wbsItems = [] } = useEntityList('WBSItem', { project_id: projectId }, ENTITY_QUERY.WBSItem.sort, ENTITY_QUERY.WBSItem.limit);
   const mutation = useEntityMutation('Milestone');
+  const confirmDialog = useConfirm();
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ title: '', planned_date: '', weight: '' });
   const [editingId, setEditingId] = useState(null);
@@ -77,7 +79,7 @@ export default function TabMilestones({ projectId }) {
   }
 
   async function deleteMilestone(id) {
-    if (!confirm('Delete this milestone?')) return;
+    if (!(await confirmDialog({ title: 'Delete milestone', description: 'Delete this milestone?', confirmText: 'Delete', destructive: true }))) return;
     await mutation.mutateAsync({ action: 'delete', id });
   }
 
@@ -88,7 +90,7 @@ export default function TabMilestones({ projectId }) {
     setSelectedIds(milestones.every(m => selectedIds.has(m.id)) ? new Set() : new Set(milestones.map(m => m.id)));
   }
   async function bulkDelete() {
-    if (!confirm(`Delete ${selectedIds.size} milestones?`)) return;
+    if (!(await confirmDialog({ title: 'Delete milestones', description: `Delete ${selectedIds.size} milestones?`, confirmText: 'Delete', destructive: true }))) return;
     await Promise.all([...selectedIds].map(id => mutation.mutateAsync({ action: 'delete', id })));
     setSelectedIds(new Set()); setBulkField(''); setBulkValue('');
   }

@@ -3,6 +3,7 @@ import { base44 } from '@/api/base44Client';
 import { useEntityList, useEntityMutation } from '@/hooks/useEntity';
 import { formatDate } from '@/lib/constants';
 import { Plus, ShieldAlert, Sparkles, Trash2, Pencil, Save, X, ChevronDown, ChevronRight, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 const PROB_SCORE  = { low: 1, medium: 2, high: 3 };
 const IMPACT_SCORE = { low: 1, medium: 2, high: 3, critical: 4 };
@@ -43,6 +44,7 @@ export default function TabRisks({ projectId }) {
   const { data: risks = [], isLoading } = useEntityList('Risk', { project_id: projectId }, '-created_date', 200);
   const riskMutation = useEntityMutation('Risk');
   const taskMutation = useEntityMutation('Task');
+  const confirmDialog = useConfirm();
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [editingId, setEditingId] = useState(null);
@@ -79,7 +81,7 @@ export default function TabRisks({ projectId }) {
   }
 
   async function deleteRisk(id) {
-    if (!confirm('Delete this risk?')) return;
+    if (!(await confirmDialog({ title: 'Delete risk', description: 'Delete this risk?', confirmText: 'Delete', destructive: true }))) return;
     await riskMutation.mutateAsync({ action: 'delete', id });
   }
 

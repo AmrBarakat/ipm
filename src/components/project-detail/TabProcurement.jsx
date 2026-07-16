@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { formatCurrency, formatDate, BOM_CATEGORY_LABELS, BOM_CATEGORY_OPTIONS } from '@/lib/constants';
 import { ShoppingCart, Package, ChevronDown, ChevronRight, Check, AlertCircle, X, Save, Trash2, RefreshCw } from 'lucide-react';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 // Items eligible for procurement: not ordered, top-level (not panel children),
 // and not an engineering/service line item.
@@ -45,6 +46,7 @@ export default function TabProcurement({ projectId, project }) {
   const [bulkEdit, setBulkEdit] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const queryClient = useQueryClient();
+  const confirmDialog = useConfirm();
 
   // Persist the frozen snapshot + hidden ids across unmounts (tab switches).
   useEffect(() => {
@@ -147,7 +149,7 @@ export default function TabProcurement({ projectId, project }) {
   // "Sync with BOM" is pressed.
   async function bulkDelete() {
     if (selectedIds.size === 0) return;
-    if (!confirm(`Remove ${selectedIds.size} selected item(s) from procurement? They stay in the BOM — use "Sync with BOM" to restore.`)) return;
+    if (!(await confirmDialog({ title: 'Remove from procurement', description: `Remove ${selectedIds.size} selected item(s) from procurement? They stay in the BOM — use "Sync with BOM" to restore.`, confirmText: 'Continue', destructive: false }))) return;
     setHiddenIds(prev => new Set([...prev, ...selectedIds]));
     setSelectedIds(new Set());
     setBulkEdit(null);

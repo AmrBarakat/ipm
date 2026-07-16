@@ -8,6 +8,7 @@ import { Plus, Package, Trash2, Filter, Tag, Truck, ShoppingCart, TrendingUp, Ch
 import PanelWrapper from '@/components/ui/PanelWrapper';
 import SkeletonTable from '@/components/ui/SkeletonTable';
 import EmptyState from '@/components/ui/EmptyState';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 const DELIVERY_COLORS = {
   not_delivered: 'bg-slate-100 text-slate-600',
@@ -47,6 +48,7 @@ export default function TabBOM({ projectId }) {
   const { data: bomData = [], isLoading } = useEntityList('BOMItem', { project_id: projectId }, ENTITY_QUERY.BOMItem.sort, ENTITY_QUERY.BOMItem.limit);
   const bomMutation = useEntityMutation('BOMItem');
   const queryClient = useQueryClient();
+  const confirmDialog = useConfirm();
   const [items, setItems] = useState([]);
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -141,7 +143,7 @@ export default function TabBOM({ projectId }) {
   }
 
   async function bulkDelete() {
-    if (!confirm(`Delete ${selectedIds.size} selected item(s)?`)) return;
+    if (!(await confirmDialog({ title: 'Delete BOM items', description: `Delete ${selectedIds.size} selected item(s)?`, confirmText: 'Delete', destructive: true }))) return;
     const selectedRows = allTopLevel.filter(i => selectedIds.has(i.id));
     const ids = selectedRows.flatMap(i => i._ids || [i.id]);
     setItems(prev => prev.filter(i => !ids.includes(i.id)));
@@ -179,7 +181,7 @@ export default function TabBOM({ projectId }) {
   }
 
   async function deleteItem(id) {
-    if (!confirm('Delete this BOM item?')) return;
+    if (!(await confirmDialog({ title: 'Delete BOM item', description: 'Delete this BOM item?', confirmText: 'Delete', destructive: true }))) return;
     await bomMutation.mutateAsync({ action: 'delete', id });
   }
 

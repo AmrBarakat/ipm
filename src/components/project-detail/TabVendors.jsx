@@ -9,6 +9,7 @@ import {
   Pencil, Trash2, Save, X, ChevronDown, ChevronRight,
   FileText, RefreshCw, ShoppingCart
 } from 'lucide-react';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -93,6 +94,7 @@ function POsPanel({ projectId, project }) {
   const { data: pos = [], isLoading } = useEntityList('PurchaseOrder', { project_id: projectId }, '-created_date', 200);
   const poMutation = useEntityMutation('PurchaseOrder');
   const queryClient = useQueryClient();
+  const confirmDialog = useConfirm();
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState(EMPTY_PO);
   const [expanded, setExpanded] = useState({});
@@ -136,7 +138,7 @@ function POsPanel({ projectId, project }) {
   }
 
   async function deletePO(id) {
-    if (!confirm('Delete this PO?')) return;
+    if (!(await confirmDialog({ title: 'Delete PO', description: 'Delete this PO?', confirmText: 'Delete', destructive: true }))) return;
     await poMutation.mutateAsync({ action: 'delete', id });
   }
 

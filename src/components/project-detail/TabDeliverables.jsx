@@ -120,7 +120,7 @@ export default function TabDeliverables({ projectId }) {
   }
 
   async function autoGenerate() {
-    if (!confirm('This will create deliverables from BOM items (panel, software & IT-HW as combined lines, others individually). Continue?')) return;
+    if (!(await confirmDialog({ title: 'Generate deliverables from BOM', description: 'This will create deliverables from BOM items (panel, software & IT-HW as combined lines, others individually). Continue?', confirmText: 'Continue', destructive: false }))) return;
     setGenerating(true);
     try {
       // Exclude panel child rows — a panel is one deliverable, its internal
