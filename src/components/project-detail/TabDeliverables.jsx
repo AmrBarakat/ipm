@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useEntityList, useEntityMutation, runBatch } from '@/hooks/useEntity';
+import { ENTITY_QUERY } from '@/lib/entityQueryDefaults';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
@@ -28,8 +29,8 @@ const EMPTY = {
 };
 
 export default function TabDeliverables({ projectId }) {
-  const { data: items = [], isLoading } = useEntityList('Deliverable', { project_id: projectId }, '-created_date', 200);
-  const { data: milestones = [] } = useEntityList('Milestone', { project_id: projectId }, 'planned_date', 100);
+  const { data: items = [], isLoading } = useEntityList('Deliverable', { project_id: projectId }, ENTITY_QUERY.Deliverable.sort, ENTITY_QUERY.Deliverable.limit);
+  const { data: milestones = [] } = useEntityList('Milestone', { project_id: projectId }, ENTITY_QUERY.Milestone.sort, ENTITY_QUERY.Milestone.limit);
   const delMutation = useEntityMutation('Deliverable');
   const msMutation = useEntityMutation('Milestone');
   const queryClient = useQueryClient();

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useEntityList, useEntityMutation } from '@/hooks/useEntity';
+import { ENTITY_QUERY } from '@/lib/entityQueryDefaults';
 import { useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { toast } from 'sonner';
@@ -20,8 +21,8 @@ import GanttEditorModal from './GanttEditorModal';
 import ScheduleAssistantModal from '@/components/project-detail/ScheduleAssistantModal';
 
 export default function TabGantt({ projectId, project }) {
-  const { data: qWbs = [], isLoading: loadingWbs } = useEntityList('WBSItem', { project_id: projectId }, 'wbs_code', 2000);
-  const { data: qMilestones = [], isLoading: loadingMs } = useEntityList('Milestone', { project_id: projectId }, 'planned_date', 500);
+  const { data: qWbs = [], isLoading: loadingWbs } = useEntityList('WBSItem', { project_id: projectId }, ENTITY_QUERY.WBSItem.sort, ENTITY_QUERY.WBSItem.limit);
+  const { data: qMilestones = [], isLoading: loadingMs } = useEntityList('Milestone', { project_id: projectId }, ENTITY_QUERY.Milestone.sort, ENTITY_QUERY.Milestone.limit);
   const wbsMutation = useEntityMutation('WBSItem', ['Task']);
   const msMutation = useEntityMutation('Milestone');
   const queryClient = useQueryClient();

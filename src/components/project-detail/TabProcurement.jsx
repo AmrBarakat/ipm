@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useEntityList } from '@/hooks/useEntity';
+import { ENTITY_QUERY } from '@/lib/entityQueryDefaults';
 import { useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { formatCurrency, formatDate, BOM_CATEGORY_LABELS, BOM_CATEGORY_OPTIONS } from '@/lib/constants';
@@ -33,7 +34,7 @@ const procurementCache = {}; // { [projectId]: { snapshot: array|null, hiddenIds
 
 export default function TabProcurement({ projectId, project }) {
   const bomQueryKey = ['BOMItem', { project_id: projectId }, 'supplier', 500];
-  const { data: all = [], isLoading } = useEntityList('BOMItem', { project_id: projectId }, 'supplier', 500);
+  const { data: all = [], isLoading } = useEntityList('BOMItem', { project_id: projectId }, ENTITY_QUERY.BOMItem.sort, ENTITY_QUERY.BOMItem.limit);
   // Frozen BOM snapshot — only refreshed by "Sync with BOM" or an intentional
   // bulk edit. Background refetches (e.g. edits in the BOM tab) do NOT resync
   // procurement, so locally-deleted items stay hidden until Sync is pressed.

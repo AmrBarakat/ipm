@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useEntityList, useEntityMutation, runBatch } from '@/hooks/useEntity';
+import { ENTITY_QUERY } from '@/lib/entityQueryDefaults';
 import { useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { formatDate } from '@/lib/constants';
@@ -63,8 +64,8 @@ async function syncProjectProgress(projectId, items, tree, byId) {
 }
 
 export default function TabWBS({ projectId, project, onProgressChange }) {
-  const { data: wbsData = [], isLoading } = useEntityList('WBSItem', { project_id: projectId }, 'wbs_code', 500);
-  const { data: milestones = [] } = useEntityList('Milestone', { project_id: projectId }, 'planned_date', 100);
+  const { data: wbsData = [], isLoading } = useEntityList('WBSItem', { project_id: projectId }, ENTITY_QUERY.WBSItem.sort, ENTITY_QUERY.WBSItem.limit);
+  const { data: milestones = [] } = useEntityList('Milestone', { project_id: projectId }, ENTITY_QUERY.Milestone.sort, ENTITY_QUERY.Milestone.limit);
   const wbsMutation = useEntityMutation('WBSItem', ['Task']);
   const msMutation = useEntityMutation('Milestone');
   const queryClient = useQueryClient();

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useEntityList, useEntityMutation, runBatch } from '@/hooks/useEntity';
+import { ENTITY_QUERY } from '@/lib/entityQueryDefaults';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { Plus, Pencil, X, Trash2, RefreshCw, Layers, Check, Save, ListTodo } from 'lucide-react';
 import EmptyState from '@/components/ui/EmptyState';
@@ -39,7 +40,7 @@ const PRIORITY_COLORS = {
 const inp = 'border border-slate-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white w-full';
 
 export default function TabTasks({ projectId }) {
-  const { data: tasks = [], isLoading } = useEntityList('Task', { project_id: projectId }, '-created_date', 300);
+  const { data: tasks = [], isLoading } = useEntityList('Task', { project_id: projectId }, ENTITY_QUERY.Task.sort, ENTITY_QUERY.Task.limit);
   const taskMutation = useEntityMutation('Task', ['WBSItem']);
   const wbsMutation = useEntityMutation('WBSItem', ['Task']);
   const confirmDialog = useConfirm();

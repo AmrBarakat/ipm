@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useEntityList, useEntityMutation } from '@/hooks/useEntity';
+import { ENTITY_QUERY } from '@/lib/entityQueryDefaults';
 import { useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { X, Loader2, CheckCircle, Save, AlertCircle, PackageCheck, Truck } from 'lucide-react';
@@ -66,7 +67,7 @@ function statusColor(s) {
 
 export default function PODNExtractionPanel({ document: doc, result, projectId, onClose, onApplied }) {
   const [docType, setDocType] = useState(result.document_type === 'po' ? 'po' : 'delivery_note');
-  const { data: bomItems = [], isLoading: bomLoading } = useEntityList('BOMItem', { project_id: projectId }, '-created_date', 2000);
+  const { data: bomItems = [], isLoading: bomLoading } = useEntityList('BOMItem', { project_id: projectId }, ENTITY_QUERY.BOMItem.sort, ENTITY_QUERY.BOMItem.limit);
   const bomMutation = useEntityMutation('BOMItem');
   const noteMutation = useEntityMutation('Note');
   const auditMutation = useEntityMutation('AuditLog');

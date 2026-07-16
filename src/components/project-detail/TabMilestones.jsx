@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useEntityList, useEntityMutation } from '@/hooks/useEntity';
+import { ENTITY_QUERY } from '@/lib/entityQueryDefaults';
 import { formatDate } from '@/lib/constants';
 import { Plus, Flag, Pencil, Trash2, Save, X, Layers, Check } from 'lucide-react';
 import PanelWrapper from '@/components/ui/PanelWrapper';
@@ -42,8 +43,8 @@ function computeMilestoneProgress(milestoneId, wbsItems) {
 }
 
 export default function TabMilestones({ projectId }) {
-  const { data: milestones = [], isLoading } = useEntityList('Milestone', { project_id: projectId }, 'planned_date', 100);
-  const { data: wbsItems = [] } = useEntityList('WBSItem', { project_id: projectId }, 'wbs_code', 500);
+  const { data: milestones = [], isLoading } = useEntityList('Milestone', { project_id: projectId }, ENTITY_QUERY.Milestone.sort, ENTITY_QUERY.Milestone.limit);
+  const { data: wbsItems = [] } = useEntityList('WBSItem', { project_id: projectId }, ENTITY_QUERY.WBSItem.sort, ENTITY_QUERY.WBSItem.limit);
   const mutation = useEntityMutation('Milestone');
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ title: '', planned_date: '', weight: '' });

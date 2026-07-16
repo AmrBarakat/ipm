@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useEntityList, useEntityMutation } from '@/hooks/useEntity';
+import { ENTITY_QUERY } from '@/lib/entityQueryDefaults';
 import { useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { formatDate, formatBytes, CATEGORY_LABELS } from '@/lib/constants';
@@ -37,8 +38,8 @@ const inp = 'border border-slate-200 rounded px-3 py-2 text-sm focus:outline-non
 
 export default function TabDocuments({ projectId, project }) {
   const { data: docs = [], isLoading } = useEntityList('Document', { project_id: projectId }, '-created_date', 200);
-  const { data: milestones = [] } = useEntityList('Milestone', { project_id: projectId }, 'planned_date', 100);
-  const { data: tasks = [] } = useEntityList('Task', { project_id: projectId }, 'title', 200);
+  const { data: milestones = [] } = useEntityList('Milestone', { project_id: projectId }, ENTITY_QUERY.Milestone.sort, ENTITY_QUERY.Milestone.limit);
+  const { data: tasks = [] } = useEntityList('Task', { project_id: projectId }, ENTITY_QUERY.Task.sort, ENTITY_QUERY.Task.limit);
   const docMutation = useEntityMutation('Document');
   const queryClient = useQueryClient();
   const [uploading, setUploading] = useState(false);

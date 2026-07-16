@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useEntityList, useEntityMutation } from '@/hooks/useEntity';
+import { ENTITY_QUERY } from '@/lib/entityQueryDefaults';
 import { useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { formatCurrency, BOM_CATEGORY_LABELS, BOM_CATEGORY_OPTIONS } from '@/lib/constants';
@@ -43,7 +44,7 @@ const selCls = 'border border-slate-200 rounded px-2 py-1.5 text-xs focus:outlin
 const addInp = 'border border-slate-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white w-full';
 
 export default function TabBOM({ projectId }) {
-  const { data: bomData = [], isLoading } = useEntityList('BOMItem', { project_id: projectId }, '-created_date', 300);
+  const { data: bomData = [], isLoading } = useEntityList('BOMItem', { project_id: projectId }, ENTITY_QUERY.BOMItem.sort, ENTITY_QUERY.BOMItem.limit);
   const bomMutation = useEntityMutation('BOMItem');
   const queryClient = useQueryClient();
   const [items, setItems] = useState([]);
@@ -512,6 +513,9 @@ export default function TabBOM({ projectId }) {
 
             return (
               <div className="space-y-3">
+                <div className="text-xs text-slate-400">
+                  Showing {bomData.length} items{bomData.length === ENTITY_QUERY.BOMItem.limit ? ' (limit reached — some items may not be shown)' : ''}
+                </div>
                 <div className="text-xs text-slate-500">{filtered.length} of {items.length} items · <span className="italic">Click any cell to edit · Check rows for bulk edit</span></div>
                 {sortedCats.map(cat => {
                   const catItems = groups[cat];

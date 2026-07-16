@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useEntityList } from '@/hooks/useEntity';
+import { ENTITY_QUERY } from '@/lib/entityQueryDefaults';
 import { formatDate, formatCurrency, EXPENSE_CATEGORY_LABELS, isTopLevelBOM } from '@/lib/constants';
 import { FileText, CreditCard, CheckCircle, AlertCircle, ClipboardList, BarChart2, PieChart, Wallet, Package, Tag, Truck, ShoppingCart, TrendingUp } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -9,7 +10,7 @@ import SpendingSummaryDashboard from '@/components/project-detail/SpendingSummar
 export default function TabOverview({ project, onRefresh }) {
   const { data: invoices = [], isLoading: invoicesLoading } = useEntityList('Invoice', { project_id: project.id }, 'planned_date', 500);
   const { data: expenses = [], isLoading: expensesLoading } = useEntityList('Expense', { project_id: project.id }, 'planned_date', 500);
-  const { data: bomItems = [], isLoading: bomLoading } = useEntityList('BOMItem', { project_id: project.id }, '-created_date', 500);
+  const { data: bomItems = [], isLoading: bomLoading } = useEntityList('BOMItem', { project_id: project.id }, ENTITY_QUERY.BOMItem.sort, ENTITY_QUERY.BOMItem.limit);
   const { data: collections = [], isLoading: colLoading } = useEntityList('Collection', { project_id: project.id }, '-received_date', 500);
   const loading = invoicesLoading || expensesLoading || bomLoading || colLoading;
 

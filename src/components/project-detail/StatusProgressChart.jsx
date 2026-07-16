@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useEntityList } from '@/hooks/useEntity';
+import { ENTITY_QUERY } from '@/lib/entityQueryDefaults';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from 'recharts';
 import { Target, Package, Activity } from 'lucide-react';
 
@@ -33,8 +34,8 @@ function truncate(s, n = 28) {
 }
 
 export default function StatusProgressChart({ projectId }) {
-  const { data: milestones = [], isLoading: msLoading } = useEntityList('Milestone', { project_id: projectId }, 'planned_date', 200);
-  const { data: deliverables = [], isLoading: delLoading } = useEntityList('Deliverable', { project_id: projectId }, 'planned_delivery_date', 200);
+  const { data: milestones = [], isLoading: msLoading } = useEntityList('Milestone', { project_id: projectId }, ENTITY_QUERY.Milestone.sort, ENTITY_QUERY.Milestone.limit);
+  const { data: deliverables = [], isLoading: delLoading } = useEntityList('Deliverable', { project_id: projectId }, ENTITY_QUERY.Deliverable.sort, ENTITY_QUERY.Deliverable.limit);
   const loading = msLoading || delLoading;
 
   const data = useMemo(() => {
