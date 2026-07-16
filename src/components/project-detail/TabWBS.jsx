@@ -50,20 +50,16 @@ function rollupProgress(id, tree, byId) {
   return Math.round(childProgresses.reduce((s, c) => s + c.p * c.w, 0) / (totalWeight || 1));
 }
 
-/** Compute overall project progress from root WBS items using weighted rollup */
-async function syncProjectProgress(projectId, items, tree, byId) {
+/** Compute overall project progress from root WBS items using weighted rollup (pure — no write). */
+function computeProjectProgress(items, tree, byId) {
   const roots = tree['__root__'] || [];
   if (roots.length === 0) return 0;
   const rootProgresses = roots.map(r => ({ p: rollupProgress(r.id, tree, byId), w: r.weight || 1 }));
   const totalWeight = rootProgresses.reduce((s, r) => s + r.w, 0);
-  const overallProgress = Math.round(
-    rootProgresses.reduce((s, r) => s + r.p * r.w, 0) / (totalWeight || 1)
-  );
-  await base44.entities.Project.update(projectId, { progress: overallProgress });
-  return overallProgress;
+  return Math.round(rootProgresses.reduce((s, r) => s + r.p * r.w, 0) / (totalWeight || 1));
 }
 
-export default function TabWBS({ projectId, project, onProgressChange }) {
+export default function TabWBS({ projectId, project, onProgressChange, projectProgress = 0 }) {
   const { data: wbsData = [], isLoading } = useEntityList('WBSItem', { project_id: projectId }, ENTITY_QUERY.WBSItem.sort, ENTITY_QUERY.WBSItem.limit);
   const { data: milestones = [] } = useEntityList('Milestone', { project_id: projectId }, ENTITY_QUERY.Milestone.sort, ENTITY_QUERY.Milestone.limit);
   const wbsMutation = useEntityMutation('WBSItem', ['Task']);
@@ -99,20 +95,21 @@ export default function TabWBS({ projectId, project, onProgressChange }) {
     });
   }, [wbsData]);
 
-  // Reconcile project progress from WBS on load and after every mutation
-  // (local rollup — syncWBSProgress is now automation-only behind x-automation-secret).
+  // Reconcile project progress from WBS on load and after every mutation.
+  // Compute the rollup locally and only persist to the Project when the rounded
+  // value differs from the current project progress — avoids redundant writes
+  // (and updated_date churn) when multiple users view the same project.
   useEffect(() => {
     if (!wbsData.length) return;
-    (async () => {
-      try {
-        const byIdLocal = Object.fromEntries(wbsData.map(i => [i.id, i]));
-        const treeLocal = {};
-        wbsData.forEach(i => { const pid = i.parent_id || '__root__'; if (!treeLocal[pid]) treeLocal[pid] = []; treeLocal[pid].push(i); });
-        const p = await syncProjectProgress(projectId, wbsData, treeLocal, byIdLocal);
-        if (p != null) onProgressChange?.(p);
-      } catch (_) { /* silent — non-critical */ }
-    })();
-  }, [wbsData, projectId]);
+    const byIdLocal = Object.fromEntries(wbsData.map(i => [i.id, i]));
+    const treeLocal = {};
+    wbsData.forEach(i => { const pid = i.parent_id || '__root__'; if (!treeLocal[pid]) treeLocal[pid] = []; treeLocal[pid].push(i); });
+    const computed = computeProjectProgress(wbsData, treeLocal, byIdLocal);
+    onProgressChange?.(computed);
+    if (Math.round(computed) !== Math.round(projectProgress)) {
+      base44.entities.Project.update(projectId, { progress: computed }).catch(() => { /* silent — non-critical */ });
+    }
+  }, [wbsData, projectId, projectProgress]);
 
   const tree = useMemo(() => {
     const byParent = {};
