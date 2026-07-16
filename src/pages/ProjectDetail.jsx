@@ -5,6 +5,7 @@ import { STATUS_COLORS, STATUS_LABELS, PRIORITY_COLORS, PRIORITY_LABELS, TYPE_LA
 import { ArrowLeft, Pencil, FolderOpen } from 'lucide-react';
 import ProjectForm from '@/components/projects/ProjectForm';
 import { useTranslation } from '@/hooks/useTranslation';
+import ErrorBoundary from '@/components/ui/ErrorBoundary';
 
 const TabOverview = lazy(() => import('@/components/project-detail/TabOverview'));
 const TabTasks = lazy(() => import('@/components/project-detail/TabTasks'));
@@ -207,6 +208,7 @@ export default function ProjectDetail() {
             </div>
           </div>
 
+          <ErrorBoundary label="this tab" key={activeTab}>
           <Suspense fallback={<TabSpinner />}>
             <div>
             {activeTab === 'overview'   && <TabOverview   project={project} onRefresh={loadProject} />}
@@ -225,6 +227,7 @@ export default function ProjectDetail() {
             {activeTab === 'assistant'   && <TabAssistant   projectId={id} project={project} />}
             </div>
           </Suspense>
+          </ErrorBoundary>
         </>
       )}
     </div>

@@ -17,6 +17,7 @@ import Reports from '@/pages/Reports';
 import Calendar from '@/pages/Calendar';
 import Settings from '@/pages/Settings';
 import { ConfirmDialogProvider } from '@/components/ui/ConfirmDialog';
+import ErrorBoundary from '@/components/ui/ErrorBoundary';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -39,6 +40,7 @@ const AuthenticatedApp = () => {
   }
 
   return (
+    <ErrorBoundary label="the app">
     <Routes>
       <Route element={<AppLayout />}>
         <Route path="/" element={<Portfolio />} />
@@ -53,6 +55,7 @@ const AuthenticatedApp = () => {
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>
+    </ErrorBoundary>
   );
 };
 

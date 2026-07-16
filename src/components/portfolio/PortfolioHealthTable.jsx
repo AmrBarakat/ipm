@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
-import { base44 } from '@/api/base44Client';
+import { useMemo } from 'react';
+import { useEntityList } from '@/hooks/useEntity';
 import { formatCurrency, STATUS_LABELS, STATUS_COLORS } from '@/lib/constants';
 import { AlertTriangle, ArrowUpRight, ArrowDownRight, Flag } from 'lucide-react';
 import SkeletonTable from '@/components/ui/SkeletonTable';
@@ -11,23 +11,11 @@ const ATTENTION_VARIANCE_PCT = 5; // over budget by >5%
 function todayStr() { return new Date().toISOString().slice(0, 10); }
 
 export default function PortfolioHealthTable({ projects }) {
-  const [expenses, setExpenses] = useState([]);
-  const [milestones, setMilestones] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([
-      base44.entities.Expense.list('-created_date', 1000),
-      base44.entities.Milestone.list('-created_date', 1000),
-    ]).then(([exp, mil]) => {
-      if (cancelled) return;
-      setExpenses(exp);
-      setMilestones(mil);
-      setLoading(false);
-    });
-    return () => { cancelled = true; };
-  }, []);
+  const { data: expenses = [], isLoading: eLoading, isError: eError, refetch: refetchE } = useEntityList('Expense', null, '-created_date', 1000);
+  const { data: milestones = [], isLoading: mLoading, isError: mError, refetch: refetchM } = useEntityList('Milestone', null, '-created_date', 1000);
+  const loading = eLoading || mLoading;
+  const isError = eError || mError;
+  const refetch = () => { refetchE(); refetchM(); };
 
   const activeProjects = useMemo(
     () => projects.filter(p => ACTIVE_STATUSES.includes(p.status)),
@@ -100,6 +88,14 @@ export default function PortfolioHealthTable({ projects }) {
   }, [activeProjects, expenses, milestones]);
 
   if (loading) return <SkeletonTable columns={6} rows={6} />;
+
+  if (isError) return (
+    <div className="flex flex-col items-center justify-center py-20 gap-3">
+      <AlertTriangle className="w-8 h-8 text-red-400" />
+      <p className="text-sm text-red-500">Failed to load health data.</p>
+      <button onClick={refetch} className="px-3 py-1.5 text-xs font-semibold border border-red-300 text-red-600 rounded hover:bg-red-50">Retry</button>
+    </div>
+  );
 
   if (activeProjects.length === 0) {
     return (

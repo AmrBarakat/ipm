@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
-import { TrendingUp, Activity, Package } from 'lucide-react';
+import { useState } from 'react';
+import { useEntityList } from '@/hooks/useEntity';
+import { TrendingUp, Activity, Package, AlertTriangle } from 'lucide-react';
 import FinancialDashboard from '@/components/portfolio/FinancialDashboard';
 import PortfolioHealthTable from '@/components/portfolio/PortfolioHealthTable';
 import MaterialTrackingReport from '@/components/portfolio/MaterialTrackingReport';
@@ -9,22 +9,21 @@ import MaterialTrackingReport from '@/components/portfolio/MaterialTrackingRepor
 
 
 export default function Portfolio() {
-  const [projects, setProjects] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [view, setView] = useState('dashboard');
+  const { data: projects = [], isLoading, isError, refetch } = useEntityList('Project', null, '-updated_date', 200);
 
-
-  useEffect(() => {
-    base44.entities.Project.list('-updated_date', 200).then((p) => {
-      setProjects(p);
-      setLoading(false);
-    });
-  }, []);
-
-  if (loading) return (
+  if (isLoading) return (
     <div className="flex items-center justify-center py-20">
       <div className="w-8 h-8 border-4 border-slate-200 border-t-amber-500 rounded-full animate-spin" />
     </div>);
+
+  if (isError) return (
+    <div className="flex flex-col items-center justify-center py-20 gap-3">
+      <AlertTriangle className="w-8 h-8 text-red-400" />
+      <p className="text-sm text-red-500">Failed to load projects.</p>
+      <button onClick={() => refetch()} className="px-3 py-1.5 text-xs font-semibold border border-red-300 text-red-600 rounded hover:bg-red-50">Retry</button>
+    </div>
+  );
 
 
   return (

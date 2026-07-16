@@ -1,7 +1,7 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { base44 } from '@/api/base44Client';
-import { CalendarDays, ChevronLeft, ChevronRight, Flag, CheckSquare, Filter, X } from 'lucide-react';
+import { useEntityList } from '@/hooks/useEntity';
+import { CalendarDays, ChevronLeft, ChevronRight, Flag, CheckSquare, Filter, X, AlertTriangle } from 'lucide-react';
 import { toLocalDate } from '@/lib/utils';
 
 const TASK_STATUS_COLORS = {
@@ -34,30 +34,17 @@ function ymd(d) {
 }
 
 export default function Calendar() {
-  const [projects, setProjects] = useState([]);
-  const [tasks, setTasks] = useState([]);
-  const [milestones, setMilestones] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { data: projects = [], isLoading: pLoading, isError: pError, refetch: refetchP } = useEntityList('Project', null, '-updated_date', 500);
+  const { data: tasks = [], isLoading: tLoading, isError: tError, refetch: refetchT } = useEntityList('Task', null, '-updated_date', 1000);
+  const { data: milestones = [], isLoading: mLoading, isError: mError, refetch: refetchM } = useEntityList('Milestone', null, '-updated_date', 1000);
+  const loading = pLoading || tLoading || mLoading;
+  const isError = pError || tError || mError;
+  const refetch = () => { refetchP(); refetchT(); refetchM(); };
   const [cursor, setCursor] = useState(() => { const d = new Date(); d.setDate(1); return d; });
   const [filterProject, setFilterProject] = useState('');
   const [showTasks, setShowTasks] = useState(true);
   const [showMilestones, setShowMilestones] = useState(true);
   const [selectedDay, setSelectedDay] = useState(null);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    const [p, t, m] = await Promise.all([
-      base44.entities.Project.list('-updated_date', 500),
-      base44.entities.Task.list('-updated_date', 1000),
-      base44.entities.Milestone.list('-updated_date', 1000),
-    ]);
-    setProjects(p);
-    setTasks(t);
-    setMilestones(m);
-    setLoading(false);
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
 
   const projectById = useMemo(() => Object.fromEntries(projects.map(p => [p.id, p])), [projects]);
 
@@ -119,6 +106,16 @@ export default function Calendar() {
 
   if (loading) {
     return <div className="flex justify-center py-20"><div className="w-8 h-8 border-4 border-slate-200 border-t-amber-500 rounded-full animate-spin" /></div>;
+  }
+
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-3">
+        <AlertTriangle className="w-8 h-8 text-red-400" />
+        <p className="text-sm text-red-500">Failed to load calendar data.</p>
+        <button onClick={refetch} className="px-3 py-1.5 text-xs font-semibold border border-red-300 text-red-600 rounded hover:bg-red-50">Retry</button>
+      </div>
+    );
   }
 
   return (
