@@ -1,32 +1,45 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useEntityList } from '@/hooks/useEntity';
 import { ENTITY_QUERY } from '@/lib/entityQueryDefaults';
 import { useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { formatCurrency, formatDate, BOM_CATEGORY_LABELS, BOM_CATEGORY_OPTIONS } from '@/lib/constants';
-import { ShoppingCart, Package, ChevronDown, ChevronRight, Check, AlertCircle, X, Save, Trash2, RefreshCw } from 'lucide-react';
+import { ShoppingCart, Package, ChevronDown, ChevronRight, Check, AlertCircle, X, Save, Trash2, RefreshCw, Filter } from 'lucide-react';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 // Items eligible for procurement: not ordered, top-level (not panel children),
 // and not an engineering/service line item.
 function isProcurementItem(i) {
-  // Top-level materials only (no panel children, no engineering/service lines).
-  // Ordered AND pending items are both shown so status badges are meaningful.
   if (i.parent_id) return false;
   const pn = (i.manufacturer_part_number || '').trim().toLowerCase();
   if (i.category === 'service' || pn === 'engineering') return false;
   return true;
 }
 
-function orderStatusOf(i) {
-  return i.order_status || (i.ordered ? 'ordered' : 'not_ordered');
+// Material-status options with their badge / select styling.
+const MATERIAL_STATUS = [
+  { value: 'not_ordered', label: 'Not Ordered', badge: 'bg-slate-100 text-slate-600', sel: 'border-slate-300 text-slate-700' },
+  { value: 'ordered', label: 'Ordered', badge: 'bg-blue-100 text-blue-700', sel: 'border-blue-400 text-blue-700 font-semibold' },
+  { value: 'received', label: 'Received', badge: 'bg-amber-100 text-amber-700', sel: 'border-amber-400 text-amber-700 font-semibold' },
+  { value: 'delivered', label: 'Delivered', badge: 'bg-emerald-100 text-emerald-700', sel: 'border-emerald-400 text-emerald-700 font-semibold' },
+];
+const MS_BY_VALUE = Object.fromEntries(MATERIAL_STATUS.map(s => [s.value, s]));
+
+/** Effective material_status, deriving from legacy fields when missing (one-time migration). */
+function effectiveMaterialStatus(i) {
+  const ms = i.material_status;
+  if (ms && ms !== 'not_ordered') return ms;
+  const dq = Number(i.delivered_qty) || 0;
+  const qty = Number(i.quantity) || 0;
+  if (qty > 0 && dq >= qty) return 'received';
+  if (i.order_status === 'ordered' || i.ordered) return 'ordered';
+  return 'not_ordered';
 }
 
-const STATUS_BADGE = {
-  ordered: 'bg-blue-100 text-blue-700',
-  not_ordered: 'bg-amber-100 text-amber-700',
-};
-const STATUS_LABEL = { ordered: 'Ordered', not_ordered: 'Pending' };
+/** Order qty = max(0, quantity − stock_qty). Read-only computed field. */
+function orderQtyOf(i) {
+  return Math.max(0, (Number(i.quantity) || 0) - (Number(i.stock_qty) || 0));
+}
 
 // Session cache so locally-deleted procurement items (and the frozen BOM
 // snapshot) survive tab switches / unmounts WITHOUT touching the BOM entity.
@@ -34,32 +47,28 @@ const STATUS_LABEL = { ordered: 'Ordered', not_ordered: 'Pending' };
 const procurementCache = {}; // { [projectId]: { snapshot: array|null, hiddenIds: Set } }
 
 export default function TabProcurement({ projectId, project }) {
-  const bomQueryKey = ['BOMItem', { project_id: projectId }, 'supplier', 500];
   const { data: all = [], isLoading } = useEntityList('BOMItem', { project_id: projectId }, ENTITY_QUERY.BOMItem.sort, ENTITY_QUERY.BOMItem.limit);
-  // Frozen BOM snapshot — only refreshed by "Sync with BOM" or an intentional
-  // bulk edit. Background refetches (e.g. edits in the BOM tab) do NOT resync
-  // procurement, so locally-deleted items stay hidden until Sync is pressed.
   const [snapshot, setSnapshot] = useState(() => procurementCache[projectId]?.snapshot ?? null);
   const [hiddenIds, setHiddenIds] = useState(() => new Set(procurementCache[projectId]?.hiddenIds ?? []));
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [collapsedSuppliers, setCollapsedSuppliers] = useState(new Set());
   const [bulkEdit, setBulkEdit] = useState(null);
   const [syncing, setSyncing] = useState(false);
+  const [materialFilter, setMaterialFilter] = useState('');
   const queryClient = useQueryClient();
   const confirmDialog = useConfirm();
+  const saveTimers = useRef({});
+  const pendingChanges = useRef({});
 
-  // Persist the frozen snapshot + hidden ids across unmounts (tab switches).
   useEffect(() => {
     procurementCache[projectId] = { snapshot, hiddenIds };
   }, [snapshot, hiddenIds, projectId]);
 
-  // Pull the latest BOM data from the cache into the local snapshot.
   async function refreshSnapshot() {
-    await queryClient.refetchQueries({ queryKey: bomQueryKey });
-    setSnapshot(queryClient.getQueryData(bomQueryKey) || []);
+    await queryClient.refetchQueries({ queryKey: ['BOMItem', { project_id: projectId }] });
+    setSnapshot(queryClient.getQueryData(['BOMItem', { project_id: projectId }]) || []);
   }
 
-  // Load this project's cached state when the project changes (or on mount).
   useEffect(() => {
     const c = procurementCache[projectId];
     setSnapshot(c?.snapshot ?? null);
@@ -67,18 +76,15 @@ export default function TabProcurement({ projectId, project }) {
     setSelectedIds(new Set());
   }, [projectId]);
 
-  // Seed the snapshot once on first load (when not restored from cache).
   useEffect(() => {
     if (snapshot === null && all.length > 0) setSnapshot(all);
   }, [all, snapshot]);
 
   const items = useMemo(
-    () => (snapshot || all).filter(i => isProcurementItem(i) && !hiddenIds.has(i.id)),
-    [snapshot, all, hiddenIds]
+    () => (snapshot || all).filter(i => isProcurementItem(i) && !hiddenIds.has(i.id) && (!materialFilter || effectiveMaterialStatus(i) === materialFilter)),
+    [snapshot, all, hiddenIds, materialFilter]
   );
 
-  // Auto-select all eligible items only when the snapshot changes (initial load
-  // + after Sync / bulk edit). A local delete does not re-trigger selection.
   useEffect(() => {
     if (snapshot === null) return;
     setSelectedIds(new Set(snapshot.filter(isProcurementItem).map(i => i.id)));
@@ -126,17 +132,101 @@ export default function TabProcurement({ projectId, project }) {
     else setSelectedIds(new Set(items.map(i => i.id)));
   }
 
+  // ── Inline editing ──────────────────────────────────────────────────────
+  function updateField(item, field, value) {
+    setSnapshot(prev => (prev || all).map(i => (i.id === item.id ? { ...i, [field]: value } : i)));
+  }
+
+  // Apply a set of changes to local state + debounce a single BOMItem.update
+  // with only the changed fields.
+  function patchAndSave(item, changes) {
+    setSnapshot(prev => (prev || all).map(i => (i.id === item.id ? { ...i, ...changes } : i)));
+    pendingChanges.current[item.id] = { ...(pendingChanges.current[item.id] || {}), ...changes };
+    if (saveTimers.current[item.id]) clearTimeout(saveTimers.current[item.id]);
+    saveTimers.current[item.id] = setTimeout(async () => {
+      const payload = pendingChanges.current[item.id];
+      delete pendingChanges.current[item.id];
+      saveTimers.current[item.id] = null;
+      if (!payload) return;
+      try {
+        await base44.entities.BOMItem.update(item.id, payload);
+        queryClient.invalidateQueries({ queryKey: ['BOMItem'] });
+      } catch (e) {
+        // surface via refresh so the row reflects persisted state
+        refreshSnapshot();
+      }
+    }, 600);
+  }
+
+  function handleStockBlur(item, value) {
+    const v = Math.max(0, Number(value) || 0);
+    patchAndSave(item, { stock_qty: v });
+  }
+
+  function handleReceivedBlur(item, value) {
+    const qty = Number(item.quantity) || 0;
+    let v = Math.max(0, Number(value) || 0);
+    if (qty > 0) v = Math.min(v, qty);
+    const cur = effectiveMaterialStatus(item);
+    let ms;
+    if (cur === 'delivered') ms = 'delivered'; // never downgrade
+    else if (v === 0) ms = cur === 'ordered' || cur === 'not_ordered' ? cur : 'not_ordered';
+    else if (qty > 0 && v >= qty) ms = 'received';
+    else ms = 'ordered'; // partial → ordered
+    patchAndSave(item, {
+      received_qty: v,
+      delivered_qty: v, // mirror to legacy field
+      remaining_qty: Math.max(0, qty - v),
+      delivery_status: qty > 0 && v >= qty ? 'delivered' : v > 0 ? 'partially_delivered' : 'not_delivered',
+      material_status: ms,
+    });
+  }
+
+  function handleMaterialStatusChange(item, value) {
+    const changes = { material_status: value };
+    const qty = Number(item.quantity) || 0;
+    const received = Number(item.received_qty) || Number(item.delivered_qty) || 0;
+    if (value === 'ordered') {
+      changes.order_status = 'ordered';
+      changes.ordered = true;
+    } else if (value === 'received') {
+      if (qty > 0 && received >= qty) {
+        changes.delivered_qty = received;
+        changes.remaining_qty = 0;
+        changes.delivery_status = 'delivered';
+      }
+    } else if (value === 'delivered') {
+      changes.site_delivered_date = new Date().toISOString().slice(0, 10);
+    }
+    patchAndSave(item, changes);
+  }
+
   async function applyBulkEdit() {
     if (!bulkEdit || selectedIds.size === 0) return;
     const { field, value } = bulkEdit;
     const ids = [...selectedIds];
-    const extra = field === 'order_status' ? { ordered: value === 'ordered' } : {};
-    await base44.entities.BOMItem.bulkUpdate(ids.map(id => ({ id, [field]: value, ...extra })));
+    let updates;
+    if (field === 'material_status') {
+      const today = new Date().toISOString().slice(0, 10);
+      updates = ids.map(id => {
+        const extra = {};
+        if (value === 'ordered') { extra.order_status = 'ordered'; extra.ordered = true; }
+        else if (value === 'delivered') { extra.site_delivered_date = today; }
+        return { id, material_status: value, ...extra };
+      });
+    } else {
+      updates = ids.map(id => ({ id, [field]: value }));
+    }
+    try {
+      await base44.entities.BOMItem.bulkUpdate(updates);
+    } catch (e) {
+      alert('Bulk update failed: ' + (e?.message || 'unknown error'));
+      return;
+    }
     setBulkEdit(null);
-    await refreshSnapshot(); // ordering/edits intentionally refresh procurement
+    await refreshSnapshot();
   }
 
-  // "Sync with BOM" — the ONLY way to re-pull BOM changes & restore hidden items.
   async function syncWithBOM() {
     setSyncing(true);
     await refreshSnapshot();
@@ -144,9 +234,6 @@ export default function TabProcurement({ projectId, project }) {
     setSyncing(false);
   }
 
-  // Procurement delete is local-only: it hides items from this view without
-  // removing them from the BOM and without resyncing. They stay hidden until
-  // "Sync with BOM" is pressed.
   async function bulkDelete() {
     if (selectedIds.size === 0) return;
     if (!(await confirmDialog({ title: 'Remove from procurement', description: `Remove ${selectedIds.size} selected item(s) from procurement? They stay in the BOM — use "Sync with BOM" to restore.`, confirmText: 'Continue', destructive: false }))) return;
@@ -157,6 +244,12 @@ export default function TabProcurement({ projectId, project }) {
 
   // KPIs
   const totalItems = items.length;
+  const orderedCount = items.filter(i => effectiveMaterialStatus(i) === 'ordered').length;
+  const receivedCount = items.filter(i => effectiveMaterialStatus(i) === 'received').length;
+  const deliveredCount = items.filter(i => effectiveMaterialStatus(i) === 'delivered').length;
+  const outstandingOrderQty = items
+    .filter(i => effectiveMaterialStatus(i) === 'not_ordered')
+    .reduce((s, i) => s + orderQtyOf(i), 0);
   const totalValue = items.reduce((s, i) => s + (Number(i.planned_cost_price) || Number(i.cost_price) || 0) * (Number(i.quantity) || 1), 0);
   const selectedValue = items
     .filter(i => selectedIds.has(i.id))
@@ -164,21 +257,25 @@ export default function TabProcurement({ projectId, project }) {
 
   if (isLoading) return <Spinner />;
 
+  const inp = 'border border-slate-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white';
+  const stop = e => e.stopPropagation();
+
   return (
     <div className="space-y-5">
 
       {/* Header KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KpiCard label="Total Items" value={totalItems} color="border-slate-400" />
-        <KpiCard label="Pending" value={items.filter(i => orderStatusOf(i) === 'not_ordered').length} color="border-amber-400" />
-        <KpiCard label="Ordered" value={items.filter(i => orderStatusOf(i) === 'ordered').length} color="border-blue-400" />
+        <KpiCard label="Ordered" value={orderedCount} color="border-blue-400" />
+        <KpiCard label="Received" value={receivedCount} color="border-amber-400" />
+        <KpiCard label="Delivered" value={deliveredCount} color="border-emerald-400" />
+        <KpiCard label="Outstanding Order Qty" value={outstandingOrderQty} color="border-slate-400" />
         <KpiCard label="Total Value" value={formatCurrency(totalValue, project?.currency || 'SAR')} color="border-slate-400" />
         <KpiCard label="Selected Value" value={formatCurrency(selectedValue, project?.currency || 'SAR')} color="border-emerald-400" />
       </div>
 
-      {/* Top toolbar — always visible so "Sync with BOM" stays reachable
-          even after locally deleting all items. */}
-      <div className="flex items-center justify-between">
+      {/* Top toolbar */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           {items.length > 0 && (
             <button onClick={toggleAll}
@@ -189,11 +286,19 @@ export default function TabProcurement({ projectId, project }) {
               <span>{selectedIds.size === items.length ? 'Deselect All' : 'Select All'} ({items.length} items)</span>
             </button>
           )}
+          <div className="flex items-center gap-1.5 text-sm">
+            <Filter className="w-3.5 h-3.5 text-slate-400" />
+            <select value={materialFilter} onChange={e => setMaterialFilter(e.target.value)}
+              className="text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white">
+              <option value="">All Material Status</option>
+              {MATERIAL_STATUS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-2 text-xs text-slate-400">
             <AlertCircle className="w-3.5 h-3.5" />
-            Unordered BOM items grouped by supplier
+            BOM materials grouped by supplier
           </span>
           <button onClick={syncWithBOM} disabled={syncing}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-amber-300 rounded hover:bg-amber-50 text-amber-700 font-semibold disabled:opacity-60">
@@ -233,13 +338,19 @@ export default function TabProcurement({ projectId, project }) {
 
               <select
                 className="text-xs bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white focus:outline-none focus:border-amber-400"
-                value={bulkEdit?.field === 'order_status' ? bulkEdit.value : ''}
-                onChange={e => setBulkEdit(e.target.value ? { field: 'order_status', value: e.target.value } : null)}
+                value={bulkEdit?.field === 'material_status' ? bulkEdit.value : ''}
+                onChange={e => setBulkEdit(e.target.value ? { field: 'material_status', value: e.target.value } : null)}
               >
-                <option value="">Order Status…</option>
-                <option value="ordered">Mark Ordered</option>
-                <option value="not_ordered">Not Ordered</option>
+                <option value="">Material Status…</option>
+                {MATERIAL_STATUS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
               </select>
+
+              <input type="number" min="0"
+                className="text-xs bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white placeholder-slate-400 focus:outline-none focus:border-amber-400 w-28"
+                placeholder="Stock Qty…"
+                value={bulkEdit?.field === 'stock_qty' ? bulkEdit.value : ''}
+                onChange={e => setBulkEdit(e.target.value !== '' ? { field: 'stock_qty', value: Number(e.target.value) } : null)}
+              />
 
               <select
                 className="text-xs bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white focus:outline-none focus:border-amber-400"
@@ -260,7 +371,7 @@ export default function TabProcurement({ projectId, project }) {
                 className="text-xs bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white placeholder-slate-400 focus:outline-none focus:border-amber-400 w-28"
                 placeholder="Unit Cost…"
                 value={bulkEdit?.field === 'planned_cost_price' ? bulkEdit.value : ''}
-                onChange={e => setBulkEdit(e.target.value ? { field: 'planned_cost_price', value: Number(e.target.value) } : null)}
+                onChange={e => setBulkEdit(e.target.value !== '' ? { field: 'planned_cost_price', value: Number(e.target.value) } : null)}
               />
 
               {bulkEdit && (
@@ -288,14 +399,11 @@ export default function TabProcurement({ projectId, project }) {
               const isCollapsed = collapsedSuppliers.has(supplier);
               const allSupSelected = supplierItems.every(i => selectedIds.has(i.id));
               const someSupSelected = supplierItems.some(i => selectedIds.has(i.id));
-              const selectedSupItems = supplierItems.filter(i => selectedIds.has(i.id));
-              const supTotal = selectedSupItems.reduce((s, i) => s + (Number(i.planned_cost_price) || Number(i.cost_price) || 0) * (Number(i.quantity) || 1), 0);
 
               return (
                 <div key={supplier} className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
                   {/* Supplier header */}
                   <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 border-b border-slate-200">
-                    {/* Supplier select-all checkbox */}
                     <button onClick={() => toggleSupplierAll(supplier, supplierItems)}
                       className="flex items-center justify-center shrink-0">
                       <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${allSupSelected ? 'bg-amber-400 border-amber-400' : someSupSelected ? 'bg-amber-200 border-amber-400' : 'border-slate-300'}`}>
@@ -310,38 +418,38 @@ export default function TabProcurement({ projectId, project }) {
                       <span className="font-semibold text-slate-800">{supplier}</span>
                       <span className="text-xs text-slate-400 ml-1">{supplierItems.length} item{supplierItems.length !== 1 ? 's' : ''}</span>
                     </button>
-
-                    <div className="flex items-center gap-3 shrink-0">
-                      {selectedSupItems.length > 0 && (
-                        <span className="text-xs text-slate-500 hidden sm:block">
-                          {selectedSupItems.length} selected · <span className="font-semibold text-slate-700">{formatCurrency(supTotal, project?.currency || 'SAR')}</span>
-                        </span>
-                      )}
-                    </div>
                   </div>
 
                   {/* Items table */}
                   {!isCollapsed && (
                     <div className="overflow-x-auto">
-                      <table className="w-full text-xs min-w-[700px]">
+                      <table className="w-full text-xs min-w-[1100px]">
                         <thead className="bg-slate-100 text-slate-500 uppercase">
                           <tr>
                             <th className="px-3 py-2 w-8"></th>
                             <th className="px-3 py-2 text-left">Description</th>
                             <th className="px-3 py-2 text-left">Part No.</th>
                             <th className="px-3 py-2 text-left">Category</th>
-                            <th className="px-3 py-2 text-left">Status</th>
+                            <th className="px-3 py-2 text-left">Supplier</th>
                             <th className="px-3 py-2 text-right">Qty</th>
-                            <th className="px-3 py-2 text-right">Unit Cost</th>
-                            <th className="px-3 py-2 text-right">Total Cost</th>
+                            <th className="px-3 py-2 text-right">Stock Qty</th>
+                            <th className="px-3 py-2 text-right">Order Qty</th>
+                            <th className="px-3 py-2 text-left">Material Status</th>
+                            <th className="px-3 py-2 text-right">Received Qty</th>
                             <th className="px-3 py-2 text-left">Exp. Delivery</th>
+                            <th className="px-3 py-2 text-left">PO Number</th>
                           </tr>
                         </thead>
                         <tbody>
                           {supplierItems.map((item, idx) => {
                             const isChecked = selectedIds.has(item.id);
-                            const unitCost = Number(item.planned_cost_price) || Number(item.cost_price) || 0;
-                            const qty = Number(item.quantity) || 1;
+                            const qty = Number(item.quantity) || 0;
+                            const stock = Number(item.stock_qty) || 0;
+                            const oQty = orderQtyOf(item);
+                            const ms = effectiveMaterialStatus(item);
+                            const msMeta = MS_BY_VALUE[ms] || MATERIAL_STATUS[0];
+                            const received = Number(item.received_qty) || Number(item.delivered_qty) || 0;
+                            const partial = ms === 'ordered' && received > 0 && (qty === 0 || received < qty);
                             return (
                               <tr
                                 key={item.id}
@@ -362,30 +470,30 @@ export default function TabProcurement({ projectId, project }) {
                                     {BOM_CATEGORY_LABELS[item.category] || item.category || '—'}
                                   </span>
                                 </td>
-                                <td className="px-3 py-2">
-                                  {(() => { const st = orderStatusOf(item); return (
-                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${STATUS_BADGE[st] || STATUS_BADGE.not_ordered}`}>
-                                      {STATUS_LABEL[st] || 'Pending'}
-                                    </span>
-                                  ); })()}
-                                </td>
+                                <td className="px-3 py-2 text-slate-600">{item.supplier || '—'}</td>
                                 <td className="px-3 py-2 text-right font-semibold text-slate-700">{qty}</td>
-                                <td className="px-3 py-2 text-right text-slate-700">{unitCost > 0 ? formatCurrency(unitCost, project?.currency || 'SAR') : '—'}</td>
-                                <td className="px-3 py-2 text-right font-semibold text-slate-800">{unitCost > 0 ? formatCurrency(unitCost * qty, project?.currency || 'SAR') : '—'}</td>
+                                <td className="px-1 py-1 text-right">
+                                  <input type="number" min="0" onClick={stop} value={stock} onChange={e => updateField(item, 'stock_qty', e.target.value)} onBlur={e => handleStockBlur(item, e.target.value)} className={inp + ' text-right'} style={{ width: 56 }} />
+                                </td>
+                                <td className="px-3 py-2 text-right text-slate-700">{oQty}</td>
+                                <td className="px-1 py-1">
+                                  <select onClick={stop} value={ms} onChange={e => handleMaterialStatusChange(item, e.target.value)} className={`text-[10px] font-semibold border rounded px-1.5 py-1 bg-white ${msMeta.sel}`}>
+                                    {MATERIAL_STATUS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                                  </select>
+                                  {partial && <div className="text-[10px] text-amber-600 mt-0.5">partial {received}/{qty}</div>}
+                                </td>
+                                <td className="px-1 py-1 text-right">
+                                  <input type="number" min="0" max={qty} onClick={stop} value={received} onChange={e => updateField(item, 'received_qty', e.target.value)} onBlur={e => handleReceivedBlur(item, e.target.value)} className={inp + ' text-right'} style={{ width: 56 }} />
+                                </td>
                                 <td className="px-3 py-2 text-slate-500">{formatDate(item.expected_delivery_date)}</td>
+                                <td className="px-3 py-2 font-mono text-slate-500">{item.po_number || '—'}</td>
                               </tr>
                             );
                           })}
                         </tbody>
                         <tfoot className="border-t-2 border-slate-200 bg-slate-50">
                           <tr>
-                            <td colSpan={7} className="px-3 py-2 text-slate-500 text-xs font-semibold">Supplier Total</td>
-                            <td className="px-3 py-2 text-right font-bold text-slate-800">
-                              {formatCurrency(
-                                supplierItems.reduce((s, i) => s + (Number(i.planned_cost_price) || Number(i.cost_price) || 0) * (Number(i.quantity) || 1), 0),
-                                project?.currency || 'SAR'
-                              )}
-                            </td>
+                            <td colSpan={11} className="px-3 py-2 text-slate-500 text-xs font-semibold">Supplier Total — {supplierItems.length} item{supplierItems.length !== 1 ? 's' : ''}</td>
                             <td></td>
                           </tr>
                         </tfoot>
