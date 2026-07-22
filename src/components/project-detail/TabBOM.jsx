@@ -9,6 +9,7 @@ import PanelWrapper from '@/components/ui/PanelWrapper';
 import SkeletonTable from '@/components/ui/SkeletonTable';
 import EmptyState from '@/components/ui/EmptyState';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
+import PanelCompositionView from '@/components/project-detail/PanelCompositionView';
 
 const DELIVERY_COLORS = {
   not_delivered: 'bg-slate-100 text-slate-600',
@@ -26,6 +27,15 @@ function deriveDeliveryStatus(item) {
 }
 function deliveryLabel(ds) {
   return ds === 'delivered' ? 'Delivered' : ds === 'partially_delivered' ? 'Partial' : 'Not Del.';
+}
+
+/** Margin pill: emerald ≥25%, amber 10–25%, red <10%; "—" when planned is 0/missing. */
+function marginPill(plannedUnit, sellUnit) {
+  if (!plannedUnit || plannedUnit === 0) return <span className="text-slate-300">—</span>;
+  const m = (sellUnit - plannedUnit) / plannedUnit;
+  const pct = (m * 100).toFixed(1) + '%';
+  const cls = m >= 0.25 ? 'bg-emerald-100 text-emerald-700' : m >= 0.10 ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-700';
+  return <span className={`px-2 py-0.5 rounded text-xs font-semibold ${cls}`}>{pct}</span>;
 }
 
 const ORDER_COLORS = {
@@ -61,6 +71,9 @@ export default function TabBOM({ projectId }) {
   // Multi-select / bulk edit
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [bulkEdit, setBulkEdit] = useState(null); // { field, value }
+
+  // View mode: Procurement (default) vs Panel Composition
+  const [viewMode, setViewMode] = useState('procurement');
 
   // Filters
   const [filterCategory, setFilterCategory] = useState('');
@@ -292,6 +305,10 @@ export default function TabBOM({ projectId }) {
       {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2 items-center text-sm">
+          <div className="flex items-center bg-slate-100 rounded-lg p-0.5">
+            <button onClick={() => setViewMode('procurement')} className={`px-3 py-1.5 text-xs font-semibold rounded-md transition ${viewMode === 'procurement' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Procurement</button>
+            <button onClick={() => setViewMode('composition')} className={`px-3 py-1.5 text-xs font-semibold rounded-md transition ${viewMode === 'composition' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Panel Composition</button>
+          </div>
           <Filter className="w-4 h-4 text-slate-400" />
           <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className={selCls}>
             <option value="">All Categories</option>
@@ -418,7 +435,9 @@ export default function TabBOM({ projectId }) {
       )}
 
       {/* Table */}
-      {items.length === 0 ? (
+      {viewMode === 'composition' ? (
+        <PanelCompositionView items={items} />
+      ) : items.length === 0 ? (
         <EmptyState
           icon={<Package className="w-12 h-12 opacity-40" />}
           title="No BOM items yet"
@@ -442,6 +461,8 @@ export default function TabBOM({ projectId }) {
             actual_cost_unit: Number(i.actual_cost_price) || 0,
             total_planned: (Number(i.planned_cost_price) || Number(i.cost_price) || 0) * (Number(i.quantity) || 1),
             total_actual: (Number(i.actual_cost_price) || 0) * (Number(i.quantity) || 1),
+            total_selling: (Number(i.selling_price) || 0) * (Number(i.quantity) || 1),
+            margin: (() => { const p = Number(i.planned_cost_price) || Number(i.cost_price) || 0; const s = Number(i.selling_price) || 0; if (!p) return '—'; return (((s - p) / p) * 100).toFixed(1) + '%'; })(),
             order_status: i.order_status || (i.ordered ? 'ordered' : 'not_ordered'),
             delivery_status: i.delivery_status || 'not_delivered',
             delivered_qty: i.delivered_qty || 0,
@@ -455,6 +476,7 @@ export default function TabBOM({ projectId }) {
             { key: 'order_qty', label: 'Order Qty' },
             { key: 'planned_cost_unit', label: 'Planned Cost/Unit' }, { key: 'actual_cost_unit', label: 'Actual Cost/Unit' },
             { key: 'total_planned', label: 'Total Planned' }, { key: 'total_actual', label: 'Total Actual' },
+            { key: 'total_selling', label: 'Total Selling' }, { key: 'margin', label: 'Margin' },
             { key: 'order_status', label: 'Order Status' }, { key: 'delivery_status', label: 'Delivery' }, { key: 'remaining', label: 'Remaining' },
             { key: 'expected_delivery', label: 'Expected Delivery' },
           ]}
@@ -503,6 +525,10 @@ export default function TabBOM({ projectId }) {
                     <th className="px-3 py-3 text-right">Planned Cost</th>
                     <th className="px-3 py-3 text-right">Actual Cost</th>
                     <th className="px-3 py-3 text-right">Sell Value</th>
+                    <th className="px-3 py-3 text-right">Total Planned</th>
+                    <th className="px-3 py-3 text-right">Total Actual</th>
+                    <th className="px-3 py-3 text-right">Total Selling</th>
+                    <th className="px-3 py-3 text-right">Margin</th>
                     <th className="px-3 py-3 text-left">Order</th>
                     <th className="px-3 py-3 text-left">Delivery</th>
                     <th className="px-3 py-3 text-right">Remaining</th>
@@ -538,7 +564,7 @@ export default function TabBOM({ projectId }) {
                         </span>
                       </div>
                       <div className="overflow-x-auto">
-                        <table className="w-full text-sm min-w-[1200px]">
+                        <table className="w-full text-sm min-w-[1500px]">
                           <GroupTableHeader catItems={catItems} />
                           <tbody>
                             {catItems.map(item => {
@@ -616,6 +642,10 @@ export default function TabBOM({ projectId }) {
                                       <span className="text-xs text-slate-400 mt-0.5">= {formatCurrency((Number(item.selling_price) || 0) * (Number(item.quantity) || 1), item.currency || 'SAR')}</span>
                                     </div>
                                   </td>
+                                  <td className="px-3 py-2 text-right text-xs font-medium text-slate-700">{formatCurrency(plannedUnit * (Number(item.quantity) || 1), item.currency || 'SAR')}</td>
+                                  <td className="px-3 py-2 text-right text-xs font-medium text-slate-700">{formatCurrency(actualUnit * (Number(item.quantity) || 1), item.currency || 'SAR')}</td>
+                                  <td className="px-3 py-2 text-right text-xs font-medium text-emerald-700">{formatCurrency((Number(item.selling_price) || 0) * (Number(item.quantity) || 1), item.currency || 'SAR')}</td>
+                                  <td className="px-3 py-2 text-right">{marginPill(plannedUnit, Number(item.selling_price) || 0)}</td>
                                   <td className="px-1 py-1">
                                     <select className={`text-xs px-2 py-1 rounded font-semibold border-0 cursor-pointer ${ORDER_COLORS[itemOrderStatus] || 'bg-slate-100 text-slate-600'}`} value={itemOrderStatus} onChange={e => handleSelectChange(item, 'order_status', e.target.value)}>
                                       <option value="not_ordered">Not Ordered</option>
@@ -640,7 +670,7 @@ export default function TabBOM({ projectId }) {
                                 // Panel children expanded sub-table
                                 isPanel && isPanelExpanded && panelChildren.length > 0 && (
                                   <tr key={`${item.id}_children`}>
-                                    <td colSpan={15} className="p-0">
+                                    <td colSpan={19} className="p-0">
                                       <div className="bg-orange-50/60 border-t border-orange-100 pl-8">
                                         <table className="w-full text-xs">
                                           <thead className="bg-orange-100 text-orange-800">
@@ -684,10 +714,14 @@ export default function TabBOM({ projectId }) {
                           <tfoot className="bg-slate-50 border-t border-slate-200 text-xs font-semibold text-slate-600">
                             <tr>
                               <td colSpan={7} className="px-3 py-2">Subtotal ({catItems.length})</td>
+                              <td className="px-3 py-2"></td>
+                              <td className="px-3 py-2"></td>
+                              <td className="px-3 py-2"></td>
                               <td className="px-3 py-2 text-right">{formatCurrency(catPlanned, 'SAR')}</td>
                               <td className="px-3 py-2 text-right">{formatCurrency(catActual, 'SAR')}</td>
                               <td className="px-3 py-2 text-right text-emerald-700">{formatCurrency(catSell, 'SAR')}</td>
-                              <td colSpan={4}></td>
+                              <td className="px-3 py-2"></td>
+                              <td colSpan={5}></td>
                             </tr>
                           </tfoot>
                         </table>
