@@ -10,6 +10,7 @@ import SkeletonTable from '@/components/ui/SkeletonTable';
 import EmptyState from '@/components/ui/EmptyState';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import PanelCompositionView from '@/components/project-detail/PanelCompositionView';
+import VendorLookup from '@/components/project-detail/VendorLookup';
 
 const DELIVERY_COLORS = {
   not_delivered: 'bg-slate-100 text-slate-600',
@@ -632,7 +633,10 @@ export default function TabBOM({ projectId }) {
                                     </select>
                                   </td>
                                   <td className="px-1 py-1">
-                                    <input className={inp} value={item.supplier || ''} onChange={e => updateField(item.id, 'supplier', e.target.value)} onBlur={e => handleBlur(item, 'supplier', e.target.value)} placeholder="Supplier" />
+                                    <div className="flex items-center gap-1">
+                                      <input className={inp} value={item.supplier || ''} onChange={e => updateField(item.id, 'supplier', e.target.value)} onBlur={e => handleBlur(item, 'supplier', e.target.value)} placeholder="Supplier" />
+                                      <VendorLookup supplier={item.supplier} projectId={projectId} variant="icon" />
+                                    </div>
                                   </td>
                                   <td className="px-1 py-1 text-right">
                                     <input type="number" className={inp + ' text-right'} style={{ width: 55 }} value={item.quantity ?? 1} onChange={e => updateField(item.id, 'quantity', e.target.value)} onBlur={e => handleBlur(item, 'quantity', e.target.value)} min="0" />

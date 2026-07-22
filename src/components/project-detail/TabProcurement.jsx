@@ -6,6 +6,7 @@ import { base44 } from '@/api/base44Client';
 import { formatCurrency, formatDate, BOM_CATEGORY_LABELS, BOM_CATEGORY_OPTIONS } from '@/lib/constants';
 import { ShoppingCart, Package, ChevronDown, ChevronRight, Check, AlertCircle, X, Save, Trash2, RefreshCw, Filter } from 'lucide-react';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
+import VendorLookup from '@/components/project-detail/VendorLookup';
 
 // Items eligible for procurement: not ordered, top-level (not panel children),
 // and not an engineering/service line item.
@@ -412,12 +413,14 @@ export default function TabProcurement({ projectId, project }) {
                       </div>
                     </button>
 
-                    <button onClick={() => toggleSupplierCollapse(supplier)} className="flex items-center gap-2 flex-1 text-left">
+                    <button onClick={() => toggleSupplierCollapse(supplier)} className="flex items-center gap-2 text-left shrink-0">
                       {isCollapsed ? <ChevronRight className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
                       <Package className="w-4 h-4 text-amber-500 shrink-0" />
-                      <span className="font-semibold text-slate-800">{supplier}</span>
-                      <span className="text-xs text-slate-400 ml-1">{supplierItems.length} item{supplierItems.length !== 1 ? 's' : ''}</span>
                     </button>
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <VendorLookup supplier={supplier} projectId={projectId} project={project} variant="link" className="font-semibold text-slate-800 hover:text-amber-700" />
+                      <span className="text-xs text-slate-400">{supplierItems.length} item{supplierItems.length !== 1 ? 's' : ''}</span>
+                    </div>
                   </div>
 
                   {/* Items table */}
@@ -470,7 +473,7 @@ export default function TabProcurement({ projectId, project }) {
                                     {BOM_CATEGORY_LABELS[item.category] || item.category || '—'}
                                   </span>
                                 </td>
-                                <td className="px-3 py-2 text-slate-600">{item.supplier || '—'}</td>
+                                <td className="px-3 py-2 text-slate-600"><VendorLookup supplier={item.supplier} projectId={projectId} project={project} variant="link" /></td>
                                 <td className="px-3 py-2 text-right font-semibold text-slate-700">{qty}</td>
                                 <td className="px-1 py-1 text-right">
                                   <input type="number" min="0" onClick={stop} value={stock} onChange={e => updateField(item, 'stock_qty', e.target.value)} onBlur={e => handleStockBlur(item, e.target.value)} className={inp + ' text-right'} style={{ width: 56 }} />
