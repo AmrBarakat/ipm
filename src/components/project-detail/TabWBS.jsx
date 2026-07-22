@@ -4,12 +4,13 @@ import { ENTITY_QUERY } from '@/lib/entityQueryDefaults';
 import { useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { formatDate } from '@/lib/constants';
-import { todayLocal } from '@/lib/utils';
-import { Plus, ChevronRight, ChevronDown, Trash2, Pencil, Save, X, Layers, AlertTriangle, Wand2, BookOpen, Check } from 'lucide-react';
+
+import { Plus, ChevronRight, ChevronDown, Trash2, Pencil, Save, X, Layers, AlertTriangle, Wand2, BookOpen, Check, Link2 } from 'lucide-react';
 import PanelWrapper from '@/components/ui/PanelWrapper';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import ScheduleAssistantModal from './ScheduleAssistantModal';
 import ProjectPlanTemplateModal from './ProjectPlanTemplateModal';
+import MilestoneLinkModal from './MilestoneLinkModal';
 
 const STATUS_COLORS = {
   not_started: 'bg-slate-100 text-slate-600',
@@ -63,7 +64,6 @@ export default function TabWBS({ projectId, project, onProgressChange, projectPr
   const { data: wbsData = [], isLoading } = useEntityList('WBSItem', { project_id: projectId }, ENTITY_QUERY.WBSItem.sort, ENTITY_QUERY.WBSItem.limit);
   const { data: milestones = [] } = useEntityList('Milestone', { project_id: projectId }, ENTITY_QUERY.Milestone.sort, ENTITY_QUERY.Milestone.limit);
   const wbsMutation = useEntityMutation('WBSItem', ['Task']);
-  const msMutation = useEntityMutation('Milestone');
   const queryClient = useQueryClient();
   const confirmDialog = useConfirm();
   const [items, setItems] = useState([]);
@@ -74,6 +74,7 @@ export default function TabWBS({ projectId, project, onProgressChange, projectPr
   const [editForm, setEditForm] = useState({});
   const [showScheduleAssistant, setShowScheduleAssistant] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
+  const [showLinkModal, setShowLinkModal] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [bulkField, setBulkField] = useState('');
   const [bulkValue, setBulkValue] = useState('');
@@ -206,21 +207,14 @@ export default function TabWBS({ projectId, project, onProgressChange, projectPr
       actual_cost: editForm.actual_cost !== '' ? Number(editForm.actual_cost) : null,
     };
     await wbsMutation.mutateAsync({ action: 'update', id, data });
-    // Auto-complete linked milestone if this item is now completed
-    if (data.status === 'completed' && data.milestone_id) {
-      await msMutation.mutateAsync({ action: 'update', id: data.milestone_id, data: { status: 'completed', completed_date: data.actual_end || todayLocal() } });
-    }
     setEditingId(null);
-    // WBS query invalidation triggers re-seed + the progress reconcile effect
+    // WBS query invalidation re-seeds items; the debounced syncWBSProgress
+    // effect recomputes the linked milestone's progress/status from the rollup.
   }
 
   async function updateStatus(item, status) {
     await wbsMutation.mutateAsync({ action: 'update', id: item.id, data: { status } });
-    // Auto-complete milestone
-    if (status === 'completed' && item.milestone_id) {
-      await msMutation.mutateAsync({ action: 'update', id: item.milestone_id, data: { status: 'completed', completed_date: item.actual_end || todayLocal() } });
-    }
-    // WBS query invalidation triggers re-seed + the progress reconcile effect
+    // WBS query invalidation triggers re-seed + the debounced syncWBSProgress effect
   }
 
   function getDescendants(id) {
@@ -467,6 +461,10 @@ export default function TabWBS({ projectId, project, onProgressChange, projectPr
           )}
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => setShowLinkModal(true)}
+            className="flex items-center gap-1 px-3 py-1.5 border border-slate-300 hover:bg-slate-100 text-slate-700 font-semibold text-sm rounded">
+            <Link2 className="w-4 h-4" /> Auto-link WBS
+          </button>
           <button onClick={() => setShowTemplates(true)}
             className="flex items-center gap-1 px-3 py-1.5 border border-slate-300 hover:bg-slate-100 text-slate-700 font-semibold text-sm rounded">
             <BookOpen className="w-4 h-4" /> Templates
@@ -601,6 +599,13 @@ export default function TabWBS({ projectId, project, onProgressChange, projectPr
           project={project}
           onClose={() => setShowTemplates(false)}
           onApplied={() => { setShowTemplates(false); queryClient.invalidateQueries({ queryKey: ['WBSItem'] }); }}
+        />
+      )}
+      {showLinkModal && (
+        <MilestoneLinkModal
+          projectId={projectId}
+          onClose={() => setShowLinkModal(false)}
+          onApplied={() => { setShowLinkModal(false); queryClient.invalidateQueries({ queryKey: ['WBSItem'] }); queryClient.invalidateQueries({ queryKey: ['Milestone'] }); }}
         />
       )}
     </div>

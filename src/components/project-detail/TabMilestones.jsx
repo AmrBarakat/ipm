@@ -3,11 +3,12 @@ import { useEntityList, useEntityMutation } from '@/hooks/useEntity';
 import { sortMilestones } from '@/lib/utils';
 import { ENTITY_QUERY } from '@/lib/entityQueryDefaults';
 import { formatDate } from '@/lib/constants';
-import { Plus, Flag, Pencil, Trash2, Save, X, Layers, Check } from 'lucide-react';
+import { Plus, Flag, Pencil, Trash2, Save, X, Layers, Check, Wand2 } from 'lucide-react';
 import PanelWrapper from '@/components/ui/PanelWrapper';
 import SkeletonTable from '@/components/ui/SkeletonTable';
 import EmptyState from '@/components/ui/EmptyState';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
+import MilestoneLinkModal from './MilestoneLinkModal';
 
 const STATUS_COLORS = {
   pending:     'bg-slate-100 text-slate-600',
@@ -18,6 +19,16 @@ const STATUS_COLORS = {
 
 // Milestone progress is now populated by the syncWBSProgress rollup
 // (weighted average of linked WBS items). See base44/functions/syncWBSProgress.
+
+// Fallback: client-side weighted progress for the brief window before the first
+// syncWBSProgress run populates milestone.progress. Once sync writes the stored
+// value, it is authoritative and this is no longer used (returns 0 when no links).
+function computeMilestoneProgress(msId, wbsItems) {
+  const linked = wbsItems.filter(i => i.milestone_id === msId);
+  if (linked.length === 0) return 0;
+  const wTotal = linked.reduce((s, i) => s + (i.weight || 1), 0);
+  return Math.round(linked.reduce((s, i) => s + (i.progress || 0) * (i.weight || 1), 0) / (wTotal || 1));
+}
 
 export default function TabMilestones({ projectId }) {
   const { data: milestones = [], isLoading } = useEntityList('Milestone', { project_id: projectId }, ENTITY_QUERY.Milestone.sort, ENTITY_QUERY.Milestone.limit);
@@ -31,6 +42,7 @@ export default function TabMilestones({ projectId }) {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [bulkField, setBulkField] = useState('');
   const [bulkValue, setBulkValue] = useState('');
+  const [showLinkModal, setShowLinkModal] = useState(false);
 
   // Display order: planned_date ascending (nulls last), tie-break by title.
   const sortedMilestones = useMemo(() => sortMilestones(milestones), [milestones]);
@@ -85,9 +97,14 @@ export default function TabMilestones({ projectId }) {
     <div>
       <div className="flex justify-between items-center mb-4">
         <p className="text-sm text-slate-500">{milestones.length} milestone{milestones.length !== 1 ? 's' : ''}</p>
-        <button onClick={() => setAdding(v => !v)} className="flex items-center gap-1 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold text-sm rounded">
-          <Plus className="w-4 h-4" /> Add Milestone
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowLinkModal(true)} className="flex items-center gap-1 px-3 py-1.5 border border-slate-300 hover:bg-slate-100 text-slate-700 font-semibold text-sm rounded">
+            <Wand2 className="w-4 h-4" /> Auto-link WBS
+          </button>
+          <button onClick={() => setAdding(v => !v)} className="flex items-center gap-1 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold text-sm rounded">
+            <Plus className="w-4 h-4" /> Add Milestone
+          </button>
+        </div>
       </div>
 
       {/* Bulk action bar */}
@@ -171,7 +188,7 @@ export default function TabMilestones({ projectId }) {
             )}
             {sortedMilestones.map(m => {
               const isEditing = editingId === m.id;
-              const displayProgress = m.progress || 0;
+              const displayProgress = m.progress || computeMilestoneProgress(m.id, wbsItems);
               const linkedCount = wbsItems.filter(i => i.milestone_id === m.id).length;
               const isAuto = linkedCount > 0;
               const isSelected = selectedIds.has(m.id);
@@ -190,7 +207,7 @@ export default function TabMilestones({ projectId }) {
                       {isEditing ? (
                         <div className="flex gap-2 flex-wrap">
                           <input value={editForm.title} onChange={e => setEditForm(f => ({ ...f, title: e.target.value }))} className={inp} placeholder="Title" style={{ maxWidth: 200 }} />
-                          <input type="date" value={editForm.planned_date} onChange={e => setEditForm(f => ({ ...f, planned_date: e.target.value }))} className={inp} style={{ maxWidth: 160 }} />
+                          <input type="date" value={editForm.planned_date} onChange={e => setEditForm(f => ({ ...f, planned_date: e.target.value }))} className={inp} style={{ maxWidth: 160 }} disabled={isAuto} title={isAuto ? 'Derived from linked WBS items — not editable' : ''} />
                           <input type="number" value={editForm.weight} onChange={e => setEditForm(f => ({ ...f, weight: e.target.value }))} placeholder="Weight %" className={inp} min="0" max="100" style={{ maxWidth: 100 }} />
                         </div>
                       ) : (
@@ -253,6 +270,14 @@ export default function TabMilestones({ projectId }) {
             })}
           </div>
         </PanelWrapper>
+      )}
+
+      {showLinkModal && (
+        <MilestoneLinkModal
+          projectId={projectId}
+          onClose={() => setShowLinkModal(false)}
+          onApplied={() => setShowLinkModal(false)}
+        />
       )}
     </div>
   );

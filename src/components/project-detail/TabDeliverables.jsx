@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useEntityList, useEntityMutation, runBatch } from '@/hooks/useEntity';
 import { ENTITY_QUERY } from '@/lib/entityQueryDefaults';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
@@ -7,7 +7,7 @@ import { base44 } from '@/api/base44Client';
 import { Plus, Package, Pencil, Trash2, Save, X, CheckCircle, Wand2, Loader2, Check, FileText } from 'lucide-react';
 import PanelWrapper from '@/components/ui/PanelWrapper';
 import { isTopLevelBOM } from '@/lib/constants';
-import { todayLocal } from '@/lib/utils';
+import { todayLocal, sortMilestones } from '@/lib/utils';
 import BulkInvoiceDialog from '@/components/project-detail/BulkInvoiceDialog';
 
 const STATUS_COLORS = {
@@ -247,9 +247,10 @@ export default function TabDeliverables({ projectId }) {
 
   const milestoneById = Object.fromEntries(milestones.map(m => [m.id, m]));
 
-  // Group deliverables by milestone
+  // Group deliverables by milestone — sorted by planned_date ascending (nulls last)
   const milestoneIds = new Set(milestones.map(m => m.id));
-  const groups = milestones
+  const sortedMilestones = useMemo(() => sortMilestones(milestones), [milestones]);
+  const groups = sortedMilestones
     .map(m => ({ milestone: m, items: items.filter(d => d.milestone_id === m.id) }))
     .filter(g => g.items.length > 0);
   // Ungrouped = no milestone OR milestone that no longer exists
