@@ -268,8 +268,8 @@ export default function GanttTimeline({
                 {item.progress > 0 && (
                   <div className="absolute left-0 top-0 h-full bg-black/25 rounded" style={{ width: `${clamp(item.progress, 0, 100)}%` }} />
                 )}
-                <span className="absolute inset-0 flex items-center px-1.5 text-[10px] text-white font-medium truncate drop-shadow pointer-events-none">
-                  {barW > 40 ? item.name : ''}
+                <span className={`absolute inset-0 flex items-center px-1.5 text-[10px] text-white font-medium drop-shadow pointer-events-none ${exporting ? 'whitespace-nowrap overflow-visible' : 'truncate'}`}>
+                  {(barW > 40 || exporting) ? item.name : ''}
                 </span>
                 {/* resize handles — adaptive: hidden for tiny bars (move-only).
                     The hit area extends 4px above/below the bar for easier

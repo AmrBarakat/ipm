@@ -1,4 +1,4 @@
-import { ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Maximize2, Minimize2, Calendar, Crosshair, Image, FileText, Sheet, Loader2, Link2, AlertTriangle, ChevronsDownUp, ChevronsUpDown, Wand2 } from 'lucide-react';
+import { ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Maximize2, Minimize2, Calendar, Crosshair, Image, FileText, Sheet, Loader2, Link2, AlertTriangle, ChevronsDownUp, ChevronsUpDown, Wand2, Table } from 'lucide-react';
 import { TIME_SCALES } from './ganttUtils';
 
 export default function GanttToolbar({
@@ -8,7 +8,7 @@ export default function GanttToolbar({
   showDeps, setShowDeps, showCritical, setShowCritical,
   criticalCount, projectDuration, projectFinish,
   fullscreen, toggleFullscreen,
-  onExportPNG, onExportPDF, onExportExcel, exporting,
+  onExportPNG, onExportPDF, onExportTablePDF, onExportExcel, exporting,
   onSmartAnalysis
 }) {
   const fmtFinish = projectFinish ? projectFinish.toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
@@ -78,8 +78,11 @@ export default function GanttToolbar({
           <button onClick={onExportPNG} disabled={exporting} className="flex items-center gap-1 px-2.5 py-1.5 text-xs hover:bg-slate-100 text-slate-600 border-r border-slate-200 disabled:opacity-50" title="Export PNG">
             {exporting === 'png' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Image className="w-3.5 h-3.5" />} PNG
           </button>
-          <button onClick={onExportPDF} disabled={exporting} className="flex items-center gap-1 px-2.5 py-1.5 text-xs hover:bg-slate-100 text-slate-600 border-r border-slate-200 disabled:opacity-50" title="Export PDF">
+          <button onClick={onExportPDF} disabled={exporting} className="flex items-center gap-1 px-2.5 py-1.5 text-xs hover:bg-slate-100 text-slate-600 border-r border-slate-200 disabled:opacity-50" title="Export Gantt chart as PDF">
             {exporting === 'pdf' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />} PDF
+          </button>
+          <button onClick={onExportTablePDF} disabled={exporting} className="flex items-center gap-1 px-2.5 py-1.5 text-xs hover:bg-slate-100 text-slate-600 border-r border-slate-200 disabled:opacity-50" title="Export schedule table (PDF) — best for large charts">
+            <Table className="w-3.5 h-3.5" /> Table
           </button>
           <button onClick={onExportExcel} className="flex items-center gap-1 px-2.5 py-1.5 text-xs hover:bg-slate-100 text-emerald-600 disabled:opacity-50" title="Export Excel">
             <Sheet className="w-3.5 h-3.5" /> Excel

@@ -8,6 +8,7 @@ import { Calendar } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx';
+import { exportSectionsPDF } from '@/lib/reportExport';
 
 import {
   TIME_SCALES, scaleByKey, HEADER_H, MIN_LEFT_WIDTH, MAX_LEFT_WIDTH,
@@ -80,6 +81,7 @@ export default function TabGantt({ projectId, project }) {
 
   const scrollRef = useRef(null);
   const containerRef = useRef(null);
+  const chartRef = useRef(null); // inner chart (tree + timeline) targeted for export
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportH, setViewportH] = useState(600);
 
@@ -337,38 +339,167 @@ export default function TabGantt({ projectId, project }) {
   }, []);
 
   // ── Exports ────────────────────────────────────────────────────────────────
+  const EXPORT_STYLE_ID = 'gantt-export-style';
+  function applyExportStyle() {
+    let el = document.getElementById(EXPORT_STYLE_ID);
+    if (!el) {
+      el = document.createElement('style');
+      el.id = EXPORT_STYLE_ID;
+      el.textContent = `.gantt-export{background:#fff!important}.gantt-export *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}`;
+      document.head.appendChild(el);
+    }
+    return el;
+  }
+
   async function captureCanvas() {
+    if (!chartRef.current) return null;
     setExporting(e => e || 'png');
-    // Reframe the timeline to the project's actual activity span (start → end)
-    // so the export focuses only on project activities, not empty/padded space.
+    // Reframe to the project's actual activity span so the export focuses on
+    // real activity, then widen the left task column so names aren't truncated.
     setTimelineStart(bounds.start);
+    const longest = rows.reduce((mx, r) => {
+      const text = r.kind === 'wbs' ? `${r.data.wbs_code || ''} ${r.data.name || ''}` : `◆ ${r.data.title || ''}`;
+      return Math.max(mx, (r.depth || 0) * 16 + text.length * 6.2 + 70);
+    }, 0);
+    const exportLeft = Math.min(720, Math.max(leftWidth, Math.ceil(longest)));
+    const restoreLeft = leftWidth;
+    if (exportLeft !== leftWidth) setLeftWidth(exportLeft);
+    // Let bars re-layout after the reframe + column resize before capturing.
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-    const el = scrollRef.current;
-    const inner = el.firstChild;
-    const canvas = await html2canvas(inner, { backgroundColor: '#ffffff', width: inner.scrollWidth, height: inner.scrollHeight, windowWidth: inner.scrollWidth, windowHeight: inner.scrollHeight, scale: 1 });
-    setExporting(null);
+    await new Promise(r => setTimeout(r, 120));
+
+    const styleEl = applyExportStyle();
+    const node = chartRef.current;
+    node.classList.add('gantt-export');
+    const dpr = window.devicePixelRatio || 1;
+    const captureScale = Math.min(3, Math.max(2, dpr * 2));
+    let canvas;
+    try {
+      canvas = await html2canvas(node, {
+        backgroundColor: '#ffffff',
+        useCORS: true,
+        scale: captureScale,
+        width: node.scrollWidth,
+        height: node.scrollHeight,
+        windowWidth: node.scrollWidth,
+        windowHeight: node.scrollHeight,
+      });
+    } finally {
+      node.classList.remove('gantt-export');
+      if (styleEl) styleEl.remove();
+      if (exportLeft !== restoreLeft) setLeftWidth(restoreLeft);
+      setExporting(null);
+    }
     return canvas;
   }
+
   async function exportPNG() {
-    try { setExporting('png'); const canvas = await captureCanvas();
+    try { setExporting('png'); const canvas = await captureCanvas(); if (!canvas) return;
       const link = document.createElement('a');
-      link.href = canvas.toDataURL('image/png');
+      link.href = canvas.toDataURL('image/png'); // lossless — correct for text/lines
       link.download = `gantt_${(project?.code || 'project')}_${new Date().toISOString().slice(0,10)}.png`;
       link.click();
     } catch (e) { console.error(e); setExporting(null); }
   }
+
+  // PDF: tile the chart across landscape pages at a readable size instead of
+  // shrinking it onto one page. Page 1 carries a header band + legend; overflow
+  // pages repeat a slim header. Image data is PNG so text stays sharp.
   async function exportPDF() {
-    try { setExporting('pdf'); const canvas = await captureCanvas();
-      const img = canvas.toDataURL('image/jpeg', 0.92);
+    let canvas;
+    try { setExporting('pdf'); canvas = await captureCanvas(); } catch (e) { console.error(e); setExporting(null); return; }
+    if (!canvas) { setExporting(null); return; }
+    try {
       const pdf = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
-      const pw = pdf.internal.pageSize.getWidth(), ph = pdf.internal.pageSize.getHeight();
-      const m = 18;
-      const aw = pw - m * 2, ah = ph - m * 2;
-      const ratio = Math.min(aw / canvas.width, ah / canvas.height);
-      const w = canvas.width * ratio, h = canvas.height * ratio;
-      pdf.addImage(img, 'JPEG', m + (aw - w) / 2, m + (ah - h) / 2, w, h);
+      const pw = pdf.internal.pageSize.getWidth();
+      const ph = pdf.internal.pageSize.getHeight();
+      const M = 24;
+      const printableW = pw - M * 2;
+      const bandH = 56;
+      const firstContentTop = 96;
+      const restContentTop = 44;
+      const footerReserve = 30;
+      const firstContentH = ph - firstContentTop - footerReserve;
+      const restContentH = ph - restContentTop - footerReserve;
+      const scalePt = printableW / canvas.width;   // fit width — never also shrink to fit height
+      const pxPerPt = canvas.width / printableW;
+
+      // ── Page 1 header band + legend ──────────────────────────────────────
+      drawHeaderBand(pdf, M, M, printableW, bandH, {
+        name: project?.name, code: project?.code, today: new Date().toLocaleDateString('en-GB'),
+        scaleLabel: scale.label, pct: project?.progress ?? 0,
+      });
+      drawLegend(pdf, M, M + bandH + 2);
+
+      // ── Slice the canvas into page-height bands ──────────────────────────
+      let yPx = 0;
+      let pageIndex = 1;
+      while (yPx < canvas.height) {
+        if (pageIndex > 1) pdf.addPage();
+        const availPt = pageIndex === 1 ? firstContentH : restContentH;
+        const slicePx = Math.max(1, Math.min(Math.floor(availPt * pxPerPt), canvas.height - yPx));
+        const tmp = document.createElement('canvas');
+        tmp.width = canvas.width; tmp.height = slicePx;
+        tmp.getContext('2d').drawImage(canvas, 0, yPx, canvas.width, slicePx, 0, 0, canvas.width, slicePx);
+        const dataUrl = tmp.toDataURL('image/png');
+        const drawH = slicePx * scalePt;
+        const topPt = pageIndex === 1 ? firstContentTop : restContentTop;
+        pdf.addImage(dataUrl, 'PNG', M, topPt, printableW, drawH);
+        yPx += slicePx;
+        pageIndex++;
+      }
+
+      // ── Slim header (pages 2+) + footer on every page ────────────────────
+      const pages = pdf.getNumberOfPages();
+      for (let p = 1; p <= pages; p++) {
+        pdf.setPage(p);
+        if (p > 1) {
+          pdf.setDrawColor(226, 232, 240); pdf.setLineWidth(0.5);
+          pdf.line(M, restContentTop - 6, pw - M, restContentTop - 6);
+          pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9); pdf.setTextColor(15, 23, 42);
+          pdf.text(`${project?.code || 'Project'} · Gantt`, M, restContentTop - 12);
+          pdf.setFont('helvetica', 'normal'); pdf.setTextColor(148, 163, 184);
+          pdf.text(`Page ${p} of ${pages}`, pw - M, restContentTop - 12, { align: 'right' });
+        }
+        pdf.setDrawColor(226, 232, 240); pdf.setLineWidth(0.5);
+        pdf.line(M, ph - 14, pw - M, ph - 14);
+        pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7); pdf.setTextColor(148, 163, 184);
+        pdf.text(`${project?.name || 'Project'} · Gantt · Page ${p} of ${pages}`, pw / 2, ph - 8, { align: 'center' });
+      }
+
       pdf.save(`gantt_${(project?.code || 'project')}_${new Date().toISOString().slice(0,10)}.pdf`);
-    } catch (e) { console.error(e); setExporting(null); }
+    } catch (e) { console.error(e); } finally { setExporting(null); }
+  }
+
+  function exportTablePDF() {
+    // Tabular fallback for very large charts — a clean schedule table via the
+    // shared report exporter. Reuses the same row-building logic as exportExcel.
+    const tblRows = wbsItems.filter(w => w.planned_start || w.planned_end).map(w => ({
+      'WBS': w.wbs_code || '',
+      'Task': w.name || '',
+      'Start': w.planned_start || '',
+      'Finish': w.planned_end || '',
+      'Duration': (w.planned_start && w.planned_end) ? daysBetween(w.planned_start, w.planned_end) : '',
+      '%': w.progress || 0,
+      'Assignee': w.assignee || '',
+      'Critical': cpm.criticalIds.has(w.id) ? 'Yes' : '',
+      'Slack': cpm.float.get(w.id) || 0,
+    }));
+    const columns = [
+      { header: 'WBS', key: 'WBS' }, { header: 'Task', key: 'Task' },
+      { header: 'Start', key: 'Start' }, { header: 'Finish', key: 'Finish' },
+      { header: 'Duration', key: 'Duration', align: 'right' },
+      { header: '%', key: '%', align: 'right' },
+      { header: 'Assignee', key: 'Assignee' },
+      { header: 'Critical', key: 'Critical' },
+      { header: 'Slack', key: 'Slack', align: 'right' },
+    ];
+    exportSectionsPDF(
+      `gantt_${(project?.code || 'project')}_${new Date().toISOString().slice(0,10)}.pdf`,
+      `Schedule — ${project?.name || project?.code || 'Project'}`,
+      [{ title: 'Schedule', type: 'table', columns, rows: tblRows }],
+      { subtitle: project?.code ? `Project code: ${project.code}` : undefined, orientation: 'landscape' },
+    );
   }
   function exportExcel() {
     const data = wbsItems.filter(w => w.planned_start || w.planned_end).map(w => ({
@@ -411,11 +542,11 @@ export default function TabGantt({ projectId, project }) {
         showDeps={showDeps} setShowDeps={setShowDeps} showCritical={showCritical} setShowCritical={setShowCritical}
         criticalCount={cpm.criticalIds.size} projectDuration={cpm.projectDurationDays} projectFinish={cpm.projectFinish}
         fullscreen={fullscreen} toggleFullscreen={() => setFullscreen(v => !v)}
-        onExportPNG={exportPNG} onExportPDF={exportPDF} onExportExcel={exportExcel} exporting={exporting}
+        onExportPNG={exportPNG} onExportPDF={exportPDF} onExportTablePDF={exportTablePDF} onExportExcel={exportExcel} exporting={exporting}
         onSmartAnalysis={() => setShowSmart(true)}
       />
       <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-auto border border-slate-200 rounded-lg bg-white relative" style={{ minHeight: 320 }}>
-        <div style={{ width: innerWidth, position: 'relative' }} className="flex flex-col">
+        <div ref={chartRef} style={{ width: innerWidth, position: 'relative' }} className="flex flex-col">
           <div className="flex">
             <GanttTree
               rows={rows} leftWidth={leftWidth} scrollTop={scrollTop} viewportH={viewportH - HEADER_H}
@@ -461,4 +592,42 @@ export default function TabGantt({ projectId, project }) {
       )}
     </>
   );
+}
+
+// ── PDF header band + legend helpers (module-level) ──────────────────────────
+function drawHeaderBand(pdf, x, y, w, h, info) {
+  pdf.setFillColor(15, 23, 42); pdf.rect(x, y, w, h, 'F');
+  pdf.setFillColor(245, 158, 11); pdf.rect(x, y + h - 3, w, 3, 'F'); // accent stripe
+  pdf.setTextColor(255, 255, 255); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(15);
+  pdf.text(String(info.name || 'Project'), x + 10, y + 18);
+  pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(203, 213, 225);
+  pdf.text(`Code: ${info.code || '—'}`, x + 10, y + 31);
+  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(11); pdf.setTextColor(255, 255, 255);
+  pdf.text('Project Schedule — Gantt Chart', x + 10, y + 46);
+  pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(203, 213, 225);
+  pdf.text(`Generated: ${info.today}`, x + w - 10, y + 18, { align: 'right' });
+  pdf.text(`Scale: ${info.scaleLabel || '—'}`, x + w - 10, y + 30, { align: 'right' });
+  pdf.text(`Progress: ${info.pct || 0}%`, x + w - 10, y + 42, { align: 'right' });
+}
+
+function drawLegend(pdf, x, y) {
+  const items = [
+    { type: 'bar', color: [168, 85, 247], label: 'Task' },
+    { type: 'bar', color: [244, 63, 94], label: 'Critical path' },
+    { type: 'diamond', color: [245, 158, 11], label: 'Milestone' },
+    { type: 'striped', label: 'In-progress' },
+  ];
+  let cx = x;
+  pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(71, 85, 105);
+  for (const it of items) {
+    if (it.type === 'bar') { pdf.setFillColor(...it.color); pdf.rect(cx, y, 10, 8, 'F'); }
+    else if (it.type === 'diamond') { pdf.setFillColor(...it.color); pdf.rect(cx + 2, y, 6, 8, 'F'); }
+    else if (it.type === 'striped') {
+      pdf.setFillColor(248, 250, 252); pdf.rect(cx, y, 10, 8, 'F');
+      pdf.setDrawColor(59, 130, 246); pdf.setLineWidth(0.6);
+      for (let i = 0; i < 10; i += 3) pdf.line(cx + i, y, cx + i, y + 8);
+    }
+    pdf.text(it.label, cx + 14, y + 6);
+    cx += 14 + pdf.getTextWidth(it.label) + 16;
+  }
 }
