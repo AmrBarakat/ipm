@@ -11,7 +11,13 @@ import { Check, Loader2, CalendarClock, ArrowRight, AlertTriangle, Sparkles } fr
  * WBS items, logs an AuditLog entry, and invalidates the WBS query so the Gantt
  * and WBS tab refresh.
  */
-export default function ScheduleProposedChanges({ proposedChanges, impact, conflictsFound, conflictsResolved, projectId }) {
+const CONF_STYLE = {
+  high: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  medium: 'bg-amber-100 text-amber-700 border-amber-200',
+  low: 'bg-slate-100 text-slate-500 border-slate-200',
+};
+
+export default function ScheduleProposedChanges({ proposedChanges, impact, conflictsFound, conflictsResolved, rejected, projectId }) {
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState(new Set(proposedChanges.map((c) => c.wbs_item_id)));
   const [applying, setApplying] = useState(false);
@@ -19,6 +25,11 @@ export default function ScheduleProposedChanges({ proposedChanges, impact, confl
   const [error, setError] = useState('');
 
   if (!proposedChanges || proposedChanges.length === 0) return null;
+
+  // Guard: never allow apply if any proposed row has end < start (should not
+  // happen after server validation, but guard anyway).
+  const hasInvalidDates = proposedChanges.some((c) => c.proposed_end && c.proposed_start && c.proposed_end < c.proposed_start);
+  const rejectedList = Array.isArray(rejected) ? rejected : [];
 
   function toggle(id) {
     setSelected((prev) => {
@@ -79,8 +90,16 @@ export default function ScheduleProposedChanges({ proposedChanges, impact, confl
         <span className="text-xs font-semibold text-amber-800">
           Proposed schedule changes ({proposedChanges.length})
         </span>
+        {rejectedList.length > 0 && (
+          <span
+            className="ml-auto text-[10px] text-slate-500 bg-slate-100 border border-slate-200 rounded-full px-2 py-0.5 cursor-help"
+            title={rejectedList.map((r) => `${r.wbs_code || r.wbs_item_id || '?'}: ${r.reason}`).join('\n')}
+          >
+            {rejectedList.length} filtered for consistency
+          </span>
+        )}
         {conflictsFound > 0 && (
-          <span className="ml-auto text-[10px] text-amber-700">
+          <span className={`text-[10px] text-amber-700 ${rejectedList.length === 0 ? 'ml-auto' : ''}`}>
             {conflictsResolved}/{conflictsFound} conflicts resolved
           </span>
         )}
@@ -110,6 +129,7 @@ export default function ScheduleProposedChanges({ proposedChanges, impact, confl
               <th className="px-2 py-1.5 text-left">Current</th>
               <th className="px-2 py-1.5 text-left"></th>
               <th className="px-2 py-1.5 text-left">Proposed</th>
+              <th className="px-2 py-1.5 text-left">Conf.</th>
               <th className="px-2 py-1.5 text-left">Reason</th>
             </tr>
           </thead>
@@ -130,6 +150,13 @@ export default function ScheduleProposedChanges({ proposedChanges, impact, confl
                 <td className="px-2 py-1.5 text-slate-500 whitespace-nowrap">{formatDate(c.current_start)} → {formatDate(c.current_end)}</td>
                 <td className="px-2 py-1.5 text-center text-slate-300"><ArrowRight className="w-3.5 h-3.5 inline" /></td>
                 <td className="px-2 py-1.5 text-slate-800 font-medium whitespace-nowrap">{formatDate(c.proposed_start)} → {formatDate(c.proposed_end)}</td>
+                <td className="px-2 py-1.5">
+                  {c.confidence ? (
+                    <span className={`inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded border ${CONF_STYLE[c.confidence] || CONF_STYLE.low}`}>
+                      {c.confidence}
+                    </span>
+                  ) : <span className="text-slate-300">—</span>}
+                </td>
                 <td className="px-2 py-1.5 text-slate-500 max-w-[220px]">{c.reason}</td>
               </tr>
             ))}
@@ -152,7 +179,8 @@ export default function ScheduleProposedChanges({ proposedChanges, impact, confl
         ) : (
           <button
             onClick={applySelected}
-            disabled={applying || selected.size === 0}
+            disabled={applying || selected.size === 0 || hasInvalidDates}
+            title={hasInvalidDates ? 'A proposed change has end before start' : undefined}
             className="flex items-center gap-1.5 px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-900 text-xs font-semibold rounded-lg disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {applying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}

@@ -215,6 +215,7 @@ function MessageBubble({ message, projectId }) {
             impact={parsed.impact}
             conflictsFound={parsed.conflicts_found}
             conflictsResolved={parsed.conflicts_resolved}
+            rejected={parsed.rejected}
             projectId={projectId}
           />
         )}
