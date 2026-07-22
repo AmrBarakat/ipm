@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { Maximize2, Minimize2, Download, FileText, Sheet } from 'lucide-react';
-import { jsPDF } from 'jspdf';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
+import { exportSectionsPDF, styleSheet } from '@/lib/reportExport';
 
 /**
  * PanelWrapper – wraps any table/chart with fullscreen + PDF/Excel export.
@@ -19,50 +19,26 @@ export default function PanelWrapper({ title = 'Panel', exportData, exportCols, 
 
   function exportExcel() {
     if (!exportData?.length) return;
-    const rows = exportData.map(row => {
-      if (!exportCols) return row;
-      return Object.fromEntries(exportCols.map(c => [c.label, row[c.key] ?? '']));
-    });
+    const cols = exportCols || Object.keys(exportData[0] || {}).map((k) => ({ key: k, label: k }));
+    const rows = exportData.map((row) => Object.fromEntries(cols.map((c) => [c.label, row[c.key] ?? ''])));
     const ws = XLSX.utils.json_to_sheet(rows);
+    styleSheet(ws, { headerRows: [0], freezeRow: 1, columns: cols.map((c) => ({ header: c.label, fmt: c.fmt })) });
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, title.slice(0, 31));
-    XLSX.writeFile(wb, `${title.replace(/\s+/g, '_')}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, String(title).slice(0, 31) || 'Sheet');
+    XLSX.writeFile(wb, `${title.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.xlsx`);
     setMenuOpen(false);
   }
 
+  // PDF routes through the shared engine: wrapped cells, header band, repeating
+  // table header, and page footer — instead of the old single-page maxWidth draw.
   function exportPDF() {
     if (!exportData?.length || !exportCols?.length) return;
-    const doc = new jsPDF({ orientation: 'landscape' });
-    doc.setFontSize(14);
-    doc.text(title, 14, 16);
-    doc.setFontSize(8);
-
-    const headers = exportCols.map(c => c.label);
-    const colW = Math.max(20, Math.floor(270 / headers.length));
-    let y = 26;
-
-    // Header row
-    doc.setFillColor(241, 245, 249);
-    doc.rect(14, y - 4, colW * headers.length, 8, 'F');
-    doc.setFont(undefined, 'bold');
-    headers.forEach((h, i) => doc.text(String(h), 14 + i * colW, y, { maxWidth: colW - 2 }));
-    doc.setFont(undefined, 'normal');
-    y += 8;
-
-    exportData.forEach((row, ri) => {
-      if (y > 185) { doc.addPage(); y = 20; }
-      if (ri % 2 === 0) {
-        doc.setFillColor(248, 250, 252);
-        doc.rect(14, y - 4, colW * headers.length, 7, 'F');
-      }
-      exportCols.forEach((c, i) => {
-        const val = row[c.key] !== undefined && row[c.key] !== null ? String(row[c.key]) : '';
-        doc.text(val, 14 + i * colW, y, { maxWidth: colW - 2 });
-      });
-      y += 7;
-    });
-
-    doc.save(`${title.replace(/\s+/g, '_')}.pdf`);
+    const columns = exportCols.map((c) => ({ header: c.label, key: c.key, align: c.align || 'left' }));
+    exportSectionsPDF(
+      `${title.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pdf`,
+      title,
+      [{ title, type: 'table', columns, rows: exportData }],
+    );
     setMenuOpen(false);
   }
 

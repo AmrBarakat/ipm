@@ -7,8 +7,8 @@ import { toast } from 'sonner';
 import { Calendar } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
-import * as XLSX from 'xlsx';
-import { exportSectionsPDF } from '@/lib/reportExport';
+import * as XLSX from 'xlsx-js-style';
+import { exportSectionsPDF, styleSheet } from '@/lib/reportExport';
 
 import {
   TIME_SCALES, scaleByKey, HEADER_H, MIN_LEFT_WIDTH, MAX_LEFT_WIDTH,
@@ -502,19 +502,33 @@ export default function TabGantt({ projectId, project }) {
     );
   }
   function exportExcel() {
+    const columns = [
+      { header: 'WBS Code', key: 'code' },
+      { header: 'Task Name', key: 'name' },
+      { header: 'Start', key: 'start' },
+      { header: 'Finish', key: 'finish' },
+      { header: 'Duration (days)', key: 'dur', fmt: '#,##0' },
+      { header: '% Complete', key: 'pct', fmt: '0"%"' },
+      { header: 'Assignee', key: 'assignee' },
+      { header: 'Dependencies', key: 'deps' },
+      { header: 'Critical', key: 'crit' },
+      { header: 'Slack (days)', key: 'slack', fmt: '#,##0' },
+    ];
     const data = wbsItems.filter(w => w.planned_start || w.planned_end).map(w => ({
-      'WBS Code': w.wbs_code || '',
-      'Task Name': w.name || '',
-      'Start': w.planned_start || '',
-      'Finish': w.planned_end || '',
-      'Duration (days)': (w.planned_start && w.planned_end) ? daysBetween(w.planned_start, w.planned_end) : '',
-      '% Complete': w.progress || 0,
-      'Assignee': w.assignee || '',
-      'Dependencies': (w.predecessor_ids || []).map(id => wbsById[id]?.wbs_code || id).join(', '),
-      'Critical': cpm.criticalIds.has(w.id) ? 'Yes' : '',
-      'Slack (days)': cpm.float.get(w.id) || 0,
+      code: w.wbs_code || '',
+      name: w.name || '',
+      start: w.planned_start || '',
+      finish: w.planned_end || '',
+      dur: (w.planned_start && w.planned_end) ? daysBetween(w.planned_start, w.planned_end) : '',
+      pct: w.progress || 0,
+      assignee: w.assignee || '',
+      deps: (w.predecessor_ids || []).map(id => wbsById[id]?.wbs_code || id).join(', '),
+      crit: cpm.criticalIds.has(w.id) ? 'Yes' : '',
+      slack: cpm.float.get(w.id) || 0,
     }));
-    const ws = XLSX.utils.json_to_sheet(data);
+    const sheetRows = data.length ? data : [Object.fromEntries(columns.map((c) => [c.header, '']))];
+    const ws = XLSX.utils.json_to_sheet(sheetRows);
+    styleSheet(ws, { headerRows: [0], freezeRow: 1, columns });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Schedule');
     XLSX.writeFile(wb, `gantt_${(project?.code || 'project')}_${new Date().toISOString().slice(0,10)}.xlsx`);

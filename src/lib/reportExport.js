@@ -1,7 +1,7 @@
 // Reusable PDF / Excel generation helpers + report data helpers.
 // Detached from the old per-tab export buttons so the Reports hub can reuse them.
 import { jsPDF } from 'jspdf';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 import { formatCurrency, formatDate } from '@/lib/constants';
 
 export { formatCurrency, formatDate };
@@ -104,12 +104,12 @@ export const HEALTH_LABELS = { green: 'On Track', amber: 'At Risk', red: 'Critic
 // ══════════════════════════════════════════════════════════════════════════════
 // PDF typography & palette (defined once, reused everywhere)
 // ══════════════════════════════════════════════════════════════════════════════
-const FONT = 'helvetica';
-const SIZES = { title: 18, subtitle: 11, section: 10.5, th: 8, body: 8, footer: 7, meta: 9 };
-const LINE_FACTOR = 1.15;
-const PT_TO_MM = 25.4 / 72;
+export const FONT = 'helvetica';
+export const SIZES = { title: 18, subtitle: 11, section: 10.5, th: 8, body: 8, footer: 7, meta: 9 };
+export const LINE_FACTOR = 1.15;
+export const PT_TO_MM = 25.4 / 72;
 
-const C = {
+export const C = {
   ink: [15, 23, 42],
   subInk: [71, 85, 105],
   muted: [148, 163, 184],
@@ -122,15 +122,15 @@ const C = {
   bandSub: [203, 213, 225],
 };
 
-const PAD_X = 1.5;     // horizontal cell padding (mm)
-const PAD_Y = 1.1;     // vertical cell padding (mm)
-const MIN_ROW = 7;     // minimum row height (mm)
-const MIN_COL_W = 16;   // minimum readable column width (mm)
+export const PAD_X = 1.5;     // horizontal cell padding (mm)
+export const PAD_Y = 1.1;     // vertical cell padding (mm)
+export const MIN_ROW = 7;     // minimum row height (mm)
+export const MIN_COL_W = 16;   // minimum readable column width (mm)
 
-const lineMm = (size) => size * LINE_FACTOR * PT_TO_MM;
-const ascentMm = (size) => size * 0.8 * PT_TO_MM;
+export const lineMm = (size) => size * LINE_FACTOR * PT_TO_MM;
+export const ascentMm = (size) => size * 0.8 * PT_TO_MM;
 
-function setColor(doc, [r, g, b], kind) {
+export function setColor(doc, [r, g, b], kind) {
   if (kind === 'fill') doc.setFillColor(r, g, b);
   else if (kind === 'draw') doc.setDrawColor(r, g, b);
   else doc.setTextColor(r, g, b);
@@ -138,7 +138,7 @@ function setColor(doc, [r, g, b], kind) {
 
 // Wrap text to a width, then hard-slice any line (long unbroken token) that still
 // overflows, appending an ellipsis so nothing ever spills outside the cell.
-function wrap(doc, value, innerW, size, style = 'normal') {
+export function wrap(doc, value, innerW, size, style = 'normal') {
   doc.setFont(FONT, style);
   doc.setFontSize(size);
   const max = Math.max(innerW, 4);
@@ -152,7 +152,7 @@ function wrap(doc, value, innerW, size, style = 'normal') {
 }
 
 // Draw pre-wrapped lines top-aligned within a cell box.
-function drawLines(doc, lines, x, topY, size, align, rightX) {
+export function drawLines(doc, lines, x, topY, size, align, rightX) {
   const asc = ascentMm(size);
   const lh = lineMm(size);
   lines.forEach((ln, i) => {
@@ -163,14 +163,14 @@ function drawLines(doc, lines, x, topY, size, align, rightX) {
 }
 
 // Convert column width fractions to absolute widths, guarding a minimum.
-function colWidths(fracs, totalW) {
+export function colWidths(fracs, totalW) {
   let widths = fracs.map((f) => Math.max(MIN_COL_W, f * totalW));
   const sum = widths.reduce((a, b) => a + b, 0);
   if (sum > totalW) widths = widths.map((w) => (w * totalW) / sum);
   return widths;
 }
 
-function colFracs(columns) {
+export function colFracs(columns) {
   const ws = columns.map((c) => c.width);
   const hasW = ws.some((w) => w != null);
   if (!hasW) return columns.map(() => 1 / columns.length);
@@ -179,7 +179,7 @@ function colFracs(columns) {
 }
 
 // Measure a data row's height (max of wrapped cells), never below MIN_ROW.
-function measureRow(doc, row, columns, widths, size) {
+export function measureRow(doc, row, columns, widths, size) {
   let maxH = 0;
   columns.forEach((c, i) => {
     const inner = widths[i] - 2 * PAD_X;
@@ -191,18 +191,22 @@ function measureRow(doc, row, columns, widths, size) {
 }
 
 // Draw a data row's cells inside the computed rowHeight. Returns nothing.
-function drawRow(doc, x, topY, widths, columns, row, size) {
+// A column may declare cellColor(row) → [r,g,b] to override the cell's text
+// color (e.g. overdue dates in red); defaults to ink.
+export function drawRow(doc, x, topY, widths, columns, row, size) {
   columns.forEach((c, i) => {
     const cw = widths[i];
     const inner = cw - 2 * PAD_X;
     const lines = wrap(doc, row[c.key], inner, size, 'normal');
     const align = c.align === 'right' ? 'right' : 'left';
+    const cellColor = c.cellColor ? c.cellColor(row) : null;
+    setColor(doc, cellColor || C.ink, 'text');
     drawLines(doc, lines, x + PAD_X, topY + PAD_Y, size, align, x + cw - PAD_X);
   });
 }
 
 // Measure + draw the header row. Returns the measured header height.
-function drawHeaderRow(doc, x, topY, totalW, widths, columns) {
+export function drawHeaderRow(doc, x, topY, totalW, widths, columns) {
   const size = SIZES.th;
   let h = MIN_ROW;
   const cellLines = columns.map((c, i) => {
@@ -226,7 +230,7 @@ function drawHeaderRow(doc, x, topY, totalW, widths, columns) {
 }
 
 // Draw vertical column separators (dense tables only).
-function drawVLines(doc, x, topY, totalW, widths, h) {
+export function drawVLines(doc, x, topY, totalW, widths, h) {
   setColor(doc, C.hairline, 'draw');
   doc.setLineWidth(0.1);
   let cx = x;
@@ -450,33 +454,115 @@ export function exportSectionsPDF(filename, reportTitle, sections, opts = {}) {
   doc.save(filename);
 }
 
-function autoWidth(rows) {
-  if (!rows.length) return;
-  const cols = Object.keys(rows[0]);
-  return cols.map(col => ({
-    wch: Math.max(col.length, ...rows.map(r => String(r[col] ?? '').length)) + 2,
-  }));
+// ── Excel styling (xlsx-js-style drop-in) ────────────────────────────────────
+// The community `xlsx` build cannot style cells; xlsx-js-style is a drop-in fork
+// that adds cell.s (font/fill/numFmt/alignment). This shared helper applies the
+// app's report look — bold white header on dark fill, frozen top row, autofilter,
+// auto column widths, and number formats on numeric columns — to any sheet.
+const HEADER_FILL = '0F172A'; // C.headerFill → hex (no #)
+
+function numFmtForHeader(header) {
+  const s = String(header || '').toLowerCase();
+  if (s.includes('%') || s.includes('progress') || s.includes('margin')) return '0"%"';
+  if (/(cost|price|amount|total|value|planned|actual|selling|budget|revenue|spent|outstanding)/.test(s)) return '#,##0.00';
+  return null;
+}
+
+function wsColWidths(ws, range) {
+  const cols = [];
+  for (let c = range.s.c; c <= range.e.c; c++) {
+    let max = 10;
+    for (let r = range.s.r; r <= range.e.r; r++) {
+      const cell = ws[XLSX.utils.encode_cell({ r, c })];
+      const v = cell ? (cell.w ?? (cell.v != null ? String(cell.v) : '')) : '';
+      const len = String(v).length;
+      if (len > max) max = len;
+    }
+    cols.push({ wch: Math.min(max + 2, 60) });
+  }
+  return cols;
+}
+
+export function styleSheet(ws, opts = {}) {
+  const headerRows = opts.headerRows ?? [0];
+  const freezeRow = opts.freezeRow ?? 1;
+  const columns = opts.columns || null;
+  const ref = ws['!ref'];
+  if (!ref) return ws;
+  const range = XLSX.utils.decode_range(ref);
+  const colCount = range.e.c - range.s.c + 1;
+
+  // Bold white text on dark fill for every header row.
+  const headerStyle = {
+    font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 11 },
+    fill: { patternType: 'solid', fgColor: { rgb: HEADER_FILL } },
+    alignment: { horizontal: 'left', vertical: 'center' },
+  };
+  headerRows.forEach((ri) => {
+    for (let ci = 0; ci < colCount; ci++) {
+      const cell = ws[XLSX.utils.encode_cell({ r: ri, c: ci })];
+      if (cell) cell.s = { ...headerStyle };
+    }
+  });
+
+  // Number formats on numeric cells, per column.
+  if (columns) {
+    for (let ci = 0; ci < colCount; ci++) {
+      const fmt = columns[ci]?.fmt || numFmtForHeader(columns[ci]?.header);
+      if (!fmt) continue;
+      for (let ri = range.s.r; ri <= range.e.r; ri++) {
+        if (headerRows.includes(ri)) continue;
+        const cell = ws[XLSX.utils.encode_cell({ r: ri, c: ci })];
+        if (cell && typeof cell.v === 'number') cell.s = { ...(cell.s || {}), numFmt: fmt };
+      }
+    }
+  }
+
+  // Auto column widths from cell content.
+  ws['!cols'] = wsColWidths(ws, range);
+
+  // Freeze the top row(s).
+  if (freezeRow > 0) {
+    ws['!freeze'] = {
+      xSplit: 0, ySplit: freezeRow,
+      topLeftCell: XLSX.utils.encode_cell({ r: freezeRow, c: 0 }),
+      activePane: 'bottomLeft', state: 'frozen',
+    };
+  }
+
+  // Autofilter across the whole used range.
+  if (opts.autoFilter !== false && headerRows.length) {
+    ws['!autofilter'] = { ref };
+  }
+  return ws;
+}
+
+function sanitizeSheetName(s) {
+  return (String(s?.title || s || 'Sheet').slice(0, 31) || 'Sheet').replace(/[\\/?*[\]:]/g, '');
 }
 
 export function exportSectionsExcel(filename, sections) {
   const wb = XLSX.utils.book_new();
-  sections.forEach(s => {
-    const name = (String(s.title || 'Sheet').slice(0, 31) || 'Sheet').replace(/[\\/?*[\]:]/g, '');
-    let rows;
+  sections.forEach((s) => {
+    const name = sanitizeSheetName(s.title);
+    let sheetRows, columns;
     if (s.type === 'summary' && s.summary) {
-      rows = s.summary.map(r => ({ Item: r.label, Value: r.value }));
+      sheetRows = s.summary.map((r) => ({ Item: r.label, Value: r.value }));
+      columns = [{ header: 'Item' }, { header: 'Value' }];
     } else if (s.columns && s.rows) {
-      rows = s.rows.map(r => {
+      sheetRows = s.rows.map((r) => {
         const o = {};
-        s.columns.forEach(c => { o[c.header] = r[c.key] != null ? r[c.key] : ''; });
+        s.columns.forEach((c) => { o[c.header] = r[c.key] != null ? r[c.key] : ''; });
         return o;
       });
+      columns = s.columns.map((c) => ({ header: c.header, fmt: c.fmt }));
     } else {
-      rows = [];
+      sheetRows = [{ Note: 'No data' }];
+      columns = [{ header: 'Note' }];
     }
-    const sheetRows = rows.length ? rows : [{ Note: 'No data' }];
+    if (!sheetRows.length) sheetRows = [{ Note: 'No data' }];
     const ws = XLSX.utils.json_to_sheet(sheetRows);
-    ws['!cols'] = autoWidth(sheetRows);
+    styleSheet(ws, { headerRows: [0], freezeRow: 1, columns });
     XLSX.utils.book_append_sheet(wb, ws, name || 'Sheet');
   });
   XLSX.writeFile(wb, filename);

@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { formatCurrency, formatDate } from '@/lib/constants';
 import { Package, AlertTriangle, FileText, Loader2, ChevronDown, ChevronRight, Filter, Search, RefreshCw } from 'lucide-react';
-import { jsPDF } from 'jspdf';
+import { exportSectionsPDF } from '@/lib/reportExport';
 
 const STATUSES = [
   { value: 'not_ordered', label: 'Not Ordered', chip: 'bg-slate-100 text-slate-600' },
@@ -28,11 +28,6 @@ function isItemOverdue(it) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   return d < today;
-}
-
-function truncate(str, max) {
-  if (!str) return '—';
-  return str.length > max ? str.slice(0, max - 1) + '…' : str;
 }
 
 export default function MaterialTrackingReport() {
@@ -81,119 +76,57 @@ export default function MaterialTrackingReport() {
     (totals.counts.not_ordered || 0) + (totals.counts.ordered || 0) +
     (totals.counts.received || 0) + (totals.counts.delivered || 0);
 
-  // ── PDF export ──────────────────────────────────────────────────────────
+  // ── PDF export (shared engine) ─────────────────────────────────────────
   async function exportPDF() {
     setGenerating(true);
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-    const W = 297, margin = 12, colW = W - margin * 2;
-    let y = 0;
-    const today = new Date().toLocaleDateString('en-GB');
-
-    function checkPage(needed = 10) {
-      if (y + needed > 200) { doc.addPage(); y = 16; }
-    }
-    function itemHeader() {
-      checkPage(8);
-      const cols = [0.30, 0.16, 0.10, 0.14, 0.14, 0.16];
-      const labels = ['Description', 'Part No.', 'Qty', 'Status', 'Received', 'Exp. Delivery'];
-      doc.setFillColor(15, 23, 42);
-      doc.rect(margin, y - 4, colW, 7, 'F');
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(7);
-      doc.setFont(undefined, 'bold');
-      let cx = margin + 1;
-      labels.forEach((l, i) => { doc.text(l, cx, y); cx += colW * cols[i]; });
-      doc.setTextColor(30, 41, 59);
-      y += 6;
-      return cols;
-    }
-    function itemRow(it, cols, shade) {
-      checkPage(7);
-      const overdue = isItemOverdue(it);
-      if (shade) { doc.setFillColor(248, 250, 252); doc.rect(margin, y - 4, colW, 6, 'F'); }
-      if (overdue) { doc.setFillColor(254, 226, 226); doc.rect(margin, y - 4, colW, 6, 'F'); }
-      doc.setFontSize(7);
-      doc.setFont(undefined, 'normal');
-      doc.setTextColor(overdue ? 185 : 30, overdue ? 28 : 41, overdue ? 28 : 59);
-      const vals = [
-        truncate(it.description || '—', 50),
-        it.manufacturer_part_number || '—',
-        String(it.quantity ?? '—'),
-        STATUS_LABEL[it.material_status] || it.material_status || '—',
-        `${it.received_qty ?? 0}/${it.quantity ?? 0}`,
-        it.expected_delivery_date ? formatDate(it.expected_delivery_date) : '—',
+    try {
+      const projById = Object.fromEntries(per_project.map((p) => [p.project_id, p]));
+      const columns = [
+        { header: 'Project', key: 'project', width: 0.22 },
+        { header: 'Item', key: 'description', width: 0.30 },
+        { header: 'Part No.', key: 'part', width: 0.13 },
+        { header: 'Qty', key: 'qty', align: 'right', width: 0.07 },
+        { header: 'Status', key: 'status', width: 0.10 },
+        { header: 'Received', key: 'received', align: 'right', width: 0.08 },
+        { header: 'Expected Delivery', key: 'expected', width: 0.10,
+          cellColor: (r) => (r._overdue ? [185, 28, 28] : null) },
       ];
-      let cx = margin + 1;
-      vals.forEach((v, i) => { doc.text(String(v), cx, y); cx += colW * cols[i]; });
-      y += 6;
-    }
-
-    // Header band
-    doc.setFillColor(15, 23, 42);
-    doc.rect(0, 0, W, 22, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(13);
-    doc.setFont(undefined, 'bold');
-    doc.text('Material Tracking Report', margin, 10);
-    doc.setFontSize(8);
-    doc.setFont(undefined, 'normal');
-    doc.text(
-      `Generated: ${today}  |  ${totalCount} items across ${per_project.length} projects  |  Total Planned: ${formatCurrency(totals.value.total_planned || 0, 'SAR')}`,
-      margin, 17
-    );
-    doc.setTextColor(0, 0, 0);
-    y = 30;
-
-    // KPI line
-    doc.setFontSize(8);
-    doc.setFont(undefined, 'bold');
-    doc.setTextColor(71, 85, 105);
-    doc.text(
-      `Ordered: ${totals.counts.ordered || 0}  ·  Received: ${totals.counts.received || 0}  ·  Delivered: ${totals.counts.delivered || 0}  ·  Overdue: ${totals.overdue || 0}`,
-      margin, y
-    );
-    y += 6;
-
-    // Per-project groups
-    per_project.forEach(p => {
-      checkPage(16);
-      doc.setFillColor(245, 158, 11);
-      doc.rect(margin, y - 4, 3, 6, 'F');
-      doc.setFontSize(10);
-      doc.setFont(undefined, 'bold');
-      doc.setTextColor(15, 23, 42);
-      doc.text(
-        `${p.code || '—'} — ${truncate(p.name, 50)}  ·  ${p.counts.not_ordered + p.counts.ordered + p.counts.received + p.counts.delivered} items  ·  ${formatCurrency(p.value.total_planned || 0, 'SAR')}${p.overdue ? `  ·  ⚠ ${p.overdue} overdue` : ''}`,
-        margin + 5, y
+      const rows = filteredItems.map((it) => {
+        const p = projById[it.project_id] || {};
+        return {
+          project: `${p.code || '—'} · ${p.name || '—'}`,
+          description: it.description || '—',
+          part: it.manufacturer_part_number || '—',
+          qty: String(it.quantity ?? '—'),
+          status: STATUS_LABEL[it.material_status] || it.material_status || '—',
+          received: `${it.received_qty ?? 0}/${it.quantity ?? 0}`,
+          expected: it.expected_delivery_date ? formatDate(it.expected_delivery_date) : '—',
+          _overdue: isItemOverdue(it),
+        };
+      });
+      exportSectionsPDF(
+        `Material_Tracking_PORTFOLIO_${new Date().toISOString().slice(0, 10)}.pdf`,
+        'Material Tracking Report',
+        [
+          {
+            title: 'Summary', type: 'summary',
+            summary: [
+              { label: 'Total items', value: String(totalCount) },
+              { label: 'Projects', value: String(per_project.length) },
+              { label: 'Total planned', value: formatCurrency(totals.value.total_planned || 0, 'SAR') },
+              { label: 'Ordered', value: String(totals.counts.ordered || 0) },
+              { label: 'Received', value: String(totals.counts.received || 0) },
+              { label: 'Delivered', value: String(totals.counts.delivered || 0) },
+              { label: 'Overdue', value: String(totals.overdue || 0) },
+            ],
+          },
+          { title: 'Material Items', type: 'table', columns, rows },
+        ],
+        { orientation: 'landscape' },
       );
-      y += 6;
-
-      const cols = itemHeader();
-      const projItems = items.filter(i => i.project_id === p.project_id);
-      projItems.forEach((it, i) => itemRow(it, cols, i % 2 === 0));
-    });
-
-    // Grand total
-    checkPage(12);
-    doc.setFillColor(15, 23, 42);
-    doc.rect(margin, y - 4, colW, 9, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(10);
-    doc.setFont(undefined, 'bold');
-    doc.text('GRAND TOTAL', margin + 1, y + 2);
-    doc.text(formatCurrency(totals.value.total_planned || 0, 'SAR'), margin + colW * 0.46 + 1, y + 2);
-    y += 12;
-
-    const pageCount = doc.getNumberOfPages();
-    for (let p = 1; p <= pageCount; p++) {
-      doc.setPage(p);
-      doc.setFontSize(6.5);
-      doc.setTextColor(148, 163, 184);
-      doc.text(`Material Tracking Report  ·  Page ${p} of ${pageCount}`, W / 2, 205, { align: 'center' });
+    } finally {
+      setGenerating(false);
     }
-
-    doc.save(`Material_Tracking_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
-    setGenerating(false);
   }
 
   if (isLoading) {

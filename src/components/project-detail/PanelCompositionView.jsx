@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 import { Download, Layers, Info, X } from 'lucide-react';
 import { formatCurrency } from '@/lib/constants';
+import { styleSheet } from '@/lib/reportExport';
 
 // Top-level component categories eligible for single-panel allocation inference.
 // Everything except panel, service, software_license, it_hardware.
@@ -95,9 +96,11 @@ export default function PanelCompositionView({ items }) {
 
   function exportComposition() {
     const rows = [];
+    const headerRows = [];
     panelData.forEach(({ panel, compRows, inferredRows, enclosureRows }) => {
       rows.push([`Panel: ${panel.description || ''}`]);
       rows.push(['#', 'Part No', 'Description', 'Qty']);
+      headerRows.push(rows.length - 1);
       let n = 1;
       compRows.forEach(r => rows.push([n++, r.partNo, r.description, r.qty]));
       inferredRows.forEach(r => rows.push([n++, r.partNo, `${r.description} *`, r.qty]));
@@ -109,9 +112,11 @@ export default function PanelCompositionView({ items }) {
       rows.push([]); // blank separator between panels
     });
     const ws = XLSX.utils.aoa_to_sheet(rows);
+    // Styled frozen header (bold white on dark) on each panel's column header row.
+    styleSheet(ws, { headerRows, freezeRow: (headerRows[0] ?? 0) + 1, autoFilter: false });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Panel Composition');
-    XLSX.writeFile(wb, 'panel_composition.xlsx');
+    XLSX.writeFile(wb, `Panel_Composition_${new Date().toISOString().slice(0, 10)}.xlsx`);
   }
 
   if (panels.length === 0) {
