@@ -4,10 +4,11 @@ import { ENTITY_QUERY } from '@/lib/entityQueryDefaults';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
-import { Plus, Package, Pencil, Trash2, Save, X, CheckCircle, Wand2, Loader2, Check } from 'lucide-react';
+import { Plus, Package, Pencil, Trash2, Save, X, CheckCircle, Wand2, Loader2, Check, FileText } from 'lucide-react';
 import PanelWrapper from '@/components/ui/PanelWrapper';
 import { isTopLevelBOM } from '@/lib/constants';
 import { todayLocal } from '@/lib/utils';
+import BulkInvoiceDialog from '@/components/project-detail/BulkInvoiceDialog';
 
 const STATUS_COLORS = {
   pending:     'bg-slate-100 text-slate-600',
@@ -43,6 +44,22 @@ export default function TabDeliverables({ projectId }) {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [bulkField, setBulkField] = useState('');
   const [bulkValue, setBulkValue] = useState('');
+  const [invoiceOpen, setInvoiceOpen] = useState(false);
+  const [projectMeta, setProjectMeta] = useState(null);
+
+  async function openInvoiceDialog() {
+    if (!projectMeta) {
+      try {
+        const p = await base44.entities.Project.get(projectId);
+        setProjectMeta({ contract_value: p.contract_value, currency: p.currency });
+      } catch (_) {
+        setProjectMeta({ contract_value: 0, currency: 'SAR' });
+      }
+    }
+    setInvoiceOpen(true);
+  }
+
+  const selectedDeliverables = items.filter(d => selectedIds.has(d.id));
 
   async function create(e) {
     e.preventDefault();
@@ -337,8 +354,12 @@ export default function TabDeliverables({ projectId }) {
               <Save className="w-3 h-3" /> Apply
             </button>
           )}
+          <button onClick={openInvoiceDialog}
+            className="flex items-center gap-1 px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded ml-auto">
+            <FileText className="w-3.5 h-3.5" /> Generate Invoices
+          </button>
           <button onClick={bulkDelete}
-            className="flex items-center gap-1 px-3 py-1 bg-red-600 hover:bg-red-500 text-white font-semibold text-xs rounded ml-auto">
+            className="flex items-center gap-1 px-3 py-1 bg-red-600 hover:bg-red-500 text-white font-semibold text-xs rounded">
             <Trash2 className="w-3.5 h-3.5" /> Delete {selectedIds.size}
           </button>
           <button onClick={() => { setSelectedIds(new Set()); setBulkField(''); setBulkValue(''); }}
@@ -407,6 +428,16 @@ export default function TabDeliverables({ projectId }) {
           </div>
         </PanelWrapper>
       )}
+
+      <BulkInvoiceDialog
+        open={invoiceOpen}
+        onClose={() => setInvoiceOpen(false)}
+        projectId={projectId}
+        deliverables={selectedDeliverables}
+        milestones={milestones}
+        contractValue={projectMeta?.contract_value || 0}
+        currency={projectMeta?.currency || 'SAR'}
+      />
     </div>
   );
 }
