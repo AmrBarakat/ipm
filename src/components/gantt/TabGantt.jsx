@@ -32,6 +32,7 @@ export default function TabGantt({ projectId, project }) {
   const [milestones, setMilestones] = useState([]);
   const committedRef = useRef([]);
   const isDraggingRef = useRef(false); // suppress query refetches while a drag is in progress
+  const pendingDragItemsRef = useRef([]); // latest optimistic items array during a drag (read on commit)
   useEffect(() => {
     // Don't clobber an in-progress optimistic drag with a background refetch
     // (realtime subscription / window focus) — the drag commits on mouseup and
@@ -229,31 +230,40 @@ export default function TabGantt({ projectId, project }) {
           updated = Object.values(byId);
         }
       }
+      // Keep the latest optimistic array in a ref so the commit path can diff
+      // it against the committed baseline directly — no setState wrapper.
+      pendingDragItemsRef.current = updated;
       return updated;
     });
 
     if (commit) {
-      isDraggingRef.current = false;
-      dragBaseRef.current = null;
-      // Persist on the next tick so we read the just-applied optimistic state.
-      setTimeout(() => {
-        setWbsItems(curr => {
-          const changed = curr.filter(i => {
-            const c = committedRef.current.find(x => x.id === i.id);
-            return c && (i.planned_start !== c.planned_start || i.planned_end !== c.planned_end);
-          });
-          if (changed.length) {
-            const updates = changed.map(i => ({ id: i.id, planned_start: i.planned_start, planned_end: i.planned_end }));
-            base44.functions.invoke('applyWBSBatch', { wbs_updates: updates })
-              .then(() => queryClient.invalidateQueries({ queryKey: ['WBSItem'] }))
-              .catch((err) => {
-                setWbsItems(committedRef.current); // atomic rollback on backend failure
-                toast.error(err?.response?.data?.error || 'Schedule save failed — no changes were saved.');
-              });
-          }
-          return curr;
+      const pending = pendingDragItemsRef.current || [];
+      const changed = pending.filter(i => {
+        const c = committedRef.current.find(x => x.id === i.id);
+        return c && (i.planned_start !== c.planned_start || i.planned_end !== c.planned_end);
+      });
+      if (!changed.length) {
+        isDraggingRef.current = false;
+        dragBaseRef.current = null;
+        return;
+      }
+      const updates = changed.map(i => ({ id: i.id, planned_start: i.planned_start, planned_end: i.planned_end }));
+      base44.functions.invoke('applyWBSBatch', { wbs_updates: updates })
+        .then(() => Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['WBSItem'] }),
+          queryClient.invalidateQueries({ queryKey: ['Task'] }), // tasks derive from WBS — must refresh
+        ]))
+        .catch((err) => {
+          setWbsItems(committedRef.current); // atomic rollback on backend failure
+          toast.error(err?.response?.data?.error || 'Schedule save failed — no changes were saved.');
+        })
+        .finally(() => {
+          // Keep the drag guard up until the save has settled AND the dependent
+          // queries have been invalidated — otherwise a realtime/focus refetch
+          // landing in this window snaps the bar back to its pre-drag position.
+          isDraggingRef.current = false;
+          dragBaseRef.current = null;
         });
-      }, 0);
     }
   }, [queryClient]);
 

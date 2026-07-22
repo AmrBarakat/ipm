@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, useState } from 'react';
+import { useRef, useCallback, useState } from 'react';
 import { CalendarX } from 'lucide-react';
 import { ROW_H, HEADER_H, daysBetween, addDays, toISO, clamp, buildHeader, buildWeekends } from './ganttUtils';
 
@@ -34,16 +34,19 @@ export default function GanttTimeline({
   const xFor = (date) => daysBetween(timelineStart, date) * dayWidth;
   const todayX = xFor(new Date());
 
-  // ── Drag bar (move / resize) ──────────────────────────────────────────────
+  // ── Drag bar (move / resize) — Pointer Events (mouse + touch) ──────────────
   const dragRef = useRef(null);
   const [hoverBar, setHoverBar] = useState(null);
 
-  const onBarMouseDown = useCallback((e, row, mode) => {
+  const onBarPointerDown = useCallback((e, row, mode) => {
     if (mode === 'dblclick') return;
     const item = row.data;
     // Only draggable when BOTH dates exist — guards against Invalid Date.
     if (!item.planned_start || !item.planned_end) return;
     e.preventDefault(); e.stopPropagation();
+    // Capture the pointer so move/up fire on the same element — no window
+    // listeners needed, and touch dragging works without scrolling the page.
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
     dragRef.current = {
       id: item.id, mode,
       startX: e.clientX,
@@ -57,44 +60,41 @@ export default function GanttTimeline({
     document.body.style.userSelect = 'none';
   }, []);
 
-  useEffect(() => {
-    function move(e) {
-      const drag = dragRef.current;
-      if (!drag) return;
-      const deltaPx = e.clientX - drag.startX;
-      const deltaDays = Math.round(deltaPx / dayWidth);
-      // Always derive from the ORIGINAL snapshot — never from the live value.
-      let newStart = drag.origStart, newEnd = drag.origEnd;
-      if (drag.mode === 'move') {
-        newStart = toISO(addDays(drag.origStart, deltaDays));
-        newEnd = toISO(addDays(drag.origEnd, deltaDays));
-      } else if (drag.mode === 'resize-left') {
-        const cand = toISO(addDays(drag.origStart, deltaDays));
-        newStart = cand < drag.origEnd ? cand : drag.origEnd; // min 1 day
-      } else if (drag.mode === 'resize-right') {
-        const cand = toISO(addDays(drag.origEnd, deltaDays));
-        newEnd = cand > drag.origStart ? cand : drag.origStart; // min 1 day
-      }
-      if (newStart === drag.lastStart && newEnd === drag.lastEnd) return; // no change this frame
-      drag.lastStart = newStart; drag.lastEnd = newEnd;
-      drag.moved = true;
-      // commit=false → optimistic only; cascade only for whole-bar moves.
-      onMoveItem(drag.id, newStart, newEnd, drag.mode, false);
+  const onBarPointerMove = useCallback((e) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const deltaPx = e.clientX - drag.startX;
+    const deltaDays = Math.round(deltaPx / dayWidth);
+    // Always derive from the ORIGINAL snapshot — never from the live value.
+    let newStart = drag.origStart, newEnd = drag.origEnd;
+    if (drag.mode === 'move') {
+      newStart = toISO(addDays(drag.origStart, deltaDays));
+      newEnd = toISO(addDays(drag.origEnd, deltaDays));
+    } else if (drag.mode === 'resize-left') {
+      const cand = toISO(addDays(drag.origStart, deltaDays));
+      newStart = cand < drag.origEnd ? cand : drag.origEnd; // min 1 day
+    } else if (drag.mode === 'resize-right') {
+      const cand = toISO(addDays(drag.origEnd, deltaDays));
+      newEnd = cand > drag.origStart ? cand : drag.origStart; // min 1 day
     }
-    function up() {
-      const drag = dragRef.current;
-      if (!drag) return;
-      dragRef.current = null;
-      document.body.style.cursor = ''; document.body.style.userSelect = '';
-      // Only persist if something actually changed.
-      if (drag.moved) {
-        onMoveItem(drag.id, drag.lastStart, drag.lastEnd, drag.mode, true);
-      }
-    }
-    window.addEventListener('mousemove', move);
-    window.addEventListener('mouseup', up);
-    return () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); };
+    if (newStart === drag.lastStart && newEnd === drag.lastEnd) return; // no change this frame
+    drag.lastStart = newStart; drag.lastEnd = newEnd;
+    drag.moved = true;
+    // commit=false → optimistic only; cascade only for whole-bar moves.
+    onMoveItem(drag.id, newStart, newEnd, drag.mode, false);
   }, [dayWidth, onMoveItem]);
+
+  const onBarPointerUp = useCallback((e) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) {}
+    dragRef.current = null;
+    document.body.style.cursor = ''; document.body.style.userSelect = '';
+    // Only persist if something actually changed.
+    if (drag.moved) {
+      onMoveItem(drag.id, drag.lastStart, drag.lastEnd, drag.mode, true);
+    }
+  }, [onMoveItem]);
 
   // Dependency arrows (all rows — absolute coords; not affected by virtualization)
   const arrows = [];
@@ -232,6 +232,11 @@ export default function GanttTimeline({
           const actualX = item.actual_start ? xFor(item.actual_start) : null;
           const actualW = item.actual_start ? Math.max(4, daysBetween(item.actual_start, item.actual_end || new Date().toISOString().slice(0, 10)) * dayWidth) : null;
           const baseColor = isCritical ? '#f43f5e' : '#a855f7';
+          // Adaptive resize handles: at/narrow bars render no handles so the
+          // whole bar stays draggable (move-only). Width scales with the bar
+          // but never exceeds 8px. Tiny bars are edited via double-click.
+          const handleW = Math.min(8, Math.floor(barW / 4));
+          const showHandles = barW >= 28;
           return (
             <div key={row.id} className="relative" style={{ height: ROW_H }}>
               {/* slack */}
@@ -247,12 +252,17 @@ export default function GanttTimeline({
               {/* planned bar */}
               <div
                 className={`absolute rounded z-10 select-none ${isCritical ? 'shadow-sm shadow-rose-300' : ''}`}
-                style={{ left: barX, width: barW, top: 8, height: 18, backgroundColor: baseColor, opacity: hoverBar === row.id ? 1 : 0.92 }}
-                onMouseDown={e => onBarMouseDown(e, row, 'move')}
+                style={{ left: barX, width: barW, top: 8, height: 18, backgroundColor: baseColor, opacity: hoverBar === row.id ? 1 : 0.92, touchAction: 'none' }}
+                onPointerDown={e => onBarPointerDown(e, row, 'move')}
+                onPointerMove={onBarPointerMove}
+                onPointerUp={onBarPointerUp}
+                onPointerCancel={onBarPointerUp}
                 onMouseEnter={() => setHoverBar(row.id)}
                 onMouseLeave={() => setHoverBar(null)}
                 onDoubleClick={() => onOpenEditor(row)}
-                title={`${item.wbs_code} ${item.name} · ${item.planned_start} → ${item.planned_end} · ${item.progress || 0}%`}
+                title={showHandles
+                  ? `${item.wbs_code} ${item.name} · ${item.planned_start} → ${item.planned_end} · ${item.progress || 0}%`
+                  : `Drag to move · double-click to edit dates`}
               >
                 {/* progress fill */}
                 {item.progress > 0 && (
@@ -261,9 +271,33 @@ export default function GanttTimeline({
                 <span className="absolute inset-0 flex items-center px-1.5 text-[10px] text-white font-medium truncate drop-shadow pointer-events-none">
                   {barW > 40 ? item.name : ''}
                 </span>
-                {/* resize handles */}
-                <div onMouseDown={e => onBarMouseDown(e, row, 'resize-left')} className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize z-20 hover:bg-white/40 rounded-l" />
-                <div onMouseDown={e => onBarMouseDown(e, row, 'resize-right')} className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize z-20 hover:bg-white/40 rounded-r" />
+                {/* resize handles — adaptive: hidden for tiny bars (move-only).
+                    The hit area extends 4px above/below the bar for easier
+                    grabbing; the visible hover indicator stays inside the bar. */}
+                {showHandles && (
+                  <>
+                    <div
+                      onPointerDown={e => onBarPointerDown(e, row, 'resize-left')}
+                      onPointerMove={onBarPointerMove}
+                      onPointerUp={onBarPointerUp}
+                      onPointerCancel={onBarPointerUp}
+                      className="absolute z-20 cursor-ew-resize"
+                      style={{ left: 0, top: -4, bottom: -4, width: handleW, touchAction: 'none' }}
+                    >
+                      <div className="absolute inset-x-0 rounded-l hover:bg-white/40" style={{ top: 4, bottom: 4 }} />
+                    </div>
+                    <div
+                      onPointerDown={e => onBarPointerDown(e, row, 'resize-right')}
+                      onPointerMove={onBarPointerMove}
+                      onPointerUp={onBarPointerUp}
+                      onPointerCancel={onBarPointerUp}
+                      className="absolute z-20 cursor-ew-resize"
+                      style={{ right: 0, top: -4, bottom: -4, width: handleW, touchAction: 'none' }}
+                    >
+                      <div className="absolute inset-x-0 rounded-r hover:bg-white/40" style={{ top: 4, bottom: 4 }} />
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           );
