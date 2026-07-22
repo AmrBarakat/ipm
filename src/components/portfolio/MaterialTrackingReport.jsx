@@ -4,6 +4,7 @@ import { base44 } from '@/api/base44Client';
 import { formatCurrency, formatDate } from '@/lib/constants';
 import { Package, AlertTriangle, FileText, Loader2, ChevronDown, ChevronRight, Filter, Search, RefreshCw } from 'lucide-react';
 import { exportSectionsPDF } from '@/lib/reportExport';
+import { logActivity } from '@/lib/logActivity';
 
 const STATUSES = [
   { value: 'not_ordered', label: 'Not Ordered', chip: 'bg-slate-100 text-slate-600' },
@@ -124,6 +125,7 @@ export default function MaterialTrackingReport() {
         ],
         { orientation: 'landscape' },
       );
+      logActivity({ entity_type: 'Report', action: 'generated', summary: 'Material Tracking report exported (portfolio).' });
     } finally {
       setGenerating(false);
     }

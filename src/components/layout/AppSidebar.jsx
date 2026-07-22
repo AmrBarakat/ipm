@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
-import { Search, Plus, Factory, FolderOpen, BarChart2, LayoutDashboard, Users, FileText, Package, CalendarDays, Settings as SettingsIcon, ChevronLeft, ChevronRight, Building2 } from 'lucide-react';
+import { Search, Plus, Factory, FolderOpen, BarChart2, LayoutDashboard, Users, FileText, Package, CalendarDays, Activity, Settings as SettingsIcon, ChevronLeft, ChevronRight, Building2 } from 'lucide-react';
 import NotificationFeed from '@/components/layout/NotificationFeed';
 
 const NAV = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard', end: true },
   { to: '/projects', icon: FolderOpen, label: 'Projects' },
   { to: '/calendar', icon: CalendarDays, label: 'Calendar' },
+  { to: '/activity', icon: Activity, label: 'Activity' },
   { to: '/reports', icon: BarChart2, label: 'Reports' },
   { to: '/resources', icon: Users, label: 'Resources' },
   { to: '/vendors', icon: Building2, label: 'Vendors' },

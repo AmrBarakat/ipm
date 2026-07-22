@@ -9,6 +9,7 @@ import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx-js-style';
 import { exportSectionsPDF, styleSheet } from '@/lib/reportExport';
+import { logActivity } from '@/lib/logActivity';
 
 import {
   TIME_SCALES, scaleByKey, HEADER_H, MIN_LEFT_WIDTH, MAX_LEFT_WIDTH,
@@ -468,6 +469,7 @@ export default function TabGantt({ projectId, project }) {
       }
 
       pdf.save(`gantt_${(project?.code || 'project')}_${new Date().toISOString().slice(0,10)}.pdf`);
+      logActivity({ entity_type: 'Report', action: 'generated', summary: `Gantt PDF exported for ${project?.code || project?.name || 'project'}.`, project_id: projectId });
     } catch (e) { console.error(e); } finally { setExporting(null); }
   }
 
@@ -532,6 +534,7 @@ export default function TabGantt({ projectId, project }) {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Schedule');
     XLSX.writeFile(wb, `gantt_${(project?.code || 'project')}_${new Date().toISOString().slice(0,10)}.xlsx`);
+    logActivity({ entity_type: 'Report', action: 'generated', summary: `Gantt schedule exported to Excel for ${project?.code || project?.name || 'project'}.`, project_id: projectId });
   }
 
   if (loadingWbs && loadingMs) return (

@@ -16,6 +16,7 @@ import ProjectDetail from '@/pages/ProjectDetail';
 import Resources from '@/pages/Resources';
 import Reports from '@/pages/Reports';
 import Calendar from '@/pages/Calendar';
+import Activity from '@/pages/Activity';
 import Settings from '@/pages/Settings';
 import Vendors from '@/pages/Vendors';
 import { ConfirmDialogProvider } from '@/components/ui/ConfirmDialog';
@@ -58,6 +59,7 @@ const AuthenticatedApp = () => {
         <Route path="/resources" element={<Resources />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/calendar" element={<Calendar />} />
+        <Route path="/activity" element={<Activity />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/vendors" element={<Vendors />} />
         {/* More routes will be added here */}
