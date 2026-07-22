@@ -96,14 +96,17 @@ export default function TabDocuments({ projectId, project }) {
     setCollapsed(p => ({ ...p, [cat]: !p[cat] }));
   }
 
-  // Run extraction once, then branch: PO/DN → BOM update panel; else → standard extractor modal.
+  // PO / Delivery-Note extraction: one server-side pipeline (extractPODN) that
+  // reads, extracts, matches, applies matched lines, writes the summary note,
+  // and returns the result rows for the results panel.
   async function handleExtract(doc) {
     setExtractingId(doc.id);
     let res;
     try {
-      res = await base44.functions.invoke('extractDocumentData', {
+      res = await base44.functions.invoke('extractPODN', {
         file_url: doc.file_url,
-        document_category: doc.category,
+        project_id: projectId,
+        doc_hint: doc.category === 'po' ? 'po' : doc.category === 'delivery_note' ? 'delivery_note' : 'auto',
       });
     } catch (err) {
       setExtractingId(null);
@@ -111,14 +114,13 @@ export default function TabDocuments({ projectId, project }) {
       return;
     }
     if (res.data?.error) { setExtractingId(null); alert(res.data.error); return; }
-    const r = res.data?.result;
     setExtractingId(null);
-    if (!r) { alert('No data could be extracted from this document.'); return; }
-    if (r.document_type === 'po' || r.document_type === 'delivery_note') {
-      setPodnResult({ document: doc, result: r });
-    } else {
-      setStandardDoc({ document: doc, result: r });
-    }
+    const r = res.data;
+    if (!r || !r.rows) { alert('No line items could be extracted from this document.'); return; }
+    setPodnResult({ document: doc, result: r });
+    queryClient.invalidateQueries({ queryKey: ['BOMItem'] });
+    queryClient.invalidateQueries({ queryKey: ['Note'] });
+    queryClient.invalidateQueries({ queryKey: ['AuditLog'] });
   }
 
   const filtered = useMemo(() =>

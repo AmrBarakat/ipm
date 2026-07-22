@@ -124,6 +124,17 @@
       "type": "boolean",
       "default": false
     },
+    "material_status": {
+      "type": "string",
+      "enum": [
+        "not_ordered",
+        "ordered",
+        "received",
+        "delivered"
+      ],
+      "default": "not_ordered",
+      "description": "Material pipeline: ordered = PO placed; received = goods arrived at warehouse (from supplier DN/packing slip); delivered = handed over to project site."
+    },
     "po_number": {
       "type": "string"
     },
@@ -144,12 +155,22 @@
     "delivered_qty": {
       "type": "number",
       "default": 0,
-      "description": "Cumulative quantity received across all packing slips / delivery notes"
+      "description": "Legacy cumulative quantity received (kept in sync with received_qty)"
+    },
+    "received_qty": {
+      "type": "number",
+      "default": 0,
+      "description": "Cumulative quantity received from supplier across all packing slips (successor of delivered_qty)."
     },
     "remaining_qty": {
       "type": "number",
       "default": 0,
-      "description": "Total quantity minus delivered_qty (clamps at 0)"
+      "description": "Total quantity minus received_qty (clamps at 0)"
+    },
+    "site_delivered_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date the material was handed over to the project site"
     },
     "panel_allocations": {
       "type": "array",
