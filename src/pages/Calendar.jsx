@@ -63,11 +63,15 @@ export default function Calendar() {
       map[key].push(ev);
     }
     tasks.forEach(t => {
+      // Only show tasks whose project still exists — orphan tasks from a deleted
+      // project are purged automatically on delete (cascadeDeleteProject), but
+      // hide any that slip through so the calendar stays in sync with live projects.
+      if (!projectById[t.project_id]) return;
       if (filterProject && t.project_id !== filterProject) return;
       add(t.due_date, { type: 'task', id: t.id, title: t.title, status: t.status, project_id: t.project_id, date: t.due_date });
     });
     return map;
-  }, [tasks, filterProject]);
+  }, [tasks, filterProject, projectById]);
 
   // Month grid
   const grid = useMemo(() => {
