@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { X, Plus, Trash2, Save, Wand2, ChevronDown, ChevronRight, Flag, Layers, Check } from 'lucide-react';
+import { X, Plus, Trash2, Save, Wand2, ChevronDown, ChevronRight, Flag, Layers, Check, Download } from 'lucide-react';
 import { toLocalDate } from '@/lib/utils';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 
@@ -17,6 +17,9 @@ const EMPTY_TEMPLATE = {
 const EMPTY_MS = { title: '', offset_days: 0, weight: 0 };
 const EMPTY_WBS = { wbs_code: '', name: '', parent_code: '', milestone_title: '', assignee: '', duration_days: 5, offset_days: 0, weight: 0, planned_hours: '' };
 
+/** Whole-day difference (b − a), rounded. */
+const dayDiff = (a, b) => Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000);
+
 export default function ProjectPlanTemplateModal({ projectId, project, onClose, onApplied }) {
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -26,6 +29,12 @@ export default function ProjectPlanTemplateModal({ projectId, project, onClose, 
   const [applying, setApplying] = useState(false);
   const [saving, setSaving] = useState(false);
   const [applyResult, setApplyResult] = useState(null);
+  const [captureForm, setCaptureForm] = useState({ name: '', description: '', project_type: '' });
+  const [captureData, setCaptureData] = useState(null);
+  const [capturePreview, setCapturePreview] = useState(null);
+  const [captureLoading, setCaptureLoading] = useState(false);
+  const [capturing, setCapturing] = useState(false);
+  const [justSavedId, setJustSavedId] = useState(null);
   const [msExpanded, setMsExpanded] = useState(true);
   const [wbsExpanded, setWbsExpanded] = useState(true);
   const confirmDialog = useConfirm();
@@ -128,6 +137,86 @@ export default function ProjectPlanTemplateModal({ projectId, project, onClose, 
     onApplied?.();
   }
 
+  // ── Save current project as template ───────────────────────────────────────
+  // Loads this project's live WBS + milestones once (for the preview counts),
+  // then reuses the same data to build the template on confirm.
+  async function startCapture() {
+    setView('capture');
+    setCaptureForm({
+      name: `${project?.name || 'Project'} — plan`,
+      description: '',
+      project_type: project?.project_type || '',
+    });
+    setCapturePreview(null);
+    setCaptureData(null);
+    setCaptureLoading(true);
+    try {
+      const [wbsItems, milestones] = await Promise.all([
+        base44.entities.WBSItem.filter({ project_id: projectId }, 'wbs_code', 2000),
+        base44.entities.Milestone.filter({ project_id: projectId }, 'planned_date', 1000),
+      ]);
+      setCaptureData({ wbsItems, milestones });
+      setCapturePreview({ wbsCount: wbsItems.length, msCount: milestones.length });
+    } finally {
+      setCaptureLoading(false);
+    }
+  }
+
+  async function captureCurrentProject(e) {
+    e.preventDefault();
+    if (!captureForm.name.trim() || !captureData) return;
+    setCapturing(true);
+    try {
+      const { wbsItems, milestones } = captureData;
+
+      // Anchor = earliest of all WBS planned_start and milestone planned_date.
+      const times = [];
+      milestones.forEach(m => { if (m.planned_date) times.push(new Date(m.planned_date).getTime()); });
+      wbsItems.forEach(w => { if (w.planned_start) times.push(new Date(w.planned_start).getTime()); });
+      const anchor = times.length ? new Date(Math.min(...times)) : null;
+
+      const msById = {}; milestones.forEach(m => { msById[m.id] = m.title; });
+      const wbsIdToCode = {}; wbsItems.forEach(w => { wbsIdToCode[w.id] = w.wbs_code; });
+
+      const tplMilestones = milestones
+        .map(m => ({
+          title: m.title,
+          weight: m.weight || 0,
+          offset_days: (anchor && m.planned_date) ? Math.max(0, dayDiff(anchor, m.planned_date)) : 0,
+        }))
+        .sort((a, b) => a.offset_days - b.offset_days);
+
+      const tplWbs = [...wbsItems]
+        .sort((a, b) => (a.wbs_code || '').localeCompare(b.wbs_code || '', undefined, { numeric: true }))
+        .map(w => ({
+          wbs_code: w.wbs_code || '',
+          name: w.name || '',
+          assignee: w.assignee || '',
+          weight: w.weight || 0,
+          planned_hours: w.planned_hours ?? '',
+          parent_code: w.parent_id ? (wbsIdToCode[w.parent_id] || '') : '',
+          duration_days: (w.planned_start && w.planned_end) ? Math.max(1, dayDiff(w.planned_start, w.planned_end)) : 1,
+          offset_days: (anchor && w.planned_start) ? Math.max(0, dayDiff(anchor, w.planned_start)) : 0,
+          milestone_title: w.milestone_id ? (msById[w.milestone_id] || '') : '',
+        }));
+
+      const created = await base44.entities.ProjectPlanTemplate.create({
+        name: captureForm.name.trim(),
+        description: captureForm.description.trim(),
+        project_type: captureForm.project_type || '',
+        milestones: tplMilestones,
+        wbs_items: tplWbs,
+      });
+      await loadTemplates();
+      setJustSavedId(created.id);
+      setTimeout(() => setJustSavedId(null), 6000);
+      setApplyResult({ captured: true, msCreated: tplMilestones.length, wbsCreated: tplWbs.length });
+      setView('list');
+    } finally {
+      setCapturing(false);
+    }
+  }
+
   // ── Template Editor Helpers ──────────────────────────────────────────────────
 
   function addMs() { setForm(f => ({ ...f, milestones: [...(f.milestones || []), { ...EMPTY_MS }] })); }
@@ -161,10 +250,16 @@ export default function ProjectPlanTemplateModal({ projectId, project, onClose, 
           </div>
           <div className="flex items-center gap-2">
             {view === 'list' && (
-              <button onClick={() => { setForm(EMPTY_TEMPLATE); setView('create'); }}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold text-sm rounded">
-                <Plus className="w-4 h-4" /> New Template
-              </button>
+              <>
+                <button onClick={startCapture}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-amber-300 text-amber-700 hover:bg-amber-50 font-semibold text-sm rounded">
+                  <Download className="w-4 h-4" /> Save current project as template
+                </button>
+                <button onClick={() => { setForm(EMPTY_TEMPLATE); setView('create'); }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold text-sm rounded">
+                  <Plus className="w-4 h-4" /> New Template
+                </button>
+              </>
             )}
             {view !== 'list' && (
               <button onClick={() => { setView('list'); setForm(EMPTY_TEMPLATE); setApplyResult(null); }}
@@ -192,7 +287,7 @@ export default function ProjectPlanTemplateModal({ projectId, project, onClose, 
                 </div>
               )}
               {templates.map(t => (
-                <div key={t.id} className="bg-white border border-slate-200 rounded-lg px-4 py-3 flex items-start gap-3 hover:shadow-sm transition">
+                <div key={t.id} className={`bg-white border border-slate-200 rounded-lg px-4 py-3 flex items-start gap-3 hover:shadow-sm transition ${justSavedId === t.id ? 'ring-2 ring-amber-400 border-amber-400' : ''}`}>
                   <div className="flex-1 min-w-0">
                     <div className="font-semibold text-slate-800 text-sm">{t.name}</div>
                     {t.description && <div className="text-xs text-slate-400 mt-0.5">{t.description}</div>}
@@ -220,7 +315,9 @@ export default function ProjectPlanTemplateModal({ projectId, project, onClose, 
               {applyResult && (
                 <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3 text-sm text-emerald-800">
                   <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                  Template applied! Created <strong>{applyResult.msCreated}</strong> milestones and <strong>{applyResult.wbsCreated}</strong> WBS items.
+                  {applyResult.captured
+                    ? <>Template saved! Captured <strong>{applyResult.msCreated}</strong> milestones and <strong>{applyResult.wbsCreated}</strong> WBS items from "{project?.name}".</>
+                    : <>Template applied! Created <strong>{applyResult.msCreated}</strong> milestones and <strong>{applyResult.wbsCreated}</strong> WBS items.</>}
                 </div>
               )}
             </div>
@@ -342,6 +439,47 @@ export default function ProjectPlanTemplateModal({ projectId, project, onClose, 
                 <button type="submit" disabled={saving}
                   className="flex items-center gap-1.5 px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold text-sm rounded disabled:opacity-50">
                   <Save className="w-4 h-4" /> {saving ? 'Saving…' : form.id ? 'Update Template' : 'Save Template'}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* ── SAVE CURRENT PROJECT AS TEMPLATE VIEW ── */}
+          {view === 'capture' && (
+            <form onSubmit={captureCurrentProject} className="space-y-4 max-w-2xl">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800 leading-relaxed">
+                Captures the current project's <strong>{project?.name}</strong> WBS tree and milestones into a reusable template. Dates are converted to day-offsets from the earliest plan date; live-only fields (status, progress, actuals, ids) are stripped — only plan structure is saved.
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <input value={captureForm.name} onChange={e => setCaptureForm(f => ({ ...f, name: e.target.value }))}
+                  placeholder="Template name *" className={inp + ' text-sm'} required />
+                <select value={captureForm.project_type} onChange={e => setCaptureForm(f => ({ ...f, project_type: e.target.value }))} className={inp + ' text-sm'}>
+                  <option value="">All project types</option>
+                  {['plc', 'plc_scada', 'pme', 'service', 'other'].map(t => <option key={t} value={t}>{t.replace(/_/g, ' ').toUpperCase()}</option>)}
+                </select>
+                <input value={captureForm.description} onChange={e => setCaptureForm(f => ({ ...f, description: e.target.value }))}
+                  placeholder="Description (optional)" className={inp + ' text-sm'} />
+              </div>
+              <div className="text-sm text-slate-600">
+                {captureLoading ? 'Loading project plan…' : capturePreview ? (
+                  <span className="flex items-center gap-3">
+                    <span className="flex items-center gap-1"><Layers className="w-3.5 h-3.5 text-purple-500" /> {capturePreview.wbsCount} WBS items</span>
+                    <span className="flex items-center gap-1"><Flag className="w-3.5 h-3.5 text-amber-500" /> {capturePreview.msCount} milestones</span>
+                    <span className="text-slate-400">will be captured</span>
+                  </span>
+                ) : ''}
+              </div>
+              {!captureLoading && capturePreview && capturePreview.wbsCount === 0 && capturePreview.msCount === 0 && (
+                <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
+                  This project has no WBS items or milestones yet — the resulting template will be empty.
+                </div>
+              )}
+              <div className="flex gap-2 justify-end">
+                <button type="button" onClick={() => setView('list')}
+                  className="px-4 py-2 border border-slate-300 text-slate-600 text-sm rounded hover:bg-slate-100">Cancel</button>
+                <button type="submit" disabled={capturing || captureLoading || !captureData}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold text-sm rounded disabled:opacity-50">
+                  <Download className="w-4 h-4" /> {capturing ? 'Capturing…' : 'Capture & Save'}
                 </button>
               </div>
             </form>
