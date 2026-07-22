@@ -28,6 +28,14 @@ const TEXT_EXTRACT_SCHEMA = {
   properties: { raw_text: { type: 'string', description: 'Full text content of the document' } },
 };
 
+/** If the model placed the part code only inside the description (in [brackets]),
+ *  re-extract it so normalizePart can match. Mirrors the frontend fallback. */
+function extractBracketCode(description) {
+  if (!description) return '';
+  const m = String(description).match(/\[([^\]]+)\]/);
+  return m ? m[1] : '';
+}
+
 const PODN_SCHEMA = {
   type: 'object',
   properties: {
@@ -63,6 +71,8 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'file_url and project_id are required' }, { status: 400 });
     if (doc_hint && !['po', 'delivery_note', 'auto'].includes(doc_hint))
       return Response.json({ error: "doc_hint must be 'po', 'delivery_note', or 'auto'" }, { status: 400 });
+
+    const debugMode = new URL(req.url).searchParams.get('debug') === '1';
 
     const urlLower = file_url.toLowerCase().split('?')[0];
     const ext = urlLower.match(/\.[^.]+$/)?.[0] || '';
@@ -105,7 +115,7 @@ Deno.serve(async (req) => {
       : `The document is attached as a file. Read it carefully, including any stamps, handwritten quantities, signatures, and table structure. Perform accurate OCR on all line items.`;
 
     // --- b. EXTRACT (narrow schema) ---
-    const extracted = await base44.asServiceRole.integrations.Core.InvokeLLM({
+    const _raw = await base44.asServiceRole.integrations.Core.InvokeLLM({
       model: 'claude_sonnet_4_6',
       ...(useVision ? { file_urls: [file_url] } : {}),
       prompt: `You are an expert at parsing Purchase Orders, Delivery Notes, and Packing Slips for industrial automation projects.
@@ -135,6 +145,8 @@ OCR ACCURACY:
 Return JSON: { document_type, document_number, document_date, vendor_name, line_items: [...] }`,
       response_json_schema: PODN_SCHEMA,
     });
+    // InvokeLLM may return the parsed object directly OR nested under `.response`.
+    const extracted = _raw?.response || _raw || {};
 
     const document_type = extracted?.document_type === 'po' ? 'po' : 'delivery_note';
     const document_number = extracted?.document_number || '';
@@ -167,7 +179,10 @@ Return JSON: { document_type, document_number, document_date, vendor_name, line_
       const ocr_uncertain = !!li.ocr_uncertain;
       if (ocr_uncertain) uncertainCount++;
 
-      const norm = normalizePart(part_number);
+      // Fallback: if the model omitted part_number, re-extract the bracketed
+      // code from the description before normalizing.
+      const code = part_number || extractBracketCode(description);
+      const norm = normalizePart(code);
       const bom = norm ? (byPart.get(norm) || byCode.get(norm)) : null;
 
       if (bom) {
@@ -182,19 +197,26 @@ Return JSON: { document_type, document_number, document_date, vendor_name, line_
 
     // --- e. SAVE SUMMARY NOTE ---
     const note_type = document_type === 'po' ? 'po_summary' : 'dn_summary';
+    const emptyExtraction = line_items.length === 0;
+    const warning = emptyExtraction
+      ? 'Document may be low quality or unsupported — no line items could be read.'
+      : undefined;
     const title = document_type === 'po'
       ? `${document_number || 'PO'} — ${appliedCount} item${appliedCount !== 1 ? 's' : ''} marked Ordered`
       : `${document_number || 'Delivery note'} — ${appliedCount} item${appliedCount !== 1 ? 's' : ''} updated to Received`;
+    const noteBody = emptyExtraction
+      ? `${document_number || 'Document'} — no line items could be read (check document quality)`
+      : title;
     const note = await base44.asServiceRole.entities.Note.create({
       project_id,
       author: actor,
-      body: title,
+      body: noteBody,
       note_type,
       table_data: { document_type, document_number, document_date, vendor_name, rows },
     });
 
     // --- f. RETURN ---
-    return Response.json({
+    const response: any = {
       note_id: note.id,
       document_type,
       document_number,
@@ -204,7 +226,17 @@ Return JSON: { document_type, document_number, document_date, vendor_name, line_
       unmatched_count: unmatchedCount,
       uncertain_count: uncertainCount,
       rows,
-    });
+    };
+    if (warning) response.warning = warning;
+    if (debugMode) {
+      response.debug = {
+        used_vision: useVision,
+        text_len: docText.length,
+        raw_had_response_key: !!(_raw && (_raw as any).response),
+        line_item_count: line_items.length,
+      };
+    }
+    return Response.json(response);
   } catch (error) {
     return Response.json({ error: error?.message || 'Extraction failed' }, { status: 500 });
   }
