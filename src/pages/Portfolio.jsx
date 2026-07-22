@@ -52,7 +52,7 @@ export default function Portfolio() {
       </section>
 
       {view === 'material' ? (
-        <MaterialTrackingReport projects={projects} />
+        <MaterialTrackingReport />
       ) : (
       <>
       {/* High-level health comparison */}
