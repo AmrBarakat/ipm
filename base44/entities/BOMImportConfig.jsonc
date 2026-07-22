@@ -43,10 +43,8 @@
         ],
         "supplier": [
           "supplier",
-          "vendor",
+          "vendor  equipment",
           "vendor equipment",
-          "manufacturer",
-          "make",
           "brand"
         ],
         "qty": [
@@ -55,68 +53,20 @@
           "total qty",
           "total quantity",
           "qty",
-          "quantity",
-          "q.ty",
-          "count"
+          "quantity"
         ],
-        "list_price": [
-          "list price equipment, sar",
-          "list price equipment",
-          "list price"
-        ],
-        "discount_pct": [
-          "discount to ehs material",
-          "discount"
-        ],
-        "transport_pct": [
-          "transport and customs per unit",
-          "transport"
-        ],
-        "unit_cost": [
+        "planned_cost_unit": [
           "cost unit price equipment sar",
           "cost unit price equipment",
-          "cost unit price",
-          "unit cost",
-          "cost/unit",
-          "buying price",
-          "net pricetl per unit equipment",
-          "net price per unit"
-        ],
-        "total_cost": [
-          "total cost equipment",
-          "total cost",
-          "extended cost",
-          "total cost equipment usd",
-          "total cost equipment sar"
+          "cost unit price"
         ],
         "unit_sell": [
           "unit price equipment sar",
-          "unit price equipment",
-          "selling price",
-          "unit price"
+          "unit price equipment"
         ],
-        "total_sell": [
-          "total equipment sar",
-          "total selling",
-          "total price",
-          "amount",
-          "total equipment"
-        ],
-        "margin_pct": [
+        "margin": [
           "materials markup to customer",
-          "markup",
-          "margin"
-        ],
-        "lead_time": [
-          "lead time",
-          "vendor lead time",
-          "delivery days",
-          "lead time calendar days"
-        ],
-        "warranty": [
-          "warranty",
-          "warranty period",
-          "warranty years"
+          "markup"
         ]
       }
     },

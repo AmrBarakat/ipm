@@ -58,9 +58,13 @@ function normalizeDeliveryStatus(val) {
 
 function mapItemToBOMRecord(item, projectId, documentId) {
   const qty       = toNumber(item.qty, 1) || 1;
-  const unitCost  = toNumber(item.unit_cost_sar ?? item.planned_cost_price ?? item.cost_price, 0);
-  const unitSell  = toNumber(item.unit_selling_sar ?? item.selling_price, 0);
-  const actualCost= toNumber(item.actual_cost_sar ?? item.unit_cost_sar, unitCost);
+  const unitCost  = toNumber(item.planned_cost_unit ?? item.planned_cost_price ?? item.unit_cost_sar ?? item.cost_price, 0);
+  const marginPct = item.margin != null ? toNumber(item.margin, 0) : (item.margin_pct != null ? toNumber(item.margin_pct, 0) : null);
+  let unitSell    = toNumber(item.unit_sell ?? item.selling_price ?? item.unit_selling_sar, 0);
+  // Source provides final cost & selling; only derive sell from cost×(1+margin) when missing.
+  if ((!unitSell || unitSell === 0) && unitCost > 0 && marginPct != null) {
+    unitSell = unitCost * (1 + marginPct);
+  }
   const stockQty  = toNumber(item.stock ?? item.stock_qty, 0);
 
   const notesParts = [
@@ -84,13 +88,10 @@ function mapItemToBOMRecord(item, projectId, documentId) {
     stock_qty:                stockQty,
     unit:                     item.unit || 'pcs',
     planned_cost_price:       unitCost,
-    actual_cost_price:        actualCost,
+    actual_cost_price:        unitCost,
     cost_price:               unitCost,
     selling_price:            unitSell,
-    list_price:               toNumber(item.list_price, 0),
-    discount_pct:             toNumber(item.discount_pct, 0),
-    transport_pct:            toNumber(item.transport_pct, 0),
-    margin_pct:               item.margin_pct != null ? toNumber(item.margin_pct, 0) : undefined,
+    margin_pct:               marginPct != null ? marginPct : undefined,
     currency:                 item.currency || 'SAR',
     stock_status:             stockQty > 0 ? 'stock' : 'non_stock',
     order_status:             normalizeOrderStatus(item.order_status),

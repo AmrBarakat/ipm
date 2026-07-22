@@ -481,6 +481,7 @@ export default function TabBOM({ projectId }) {
             actual_cost_unit: Number(i.actual_cost_price) || 0,
             total_planned: (Number(i.planned_cost_price) || Number(i.cost_price) || 0) * (Number(i.quantity) || 1),
             total_actual: (Number(i.actual_cost_price) || 0) * (Number(i.quantity) || 1),
+            unit_selling: Number(i.selling_price) || 0,
             total_selling: (Number(i.selling_price) || 0) * (Number(i.quantity) || 1),
             margin: (() => { const p = Number(i.planned_cost_price) || Number(i.cost_price) || 0; const s = Number(i.selling_price) || 0; if (!p) return '—'; return (((s - p) / p) * 100).toFixed(1) + '%'; })(),
             order_status: i.order_status || (i.ordered ? 'ordered' : 'not_ordered'),
@@ -496,6 +497,7 @@ export default function TabBOM({ projectId }) {
             { key: 'order_qty', label: 'Order Qty' },
             { key: 'planned_cost_unit', label: 'Planned Cost/Unit' }, { key: 'actual_cost_unit', label: 'Actual Cost/Unit' },
             { key: 'total_planned', label: 'Total Planned' }, { key: 'total_actual', label: 'Total Actual' },
+            { key: 'unit_selling', label: 'Unit Selling' },
             { key: 'total_selling', label: 'Total Selling' }, { key: 'margin', label: 'Margin' },
             { key: 'order_status', label: 'Order Status' }, { key: 'delivery_status', label: 'Delivery' }, { key: 'remaining', label: 'Remaining' },
             { key: 'expected_delivery', label: 'Expected Delivery' },
@@ -540,16 +542,13 @@ export default function TabBOM({ projectId }) {
                     <th className="px-3 py-3 text-left">Category</th>
                     <th className="px-3 py-3 text-left">Supplier</th>
                     <th className="px-3 py-3 text-right">Qty</th>
-                    <th className="px-3 py-3 text-right">Stock</th>
+                    <th className="px-3 py-3 text-right">Stock Qty</th>
                     <th className="px-3 py-3 text-right">Order Qty</th>
-                    <th className="px-3 py-3 text-right">List Price</th>
-                    <th className="px-3 py-3 text-right">Disc %</th>
-                    <th className="px-3 py-3 text-right">Margin %</th>
-                    <th className="px-3 py-3 text-right">Planned Cost</th>
-                    <th className="px-3 py-3 text-right">Actual Cost</th>
-                    <th className="px-3 py-3 text-right">Sell Value</th>
+                    <th className="px-3 py-3 text-right">Planned Cost/Unit</th>
+                    <th className="px-3 py-3 text-right">Actual Cost/Unit</th>
                     <th className="px-3 py-3 text-right">Total Planned</th>
                     <th className="px-3 py-3 text-right">Total Actual</th>
+                    <th className="px-3 py-3 text-right">Unit Selling</th>
                     <th className="px-3 py-3 text-right">Total Selling</th>
                     <th className="px-3 py-3 text-right">Margin</th>
                     <th className="px-3 py-3 text-left">Order</th>
@@ -645,15 +644,6 @@ export default function TabBOM({ projectId }) {
                                     <span className={`font-semibold text-xs ${oQty > 0 ? 'text-amber-700' : 'text-emerald-600'}`}>{oQty}</span>
                                   </td>
                                   <td className="px-1 py-1 text-right">
-                                    <input type="number" className={inp + ' text-right'} style={{ width: 80 }} value={item.list_price ?? ''} onChange={e => updateField(item.id, 'list_price', e.target.value)} onBlur={e => handlePricingBlur(item, 'list_price', Number(e.target.value) || 0)} min="0" placeholder="0" />
-                                  </td>
-                                  <td className="px-1 py-1 text-right">
-                                    <input type="number" className={inp + ' text-right'} style={{ width: 56 }} value={(Number(item.discount_pct) || 0) * 100} onChange={e => updateField(item.id, 'discount_pct', Number(e.target.value) / 100)} onBlur={e => handlePricingBlur(item, 'discount_pct', Number(e.target.value) / 100)} min="0" step="0.1" placeholder="0" />
-                                  </td>
-                                  <td className="px-1 py-1 text-right">
-                                    <input type="number" className={inp + ' text-right'} style={{ width: 56 }} value={(Number(item.margin_pct) || 0) * 100} onChange={e => updateField(item.id, 'margin_pct', Number(e.target.value) / 100)} onBlur={e => handlePricingBlur(item, 'margin_pct', Number(e.target.value) / 100)} min="0" step="0.1" placeholder="0" />
-                                  </td>
-                                  <td className="px-1 py-1 text-right">
                                     <div className="flex flex-col items-end">
                                       <input type="number" className={inp + ' text-right'} style={{ width: 90 }} value={item.planned_cost_price ?? 0} onChange={e => updateField(item.id, 'planned_cost_price', e.target.value)} onBlur={e => handleBlur(item, 'planned_cost_price', e.target.value)} min="0" placeholder="0" />
                                       <span className="text-xs text-slate-400 mt-0.5">= {formatCurrency(plannedUnit * (Number(item.quantity) || 1), item.currency || 'SAR')}</span>
@@ -665,14 +655,11 @@ export default function TabBOM({ projectId }) {
                                       <span className="text-xs text-slate-400 mt-0.5">= {formatCurrency(actualUnit * (Number(item.quantity) || 1), item.currency || 'SAR')}</span>
                                     </div>
                                   </td>
-                                  <td className="px-1 py-1 text-right">
-                                    <div className="flex flex-col items-end">
-                                      <input type="number" className={inp + ' text-right'} style={{ width: 90 }} value={item.selling_price ?? 0} onChange={e => updateField(item.id, 'selling_price', e.target.value)} onBlur={e => handleBlur(item, 'selling_price', e.target.value)} min="0" placeholder="0" />
-                                      <span className="text-xs text-slate-400 mt-0.5">= {formatCurrency((Number(item.selling_price) || 0) * (Number(item.quantity) || 1), item.currency || 'SAR')}</span>
-                                    </div>
-                                  </td>
                                   <td className="px-3 py-2 text-right text-xs font-medium text-slate-700">{formatCurrency(plannedUnit * (Number(item.quantity) || 1), item.currency || 'SAR')}</td>
                                   <td className="px-3 py-2 text-right text-xs font-medium text-slate-700">{formatCurrency(actualUnit * (Number(item.quantity) || 1), item.currency || 'SAR')}</td>
+                                  <td className="px-1 py-1 text-right">
+                                    <input type="number" className={inp + ' text-right'} style={{ width: 90 }} value={item.selling_price ?? 0} onChange={e => updateField(item.id, 'selling_price', e.target.value)} onBlur={e => handleBlur(item, 'selling_price', e.target.value)} min="0" placeholder="0" />
+                                  </td>
                                   <td className="px-3 py-2 text-right text-xs font-medium text-emerald-700">{formatCurrency((Number(item.selling_price) || 0) * (Number(item.quantity) || 1), item.currency || 'SAR')}</td>
                                   <td className="px-3 py-2 text-right">{marginPill(plannedUnit, Number(item.selling_price) || 0)}</td>
                                   <td className="px-1 py-1">
@@ -699,7 +686,7 @@ export default function TabBOM({ projectId }) {
                                 // Panel children expanded sub-table
                                 isPanel && isPanelExpanded && panelChildren.length > 0 && (
                                   <tr key={`${item.id}_children`}>
-                                    <td colSpan={22} className="p-0">
+                                    <td colSpan={20} className="p-0">
                                       <div className="bg-orange-50/60 border-t border-orange-100 pl-8">
                                         <table className="w-full text-xs">
                                           <thead className="bg-orange-100 text-orange-800">
@@ -742,15 +729,13 @@ export default function TabBOM({ projectId }) {
                           </tbody>
                           <tfoot className="bg-slate-50 border-t border-slate-200 text-xs font-semibold text-slate-600">
                             <tr>
-                              <td colSpan={10} className="px-3 py-2">Subtotal ({catItems.length})</td>
-                              <td className="px-3 py-2"></td>
-                              <td className="px-3 py-2"></td>
-                              <td className="px-3 py-2"></td>
+                              <td colSpan={9} className="px-3 py-2">Subtotal ({catItems.length})</td>
                               <td className="px-3 py-2 text-right">{formatCurrency(catPlanned, 'SAR')}</td>
                               <td className="px-3 py-2 text-right">{formatCurrency(catActual, 'SAR')}</td>
+                              <td className="px-3 py-2"></td>
                               <td className="px-3 py-2 text-right text-emerald-700">{formatCurrency(catSell, 'SAR')}</td>
                               <td className="px-3 py-2"></td>
-                              <td colSpan={5}></td>
+                              <td colSpan={6}></td>
                             </tr>
                           </tfoot>
                         </table>

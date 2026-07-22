@@ -9,17 +9,11 @@ import { AlertTriangle, Info } from 'lucide-react';
 const LOGICAL_FIELDS = [
   { key: 'description', label: 'Description', required: true },
   { key: 'part_no', label: 'Part No.', required: true },
-  { key: 'supplier', label: 'Supplier / Manufacturer', required: false },
-  { key: 'qty', label: 'Quantity', required: true },
-  { key: 'list_price', label: 'List Price', required: false },
-  { key: 'discount_pct', label: 'Discount %', required: false },
-  { key: 'transport_pct', label: 'Transport %', required: false },
-  { key: 'unit_cost', label: 'Unit Cost (planned)', required: false },
-  { key: 'total_cost', label: 'Total Cost', required: false },
+  { key: 'supplier', label: 'Supplier / Brand', required: false },
+  { key: 'qty', label: 'Quantity (T.Qty)', required: true },
+  { key: 'planned_cost_unit', label: 'Planned Cost/Unit', required: false },
   { key: 'unit_sell', label: 'Unit Selling Price', required: false },
-  { key: 'total_sell', label: 'Total Selling', required: false },
-  { key: 'margin_pct', label: 'Margin %', required: false },
-  { key: 'lead_time', label: 'Lead Time', required: false },
+  { key: 'margin', label: 'Margin (informational)', required: false },
 ];
 
 const LAYER_LABELS = { 1: 'Header name', 2: 'Position heuristic', 3: 'Content shape', 4: 'Manual' };
