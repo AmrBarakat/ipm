@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useEntityList, useEntityMutation, runBatch } from '@/hooks/useEntity';
 import { ENTITY_QUERY } from '@/lib/entityQueryDefaults';
@@ -39,7 +39,7 @@ const PRIORITY_COLORS = {
 
 const inp = 'border border-slate-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white w-full';
 
-export default function TabTasks({ projectId }) {
+export default function TabTasks({ projectId, focusTaskId }) {
   const { data: tasks = [], isLoading } = useEntityList('Task', { project_id: projectId }, ENTITY_QUERY.Task.sort, ENTITY_QUERY.Task.limit);
   const taskMutation = useEntityMutation('Task', ['WBSItem']);
   const wbsMutation = useEntityMutation('WBSItem', ['Task']);
@@ -54,6 +54,14 @@ export default function TabTasks({ projectId }) {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [bulkField, setBulkField] = useState('');
   const [bulkValue, setBulkValue] = useState('');
+
+  // Deep-link from the Calendar: scroll the focused task card into view and
+  // highlight it so the user lands directly on the selected task.
+  useEffect(() => {
+    if (!focusTaskId || isLoading) return;
+    const el = document.querySelector(`[data-task-id="${focusTaskId}"]`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [focusTaskId, isLoading, tasks]);
 
   async function createTask(e, colId) {
     e.preventDefault();
@@ -278,7 +286,7 @@ export default function TabTasks({ projectId }) {
               {byCol[col.id].map(task => {
                 const isEditing = editingId === task.id;
                 return (
-                  <div key={task.id} className={`bg-white rounded-lg shadow-sm p-3 text-xs border ${selectedIds.has(task.id) ? 'border-amber-400 bg-amber-50/30' : 'border-slate-100'}`}>
+                  <div key={task.id} data-task-id={task.id} className={`bg-white rounded-lg shadow-sm p-3 text-xs border ${selectedIds.has(task.id) ? 'border-amber-400 bg-amber-50/30' : 'border-slate-100'} ${focusTaskId === task.id ? 'ring-2 ring-amber-400 border-amber-400' : ''}`}>
                     {isEditing ? (
                       <div className="space-y-1.5">
                         <input value={editForm.title} onChange={e => setEditForm(f => ({ ...f, title: e.target.value }))} className={inp} placeholder="Title" />

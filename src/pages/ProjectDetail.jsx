@@ -1,5 +1,5 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { STATUS_COLORS, STATUS_LABELS, PRIORITY_COLORS, PRIORITY_LABELS, TYPE_LABELS, formatCurrency, formatDate } from '@/lib/constants';
 import { ArrowLeft, Pencil, FolderOpen } from 'lucide-react';
@@ -39,12 +39,17 @@ const DEFAULT_GROUP = 'plan';
 export default function ProjectDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { t } = useTranslation();
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState(DEFAULT_TAB);
-  const [activeGroup, setActiveGroup] = useState(DEFAULT_GROUP);
-  const [lastTabByGroup, setLastTabByGroup] = useState({ [DEFAULT_GROUP]: DEFAULT_TAB });
+  // Deep-link support: ?tab=tasks&task=<id> (e.g. from the Calendar) opens the
+  // project straight on the Tasks tab with the given task focused.
+  const initialTab = searchParams.get('tab') === 'tasks' ? 'tasks' : DEFAULT_TAB;
+  const initialGroup = searchParams.get('tab') === 'tasks' ? 'plan' : DEFAULT_GROUP;
+  const [activeTab, setActiveTab] = useState(initialTab);
+  const [activeGroup, setActiveGroup] = useState(initialGroup);
+  const [lastTabByGroup, setLastTabByGroup] = useState({ [initialGroup]: initialTab });
   const [editing, setEditing] = useState(false);
   const [overduePOCount, setOverduePOCount] = useState(0);
 
@@ -214,7 +219,7 @@ export default function ProjectDetail() {
             {activeTab === 'overview'   && <TabOverview   project={project} onRefresh={loadProject} />}
             {activeTab === 'gantt'      && <TabGantt      projectId={id} project={project} />}
             {activeTab === 'wbs'        && <TabWBS        projectId={id} project={project} projectProgress={project?.progress ?? 0} onProgressChange={(p) => setProject(prev => ({ ...prev, progress: p }))} />}
-            {activeTab === 'tasks'      && <TabTasks      projectId={id} />}
+            {activeTab === 'tasks'      && <TabTasks      projectId={id} focusTaskId={searchParams.get('task')} />}
             {activeTab === 'milestones' && <TabMilestones projectId={id} />}
             {activeTab === 'bom'        && <TabBOM        projectId={id} />}
             {activeTab === 'financials' && <TabFinancials projectId={id} project={project} />}
