@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react';
 import { useEntityList } from '@/hooks/useEntity';
+import { formatNumber } from '@/lib/constants';
 import { Users, AlertTriangle, TrendingUp, Clock, ChevronDown, ChevronRight } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 const CAPACITY_HOURS_PER_WEEK = 40; // assumed weekly capacity per person
 
@@ -70,6 +72,13 @@ export default function Resources() {
   const bottlenecks = resources.filter(r => r.isBottleneck).length;
   const totalHours = resources.reduce((s, r) => s + r.estimatedHours, 0);
 
+  // Top 10 assignees by estimated hours — for the load-by-assignee chart.
+  const loadChartData = useMemo(() =>
+    [...resources].sort((a, b) => b.estimatedHours - a.estimatedHours).slice(0, 10)
+      .map(r => ({ name: r.name, hours: r.estimatedHours })),
+    [resources]
+  );
+
   if (loading) return (
     <div className="flex items-center justify-center py-20">
       <div className="w-8 h-8 border-4 border-slate-200 border-t-amber-500 rounded-full animate-spin" />
@@ -104,10 +113,30 @@ export default function Resources() {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <KpiCard label="Team Members" value={totalPeople} icon={<Users className="w-5 h-5" />} color="border-blue-400" />
-        <KpiCard label="Total Est. Hours" value={`${totalHours.toLocaleString()}h`} icon={<Clock className="w-5 h-5" />} color="border-amber-400" />
+        <KpiCard label="Total Est. Hours" value={`${formatNumber(totalHours)}h`} icon={<Clock className="w-5 h-5" />} color="border-amber-400" />
         <KpiCard label="Overloaded" value={overloaded} sub={`>${CAPACITY_HOURS_PER_WEEK}h assigned`} icon={<TrendingUp className="w-5 h-5" />} color="border-red-400" />
         <KpiCard label="Bottlenecks" value={bottlenecks} sub="critical tasks or overload" icon={<AlertTriangle className="w-5 h-5" />} color="border-purple-400" />
       </div>
+
+      {/* Load by Assignee chart */}
+      {totalHours > 0 ? (
+        <div className="bg-white rounded-lg shadow-sm p-5 mb-6">
+          <h2 className="font-semibold text-slate-700 text-sm mb-3">Load by Assignee (Top 10)</h2>
+          <ResponsiveContainer width="100%" height={Math.max(200, loadChartData.length * 32)}>
+            <BarChart data={loadChartData} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <XAxis type="number" tick={{ fontSize: 11, fill: '#64748b' }} />
+              <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} width={90} />
+              <Tooltip formatter={(v) => [`${v}h`, 'Est. Hours']} contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }} />
+              <Bar dataKey="hours" fill="#f59e0b" radius={[0, 4, 4, 0]} maxBarSize={22} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      ) : (
+        <div className="bg-white rounded-lg shadow-sm p-5 mb-6 text-center text-sm text-slate-400">
+          No load data to display.
+        </div>
+      )}
 
       {/* Resource Table */}
       <div className="bg-white rounded-lg shadow-sm overflow-hidden">

@@ -53,7 +53,7 @@ export default function SpendingSummaryDashboard({ projectId, currency = 'SAR' }
   }
 
   const variance = totalPlanned - totalActual;
-  const pctSpent = totalPlanned > 0 ? Math.round((totalActual / totalPlanned) * 100) : 0;
+  const pctSpent = totalPlanned > 0 ? Math.round((totalActual / totalPlanned) * 100) : null;
   const overBudget = totalActual > totalPlanned && totalPlanned > 0;
 
   return (
@@ -67,19 +67,19 @@ export default function SpendingSummaryDashboard({ projectId, currency = 'SAR' }
         <Kpi label="Planned Spending" value={formatCurrency(totalPlanned, currency)} icon={<TrendingDown className="w-5 h-5" />} accent="border-blue-400" />
         <Kpi label="Actual Spending" value={formatCurrency(totalActual, currency)} icon={<Wallet className="w-5 h-5" />} accent={overBudget ? 'border-red-500' : 'border-emerald-400'} />
         <Kpi label="Variance" value={formatCurrency(variance, currency)} icon={<Scale className="w-5 h-5" />} accent={variance < 0 ? 'border-red-500' : 'border-amber-400'} sub={variance < 0 ? 'Over plan' : 'Under plan'} />
-        <Kpi label="% Spent" value={`${pctSpent}%`} icon={<Gauge className="w-5 h-5" />} accent={pctSpent > 100 ? 'border-red-500' : 'border-slate-400'} />
+        <Kpi label="% Spent" value={pctSpent == null ? '—' : `${pctSpent}%`} icon={<Gauge className="w-5 h-5" />} accent={pctSpent != null && pctSpent > 100 ? 'border-red-500' : 'border-slate-400'} />
       </div>
 
       {/* Overall progress bar */}
       <div>
         <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
           <span>Overall spend vs plan</span>
-          <span className={overBudget ? 'text-red-600 font-semibold' : 'text-slate-600'}>{pctSpent}%</span>
+          <span className={overBudget ? 'text-red-600 font-semibold' : 'text-slate-600'}>{pctSpent == null ? '—' : `${pctSpent}%`}</span>
         </div>
         <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden relative">
           <div
             className={overBudget ? 'bg-red-500 h-3 rounded-full' : 'bg-amber-500 h-3 rounded-full'}
-            style={{ width: `${Math.min(pctSpent, 100)}%` }}
+            style={{ width: `${Math.min(pctSpent ?? 0, 100)}%` }}
           />
           {overBudget && (
             <div className="absolute top-0 right-0 h-3 w-2 bg-red-700" title={`${pctSpent - 100}% over plan`} />

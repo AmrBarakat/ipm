@@ -1,8 +1,7 @@
 import { useMemo } from 'react';
 import { useEntityList } from '@/hooks/useEntity';
-import { ENTITY_QUERY } from '@/lib/entityQueryDefaults';
-import { formatDate, formatCurrency, EXPENSE_CATEGORY_LABELS, isTopLevelBOM } from '@/lib/constants';
-import { FileText, CreditCard, CheckCircle, AlertCircle, ClipboardList, BarChart2, PieChart, Wallet, Package, Tag, Truck, ShoppingCart, TrendingUp } from 'lucide-react';
+import { formatDate, formatCurrency, EXPENSE_CATEGORY_LABELS } from '@/lib/constants';
+import { CreditCard, CheckCircle, Wallet, TrendingUp, ShieldAlert, CalendarClock } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import StatusProgressChart from '@/components/project-detail/StatusProgressChart';
 import SpendingSummaryDashboard from '@/components/project-detail/SpendingSummaryDashboard';
@@ -10,40 +9,35 @@ import SpendingSummaryDashboard from '@/components/project-detail/SpendingSummar
 export default function TabOverview({ project, onRefresh }) {
   const { data: invoices = [], isLoading: invoicesLoading } = useEntityList('Invoice', { project_id: project.id }, 'planned_date', 500);
   const { data: expenses = [], isLoading: expensesLoading } = useEntityList('Expense', { project_id: project.id }, 'planned_date', 500);
-  const { data: bomItems = [], isLoading: bomLoading } = useEntityList('BOMItem', { project_id: project.id }, ENTITY_QUERY.BOMItem.sort, ENTITY_QUERY.BOMItem.limit);
   const { data: collections = [], isLoading: colLoading } = useEntityList('Collection', { project_id: project.id }, '-received_date', 500);
-  const loading = invoicesLoading || expensesLoading || bomLoading || colLoading;
+  const { data: risks = [], isLoading: risksLoading } = useEntityList('Risk', { project_id: project.id }, '-created_date', 200);
+  const loading = invoicesLoading || expensesLoading || colLoading || risksLoading;
 
   const cur = project?.currency || 'SAR';
   const contractValue = project?.contract_value || 0;
 
-  // Financial KPIs — aligned with TabFinancials logic
-  // Planned invoiced: all non-cancelled invoices → planned_amount
-  const plannedInvoiced = invoices.filter(i => i.status !== 'cancelled').reduce((s, i) => s + (i.planned_amount || 0), 0);
   // Actual invoiced: invoiced/paid/partial/overdue → actual_amount fallback planned_amount
   const actualInvoiced = invoices.filter(i => ['invoiced','paid','partial','overdue'].includes(i.status)).reduce((s, i) => s + (i.actual_amount || i.planned_amount || 0), 0);
   const totalReceived = collections.reduce((s, c) => s + (c.amount || 0), 0);
-  const outstanding = actualInvoiced - totalReceived;
 
   // Cost KPIs — aligned with TabFinancials logic
-  // Planned: all non-cancelled expenses → planned_amount
   const plannedCost = expenses.filter(e => e.status !== 'cancelled').reduce((s, e) => s + (e.planned_amount || 0), 0);
-  // Actual: committed/paid expenses → actual_amount fallback planned_amount
   const actualCost = expenses.filter(e => ['committed','paid'].includes(e.status)).reduce((s, e) => s + (e.actual_amount || e.planned_amount || 0), 0);
-  const plannedMargin = contractValue - plannedCost;
-  const plannedMarginPct = contractValue > 0 ? Math.round((plannedMargin / contractValue) * 100) : 0;
-  const cashOnHand = totalReceived - actualCost;
+  const budgetVariance = plannedCost - actualCost;
 
-  // BOM KPIs — exclude panel child rows (parent_id) so a panel is counted once
-  // and its cost isn't double-counted with its components.
-  const topBom = bomItems.filter(isTopLevelBOM);
-  const bomCost = topBom.reduce((s, i) => s + (i.cost_price || 0) * (i.quantity || 1), 0);
-  const bomSell = topBom.reduce((s, i) => s + (i.selling_price || 0) * (i.quantity || 1), 0);
-  const bomMarginPct = bomSell > 0 ? Math.round(((bomSell - bomCost) / bomSell) * 100) : 0;
-  const alreadyOrdered = topBom.filter(i => i.ordered).reduce((s, i) => s + (i.cost_price || 0) * (i.quantity || 1), 0);
-  const orderedCount = topBom.filter(i => i.ordered).length;
-  const toOrderItems = topBom.filter(i => !i.ordered && i.stock_status === 'non_stock');
-  const toOrderValue = toOrderItems.reduce((s, i) => s + (i.cost_price || 0) * (i.quantity || 1), 0);
+  // Operational KPIs
+  const invoicedPct = contractValue > 0 ? Math.round((actualInvoiced / contractValue) * 100) : null;
+  const collectedPct = actualInvoiced > 0 ? Math.round((totalReceived / actualInvoiced) * 100) : null;
+  const openRisks = risks.filter(r => r.status === 'open').length;
+
+  // Schedule variance: planned end (target_completion_date) vs today.
+  const targetDate = project?.target_completion_date;
+  const scheduleVarianceDays = targetDate
+    ? Math.round((new Date(targetDate) - new Date(new Date().toISOString().slice(0, 10))) / 86400000)
+    : null;
+  const scheduleValue = scheduleVarianceDays == null ? '—'
+    : scheduleVarianceDays >= 0 ? `${scheduleVarianceDays}d left`
+    : `${Math.abs(scheduleVarianceDays)}d over`;
 
   // Projected Profit: Collections (received) minus committed/paid expenses actual cost
   const totalExpenseActualCost = expenses.filter(e => ['committed','paid'].includes(e.status)).reduce((s, e) => s + (e.actual_amount || e.planned_amount || 0), 0);
@@ -66,105 +60,57 @@ export default function TabOverview({ project, onRefresh }) {
 
   return (
     <div className="space-y-6">
-      {/* Financial Summary KPIs */}
+      {/* Operational KPIs */}
       {!loading && (
-        <>
-          {/* Row 1: Contract / Invoiced / Paid / Outstanding */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <KpiCard
-              label="Contract Value"
-              value={formatCurrency(contractValue, cur)}
-              icon={<FileText className="w-5 h-5" />}
-              accent="blue"
-            />
-            <KpiCard
-              label="Planned Invoiced"
-              value={formatCurrency(plannedInvoiced, cur)}
-              sub={contractValue > 0 ? `${Math.round((plannedInvoiced / contractValue) * 100)}% of contract` : null}
-              icon={<CreditCard className="w-5 h-5" />}
-              accent="green"
-            />
-            <KpiCard
-              label="Received"
-              value={formatCurrency(totalReceived, cur)}
-              sub={contractValue > 0 ? `${Math.round((totalReceived / contractValue) * 100)}% of contract` : null}
-              icon={<CheckCircle className="w-5 h-5" />}
-              accent="purple"
-            />
-            <KpiCard
-              label="Outstanding"
-              value={formatCurrency(outstanding, cur)}
-              icon={<AlertCircle className="w-5 h-5" />}
-              accent="amber"
-            />
-          </div>
-
-          {/* Row 2: Planned Cost / Actual Cost / Planned Margin / Cash on Hand */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <KpiCard
-              label="Planned Cost"
-              value={formatCurrency(plannedCost, cur)}
-              icon={<ClipboardList className="w-5 h-5" />}
-              accent="blue"
-            />
-            <KpiCard
-              label="Actual Cost"
-              value={formatCurrency(actualCost, cur)}
-              icon={<BarChart2 className="w-5 h-5" />}
-              accent="red"
-            />
-            <KpiCard
-              label="Planned Margin"
-              value={formatCurrency(plannedMargin, cur)}
-              sub={`${plannedMarginPct}% margin`}
-              icon={<PieChart className="w-5 h-5" />}
-              accent="green"
-            />
-            <KpiCard
-              label="Cash on Hand (so far)"
-              value={formatCurrency(cashOnHand, cur)}
-              icon={<Wallet className="w-5 h-5" />}
-              accent={cashOnHand >= 0 ? 'amber' : 'red'}
-            />
-          </div>
-
-          {/* Row 3: BOM Cost / BOM Sell / Already Ordered / To Order */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <KpiCard
-              label="BOM Cost (Parts)"
-              value={formatCurrency(bomCost, cur)}
-              sub={`${topBom.length} line item${topBom.length !== 1 ? 's' : ''}`}
-              icon={<Package className="w-5 h-5" />}
-              accent="blue"
-            />
-            <KpiCard
-              label="BOM Sell"
-              value={formatCurrency(bomSell, cur)}
-              sub={`Margin ${bomMarginPct}%`}
-              icon={<Tag className="w-5 h-5" />}
-              accent="green"
-            />
-            <KpiCard
-              label="Already Ordered"
-              value={formatCurrency(alreadyOrdered, cur)}
-              sub={`${orderedCount} PO${orderedCount !== 1 ? 's' : ''} issued`}
-              icon={<Truck className="w-5 h-5" />}
-              accent="purple"
-            />
-            <KpiCard
-              label="To Order"
-              value={formatCurrency(toOrderValue, cur)}
-              sub={`${toOrderItems.length} non-stock item${toOrderItems.length !== 1 ? 's' : ''} pending`}
-              icon={<ShoppingCart className="w-5 h-5" />}
-              accent="amber"
-            />
-          </div>
-        </>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <KpiCard
+            label="Progress"
+            value={`${project.progress || 0}%`}
+            icon={<TrendingUp className="w-5 h-5" />}
+            accent="blue"
+            sub="Overall"
+          />
+          <KpiCard
+            label="Schedule"
+            value={scheduleValue}
+            icon={<CalendarClock className="w-5 h-5" />}
+            accent={scheduleVarianceDays != null && scheduleVarianceDays < 0 ? 'red' : 'amber'}
+            sub={targetDate ? `Target ${formatDate(targetDate)}` : 'No target date'}
+          />
+          <KpiCard
+            label="Budget"
+            value={formatCurrency(actualCost, cur)}
+            icon={<Wallet className="w-5 h-5" />}
+            accent={budgetVariance < 0 ? 'red' : 'blue'}
+            sub={plannedCost > 0 ? `${Math.round((actualCost / plannedCost) * 100)}% of plan` : '—'}
+          />
+          <KpiCard
+            label="Invoiced"
+            value={invoicedPct == null ? '—' : `${invoicedPct}%`}
+            icon={<CreditCard className="w-5 h-5" />}
+            accent="purple"
+            sub={formatCurrency(actualInvoiced, cur)}
+          />
+          <KpiCard
+            label="Collected"
+            value={collectedPct == null ? '—' : `${collectedPct}%`}
+            icon={<CheckCircle className="w-5 h-5" />}
+            accent="green"
+            sub={formatCurrency(totalReceived, cur)}
+          />
+          <KpiCard
+            label="Open Risks"
+            value={openRisks}
+            icon={<ShieldAlert className="w-5 h-5" />}
+            accent={openRisks > 0 ? 'red' : 'green'}
+            sub={`${risks.length} total`}
+          />
+        </div>
       )}
 
       {loading && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {Array.from({ length: 12 }).map((_, i) => (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="bg-white rounded-lg shadow-sm p-4 h-20 animate-pulse bg-slate-100" />
           ))}
         </div>

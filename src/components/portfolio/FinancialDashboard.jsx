@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { formatCurrency, TYPE_LABELS } from '@/lib/constants';
 import { Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  LineChart, Line, ComposedChart, ResponsiveContainer,
+  Line, ComposedChart, ResponsiveContainer,
   PieChart, Pie, Cell, Area, ReferenceLine } from
 'recharts';
 import {
@@ -125,6 +125,10 @@ export default function FinancialDashboard({ projects }) {
   reduce((s, p) => s + (p.contract_value || 0), 0),
   [projects, filteredProjectIds]
   );
+  const filteredProjects = useMemo(() => projects.filter((p) => filteredProjectIds.has(p.id)), [projects, filteredProjectIds]);
+  const activeProjectCount = filteredProjects.filter((p) => p.status === 'in_progress').length;
+  const completedProjectCount = filteredProjects.filter((p) => p.status === 'completed').length;
+  const onHoldProjectCount = filteredProjects.filter((p) => ['on_hold', 'closed'].includes(p.status)).length;
   // Planned invoiced: all non-cancelled → planned_amount
   const totalPlannedInvoiced = useMemo(() => fInvoices.filter((i) => i.status !== 'cancelled').reduce((s, i) => s + (i.planned_amount || 0), 0), [fInvoices]);
   // Actual invoiced: invoiced/paid/partial/overdue → actual_amount fallback planned_amount
@@ -214,24 +218,21 @@ export default function FinancialDashboard({ projects }) {
   [allKeys, period, bookingByPeriod, invoicedPlannedByPeriod, invoicedActualByPeriod, cashInByPeriod]
   );
 
-  // Chart 2 — Cash In vs Out
-  const cashFlowData = useMemo(() =>
-  allKeys.map((k) => {
-    const ci = Math.round(cashInByPeriod[k] || 0);
-    const co = Math.round(cashOutByPeriod[k] || 0);
-    return { period: periodLabel(k, period), 'Cash In': ci, 'Cash Out': -co, Net: ci - co };
-  }),
-  [allKeys, period, cashInByPeriod, cashOutByPeriod]
-  );
-
-  // Chart 3 — Cumulative Cash Flow
-  const cumulativeData = useMemo(() => {
-    let cumIn = 0,cumOut = 0,cumNet = 0;
+  // Chart 2 — Cash Flow (periodic bars + cumulative net line).
+  // Merges the former "Cash In vs Out" and "Cumulative Cash Flow" charts into
+  // one ComposedChart — bars for periodic in/out, line for running net.
+  const cashFlowMerged = useMemo(() => {
+    let cumNet = 0;
     return allKeys.map((k) => {
-      cumIn += cashInByPeriod[k] || 0;
-      cumOut += cashOutByPeriod[k] || 0;
-      cumNet = cumIn - cumOut;
-      return { period: periodLabel(k, period), 'Cum Cash In': Math.round(cumIn), 'Cum Cash Out': Math.round(cumOut), 'Cum Net': Math.round(cumNet) };
+      const ci = cashInByPeriod[k] || 0;
+      const co = cashOutByPeriod[k] || 0;
+      cumNet += ci - co;
+      return {
+        period: periodLabel(k, period),
+        'Cash In': Math.round(ci),
+        'Cash Out': Math.round(co),
+        'Cum Net': Math.round(cumNet),
+      };
     });
   }, [allKeys, period, cashInByPeriod, cashOutByPeriod]);
 
@@ -351,26 +352,33 @@ export default function FinancialDashboard({ projects }) {
       </div>
 
       {/* ── KPI Cards ──────────────────────────────────────────────────────── */}
-      {/* Row 0 — Portfolio overview (filter-aware) */}
+      {/* Projects overview (consolidated status breakdown) */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard label="Total Projects" value={projects.filter((p) => filteredProjectIds.has(p.id)).length} icon={<TrendingUp className="w-5 h-5" />} color="border-blue-400" sub={projectType ? TYPE_LABELS[projectType] : 'All types'} />
-        <KpiCard label="In Progress" value={projects.filter((p) => filteredProjectIds.has(p.id) && p.status === 'in_progress').length} icon={<Activity className="w-5 h-5" />} color="border-amber-400" sub="Active projects" />
-        <KpiCard label="Completed" value={projects.filter((p) => filteredProjectIds.has(p.id) && p.status === 'completed').length} icon={<ArrowUpCircle className="w-5 h-5" />} color="border-emerald-400" sub="Finished projects" />
-        <KpiCard label="Total Booking" value={formatCurrency(totalBooking, currency)} icon={<TrendingUp className="w-5 h-5" />} color="border-blue-500" sub={`${projects.filter((p) => filteredProjectIds.has(p.id)).length} projects`} />
+        <KpiCard label="Projects" value={filteredProjects.length} icon={<TrendingUp className="w-5 h-5" />} color="border-blue-400" sub={projectType ? `${TYPE_LABELS[projectType]} · ${activeProjectCount} active / ${completedProjectCount} done / ${onHoldProjectCount} on hold` : `${activeProjectCount} active / ${completedProjectCount} done / ${onHoldProjectCount} on hold`} />
       </div>
-      {/* Row 1 — Invoicing & collections */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard label="Planned Invoiced" value={formatCurrency(totalPlannedInvoiced, currency)} icon={<ReceiptText className="w-5 h-5" />} color="border-purple-400" sub={totalBooking > 0 ? `${Math.round(totalPlannedInvoiced / totalBooking * 100)}% of booking` : null} />
-        <KpiCard label="Actual Invoiced" value={formatCurrency(totalActualInvoiced, currency)} icon={<ReceiptText className="w-5 h-5" />} color="border-purple-600" sub={totalPlannedInvoiced > 0 ? `${Math.round(totalActualInvoiced / totalPlannedInvoiced * 100)}% of planned` : null} />
-        <KpiCard label="Cash In (Collected)" value={formatCurrency(totalCashIn, currency)} icon={<ArrowUpCircle className="w-5 h-5" />} color="border-emerald-500" sub={totalActualInvoiced > 0 ? `${Math.round(totalCashIn / totalActualInvoiced * 100)}% collected` : null} />
-        <KpiCard label="Remaining Collection" value={formatCurrency(collectionBal, currency)} icon={<DollarSign className="w-5 h-5" />} color="border-amber-500" highlight={collectionBal > 0 ? 'amber' : 'green'} sub="Actual Invoiced – Collected" />
+
+      {/* Revenue & Collection */}
+      <div className="flex items-center gap-2 pt-1">
+        <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Revenue & Collection</h4>
+        <div className="flex-1 h-px bg-slate-100" />
       </div>
-      {/* Row 2 — Expenses & net */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        <KpiCard label="Total Booking" value={formatCurrency(totalBooking, currency)} icon={<TrendingUp className="w-5 h-5" />} color="border-blue-500" sub={`${filteredProjects.length} projects`} />
+        <KpiCard label="Planned Invoiced" value={formatCurrency(totalPlannedInvoiced, currency)} icon={<ReceiptText className="w-5 h-5" />} color="border-purple-400" sub={totalBooking > 0 ? `${Math.round(totalPlannedInvoiced / totalBooking * 100)}% of booking` : '—'} />
+        <KpiCard label="Actual Invoiced" value={formatCurrency(totalActualInvoiced, currency)} icon={<ReceiptText className="w-5 h-5" />} color="border-purple-600" sub={totalPlannedInvoiced > 0 ? `${Math.round(totalActualInvoiced / totalPlannedInvoiced * 100)}% of planned` : '—'} />
+        <KpiCard label="Cash In (Collected)" value={formatCurrency(totalCashIn, currency)} icon={<ArrowUpCircle className="w-5 h-5" />} color="border-emerald-500" sub={totalActualInvoiced > 0 ? `${Math.round(totalCashIn / totalActualInvoiced * 100)}% collected` : '—'} />
+        <KpiCard label="Remaining Collection" value={formatCurrency(collectionBal, currency)} icon={<DollarSign className="w-5 h-5" />} color="border-amber-500" highlight={collectionBal > 0 ? 'amber' : 'green'} sub="Invoiced – Collected" />
+      </div>
+
+      {/* Cost & Cash */}
+      <div className="flex items-center gap-2 pt-1">
+        <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Cost & Cash</h4>
+        <div className="flex-1 h-px bg-slate-100" />
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         <KpiCard label="Planned Expenses" value={formatCurrency(totalPlannedCashOut, currency)} icon={<ArrowDownCircle className="w-5 h-5" />} color="border-red-400" sub="Non-cancelled" />
         <KpiCard label="Actual Expenses" value={formatCurrency(totalCashOut, currency)} icon={<ArrowDownCircle className="w-5 h-5" />} color="border-red-600" sub="Committed / paid" />
         <KpiCard label="Net Cash" value={formatCurrency(netCash, currency)} icon={<Wallet className="w-5 h-5" />} color={netCash >= 0 ? 'border-emerald-500' : 'border-red-500'} highlight={netCash < 0 ? 'red' : 'green'} sub="Cash In – Actual Expenses" />
-        <KpiCard label="On Hold / Closed" value={projects.filter((p) => filteredProjectIds.has(p.id) && ['on_hold', 'closed'].includes(p.status)).length} icon={<ArrowDownCircle className="w-5 h-5" />} color="border-slate-400" sub="Inactive projects" />
       </div>
 
       {/* ── Charts Grid ────────────────────────────────────────────────────── */}
@@ -416,35 +424,19 @@ export default function FinancialDashboard({ projects }) {
             </ResponsiveContainer>
           </ChartCard>
 
-          {/* Chart 2 — Cash In vs Out */}
-          <ChartCard title="Cash In vs Cash Out" subtitle={`${period.charAt(0).toUpperCase() + period.slice(1)} cash movements with net overlay`}>
+          {/* Chart 2 — Cash Flow (periodic bars + cumulative net line) */}
+          <ChartCard title="Cash Flow — Periodic & Cumulative" subtitle={`${period.charAt(0).toUpperCase() + period.slice(1)} cash in/out with running net`}>
             <ResponsiveContainer width="100%" height={280}>
-              <ComposedChart data={cashFlowData} margin={{ top: 4, right: 16, left: 0, bottom: 40 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="period" tick={{ fontSize: 10, fill: '#94a3b8' }} angle={-30} textAnchor="end" interval={0} />
-                <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={fmt} width={55} />
-                <Tooltip formatter={(v, n) => [formatCurrency(Math.abs(v), currency), n]} contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e2e8f0' }} />
-                <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
-                <Bar dataKey="Cash In" fill="#10b981" radius={[3, 3, 0, 0]} maxBarSize={40} />
-                <Bar dataKey="Cash Out" fill="#ef4444" radius={[3, 3, 0, 0]} maxBarSize={40} />
-                <Line dataKey="Net" type="monotone" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </ChartCard>
-
-          {/* Chart 3 — Cumulative Cash Flow */}
-          <ChartCard title="Cumulative Cash Flow" subtitle="Running totals over time">
-            <ResponsiveContainer width="100%" height={280}>
-              <LineChart data={cumulativeData} margin={{ top: 4, right: 16, left: 0, bottom: 40 }}>
+              <ComposedChart data={cashFlowMerged} margin={{ top: 4, right: 16, left: 0, bottom: 40 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                 <XAxis dataKey="period" tick={{ fontSize: 10, fill: '#94a3b8' }} angle={-30} textAnchor="end" interval={0} />
                 <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={fmt} width={55} />
                 <Tooltip formatter={(v) => formatCurrency(v, currency)} contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e2e8f0' }} />
                 <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
-                <Line dataKey="Cum Cash In" type="monotone" stroke="#10b981" strokeWidth={2} dot={{ r: 2 }} />
-                <Line dataKey="Cum Cash Out" type="monotone" stroke="#ef4444" strokeWidth={2} dot={{ r: 2 }} />
+                <Bar dataKey="Cash In" fill="#10b981" radius={[3, 3, 0, 0]} maxBarSize={40} />
+                <Bar dataKey="Cash Out" fill="#ef4444" radius={[3, 3, 0, 0]} maxBarSize={40} />
                 <Line dataKey="Cum Net" type="monotone" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3 }} strokeDasharray="5 3" />
-              </LineChart>
+              </ComposedChart>
             </ResponsiveContainer>
           </ChartCard>
 

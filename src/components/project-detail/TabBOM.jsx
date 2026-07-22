@@ -271,14 +271,18 @@ export default function TabBOM({ projectId }) {
     return true;
   }), [allTopLevel, filterCategory, filterOrderStatus, filterDelivery, filterSupplier]);
 
-  // Dashboard KPIs — based on top-level items only (panels + aggregated standalone)
+  // Dashboard KPIs — totals based on top-level items (panels + aggregated standalone)
   const totalItems = allTopLevel.length;
   const totalPlannedCost = allTopLevel.reduce((s, i) => s + (Number(i.planned_cost_price) || Number(i.cost_price) || 0) * (Number(i.quantity) || 1), 0);
   const totalActualCost = allTopLevel.reduce((s, i) => s + (Number(i.actual_cost_price) || 0) * (Number(i.quantity) || 1), 0);
   const totalSell = allTopLevel.reduce((s, i) => s + (Number(i.selling_price) || 0) * (Number(i.quantity) || 1), 0);
-  const orderedCount = allTopLevel.filter(i => (i.order_status || (i.ordered ? 'ordered' : 'not_ordered')) === 'ordered').length;
-  const deliveredCount = allTopLevel.filter(i => i.delivery_status === 'delivered').length;
-  const pendingDelivery = allTopLevel.filter(i => i.delivery_status === 'not_delivered' || i.delivery_status === 'partially_delivered').length;
+  // Procurement status KPIs: top-level, non-service items only (exclude panel
+  // children and category 'service') so counts reconcile with the table.
+  const procurementKpiItems = allTopLevel.filter(i => i.category !== 'service');
+  const orderedCount = procurementKpiItems.filter(i => (i.order_status || (i.ordered ? 'ordered' : 'not_ordered')) === 'ordered').length;
+  const notOrderedCount = procurementKpiItems.length - orderedCount;
+  const deliveredCount = procurementKpiItems.filter(i => i.delivery_status === 'delivered').length;
+  const pendingDelivery = procurementKpiItems.filter(i => i.delivery_status === 'not_delivered' || i.delivery_status === 'partially_delivered').length;
 
   const byCategory = useMemo(() => {
     const map = {};
@@ -320,7 +324,7 @@ export default function TabBOM({ projectId }) {
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KpiCard label="Ordered" value={orderedCount} icon={<Truck className="w-5 h-5" />} color="border-blue-400" />
-        <KpiCard label="Not Ordered" value={totalItems - orderedCount} icon={<ShoppingCart className="w-5 h-5" />} color="border-slate-400" />
+        <KpiCard label="Not Ordered" value={notOrderedCount} icon={<ShoppingCart className="w-5 h-5" />} color="border-slate-400" />
         <KpiCard label="Delivered" value={deliveredCount} icon={<CheckCircle className="w-5 h-5" />} color="border-emerald-400" />
         <KpiCard label="Pending Delivery" value={pendingDelivery} icon={<Clock className="w-5 h-5" />} color="border-amber-400" />
       </div>
