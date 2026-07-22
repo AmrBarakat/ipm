@@ -22,7 +22,7 @@
     },
     "field_synonyms": {
       "type": "object",
-      "description": "Maps logical field name to array of header synonyms (lowercase, normalized)",
+      "description": "Maps logical field name to array of header synonyms (lowercase, normalized). Order matters for qty: total-quantity variants are listed first so they win over plain per-panel Qty when both columns exist.",
       "default": {
         "description": [
           "description",
@@ -44,16 +44,18 @@
         "supplier": [
           "supplier",
           "vendor",
+          "vendor equipment",
           "manufacturer",
           "make",
-          "brand",
-          "vendor equipment"
+          "brand"
         ],
         "qty": [
+          "t.qty",
+          "t qty",
+          "total qty",
+          "total quantity",
           "qty",
           "quantity",
-          "t.qty",
-          "total qty",
           "q.ty",
           "count"
         ],
@@ -64,12 +66,14 @@
           "u/m"
         ],
         "unit_cost": [
+          "cost unit price equipment sar",
+          "cost unit price equipment",
           "cost unit price",
           "unit cost",
           "cost/unit",
           "buying price",
-          "net price tl per unit equipment",
-          "cost unit price equipment sar"
+          "net pricetl per unit equipment",
+          "net price per unit"
         ],
         "total_cost": [
           "total cost equipment",
@@ -79,6 +83,7 @@
           "total cost equipment sar"
         ],
         "unit_sell": [
+          "unit price equipment sar",
           "unit price equipment",
           "selling price",
           "list price",

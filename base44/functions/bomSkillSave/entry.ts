@@ -76,6 +76,7 @@ Deno.serve(async (req) => {
         stock_qty: row.stock_qty ?? 0,
         order_status: row.order_status || 'not_ordered',
         delivery_status: row.delivery_status || 'not_delivered',
+        panel_allocations: Array.isArray(row.panel_allocations) ? row.panel_allocations : [],
         currency: 'SAR',
       }));
       const newItems = await base44.asServiceRole.entities.BOMItem.bulkCreate(batch);

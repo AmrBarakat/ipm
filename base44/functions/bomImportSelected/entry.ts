@@ -94,6 +94,7 @@ function mapItemToBOMRecord(item, projectId, documentId) {
     delivery_status:          normalizeDeliveryStatus(item.delivery_status),
     expected_delivery_date:   toDateOrUndefined(item.expected_delivery_date),
     notes:                    notesParts.join(' | '),
+    panel_allocations:        Array.isArray(item.panel_allocations) ? item.panel_allocations : [],
   };
 }
 

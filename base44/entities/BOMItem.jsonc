@@ -131,6 +131,22 @@
       "default": 0,
       "description": "Total quantity minus delivered_qty (clamps at 0)"
     },
+    "panel_allocations": {
+      "type": "array",
+      "description": "For aggregated component lines: which panels this part goes into and how many per panel. [{panel_name: string, qty: number}]",
+      "items": {
+        "type": "object",
+        "properties": {
+          "panel_name": {
+            "type": "string"
+          },
+          "qty": {
+            "type": "number"
+          }
+        }
+      },
+      "default": []
+    },
     "expected_delivery_date": {
       "type": "string",
       "format": "date"

@@ -6,6 +6,7 @@
 
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 import * as XLSX from 'npm:xlsx@0.18.5';
+import { classifyItem, buildPanelLookup, allocationPanelName, addAllocation } from '../../shared/bomClassify.ts';
 
 // ─── Normalization ─────────────────────────────────────────────────────────────
 
@@ -80,6 +81,10 @@ function layer2Disambiguate(candidates, dataRows, headers) {
         const numericFrac = values.filter(isNumbery).length / Math.max(values.length, 1);
         const smallIntFrac = values.filter(v => { const n = toNumber(v); return n != null && Number.isInteger(n) && n > 0 && n < 1000; }).length / Math.max(values.length, 1);
         score += numericFrac * 0.1 + smallIntFrac * 0.15;
+        // When both "Qty" and "T.Qty"/"Total Qty" columns exist, prefer the
+        // total column — it is the panel-multiplied total; plain Qty is per-panel.
+        const norm = headers.find(h => h.col_idx === c.col_idx)?.normalized || '';
+        if (/t qty|total qty|total quantity/.test(norm)) score += 0.3;
       }
       if (field === 'part_no') {
         // Prefer high uniqueness, alphanumeric mixed values
@@ -303,10 +308,7 @@ function extractRows(sheetData, profile, config) {
   const dataRows = sheetData.slice(data_start_row);
   const isGroup = buildGroupRowDetector(field_map);
   const panelKeyword = config.panel_keyword || 'panel';
-  const networkKeywords = config.networking_keywords || [];
-  const softwareKeywords = config.software_keywords || [];
   const defaultMarkup = config.default_markup_factor || 1.37;
-  const equipmentCategory = 'plc'; // enum value for fallback equipment
 
   const get = (row, field) => {
     const info = field_map[field];
@@ -332,6 +334,11 @@ function extractRows(sheetData, profile, config) {
     }
 
     // Item row
+    if (!currentGroup) {
+      currentGroup = { name: '', isPanel: false, items: [] };
+      groups.push(currentGroup);
+    }
+
     const descRaw = get(row, 'description');
     const partNoRaw = get(row, 'part_no');
     if (!descRaw && !partNoRaw) continue;
@@ -354,29 +361,12 @@ function extractRows(sheetData, profile, config) {
       warnings.push(`Selling price for "${description}" defaulted using markup factor ${factor.toFixed(2)} (not read from file)`);
     }
 
-    // Classify
-    const descLower = `${description} ${partNo}`.toLowerCase();
-    let category;
-    const noSupplier = !supplier || ['', '-', 'n/a', 'na'].includes(supplier.toLowerCase());
-    if (noSupplier && networkKeywords.some(kw => descLower.includes(kw.toLowerCase()))) {
-      category = 'network';
-    } else if (noSupplier) {
-      category = 'it_hardware';
-    } else if (softwareKeywords.some(kw => descLower.includes(kw.toLowerCase()))) {
-      category = 'software_license';
-    } else {
-      category = equipmentCategory;
-    }
+    const category = classifyItem(description, partNo, currentGroup.name);
 
     const item = {
       description, partNo, supplier, qty, unit, unitCost, totalCost, unitSell, totalSell,
       category, raw_row: row,
     };
-
-    if (!currentGroup) {
-      currentGroup = { name: '', isPanel: false, items: [] };
-      groups.push(currentGroup);
-    }
     currentGroup.items.push(item);
   }
 
@@ -388,6 +378,8 @@ function extractRows(sheetData, profile, config) {
 function aggregateGroups(groups, config) {
   const shouldAggregate = config.aggregate_by_category || {};
   const defaultMarkup = config.default_markup_factor || 1.37;
+  const panelKeyword = config.panel_keyword || 'panel';
+  const panelLookup = buildPanelLookup(groups);
 
   const topLevel = []; // final BOMItem rows (parents)
   const children = []; // Panel child rows
@@ -395,8 +387,9 @@ function aggregateGroups(groups, config) {
   // Panel groups → one aggregate parent + children
   for (const group of groups) {
     if (group.isPanel && group.items.length > 0) {
-      const totalCost = group.items.reduce((s, i) => s + (i.totalCost ?? 0), 0);
-      const totalSell = group.items.reduce((s, i) => s + (i.totalSell ?? (i.totalCost ?? 0) * defaultMarkup), 0);
+      // Panel parent pricing = sum of child (unit cost × qty).
+      const totalCost = group.items.reduce((s, i) => s + (i.unitCost != null ? i.unitCost * i.qty : (i.totalCost ?? 0)), 0);
+      const totalSell = group.items.reduce((s, i) => s + (i.unitSell != null ? i.unitSell * i.qty : (i.totalSell ?? (i.unitCost != null ? i.unitCost * i.qty : (i.totalCost ?? 0)) * defaultMarkup)), 0);
       const parent = {
         description: group.name,
         category: 'panel',
@@ -407,6 +400,7 @@ function aggregateGroups(groups, config) {
         planned_cost_price: totalCost,
         actual_cost_price: totalCost,
         selling_price: totalSell,
+        panel_allocations: [],
         stock_qty: 0,
         order_status: 'not_ordered',
         delivery_status: 'not_delivered',
@@ -436,7 +430,9 @@ function aggregateGroups(groups, config) {
       continue;
     }
 
-    // Non-panel groups — aggregate by part_no within category if configured
+    // Non-panel groups — aggregate by part_no within category if configured,
+    // tracking which panels each aggregated part is allocated to.
+    const panelName = allocationPanelName(group, panelLookup, panelKeyword);
     for (const item of group.items) {
       const agg = shouldAggregate[item.category] !== false;
       if (agg && item.partNo) {
@@ -445,9 +441,12 @@ function aggregateGroups(groups, config) {
           existing.quantity += item.qty;
           if (item.totalCost != null) existing._total_cost_sum = (existing._total_cost_sum || 0) + item.totalCost;
           if (item.totalSell != null) existing._total_sell_sum = (existing._total_sell_sum || 0) + item.totalSell;
+          addAllocation(existing.panel_allocations, panelName, item.qty);
           continue;
         }
       }
+      const allocations = [];
+      addAllocation(allocations, panelName, item.qty);
       topLevel.push({
         description: item.description,
         category: item.category,
@@ -458,6 +457,7 @@ function aggregateGroups(groups, config) {
         planned_cost_price: item.unitCost,
         actual_cost_price: item.unitCost,
         selling_price: item.unitSell,
+        panel_allocations: allocations,
         _total_cost_sum: item.totalCost,
         _total_sell_sum: item.totalSell,
         stock_qty: 0,
@@ -533,15 +533,15 @@ Deno.serve(async (req) => {
       config = configs[0] || null;
     } catch (_) {}
     const synonymDict = config?.field_synonyms || {
-      description: ['description', 'item description', 'material description', 'details'],
-      part_no: ['part no', 'part number', 'model', 'p/n', 'material code'],
-      supplier: ['supplier', 'vendor', 'manufacturer', 'make', 'brand'],
-      qty: ['qty', 'quantity', 't.qty', 'total qty'],
-      unit: ['unit', 'uom'],
-      unit_cost: ['cost unit price', 'unit cost', 'buying price', 'net price tl per unit equipment', 'cost unit price equipment sar'],
-      total_cost: ['total cost equipment', 'total cost', 'extended cost', 'total cost equipment sar'],
-      unit_sell: ['unit price equipment', 'list price equipment sar', 'list price sar', 'unit price', 'list price'],
-      total_sell: ['total equipment sar', 'total selling', 'total price', 'amount'],
+      description: ['description', 'item description', 'material description', 'details', 'name'],
+      part_no: ['part no', 'part number', 'model', 'p/n', 'material code', 'model number', 'article no', 'item code'],
+      supplier: ['supplier', 'vendor', 'vendor equipment', 'manufacturer', 'make', 'brand'],
+      qty: ['t.qty', 't qty', 'total qty', 'total quantity', 'qty', 'quantity', 'q.ty', 'count'],
+      unit: ['unit', 'uom', 'unit of measure', 'u/m'],
+      unit_cost: ['cost unit price equipment sar', 'cost unit price equipment', 'cost unit price', 'unit cost', 'cost/unit', 'buying price', 'net pricetl per unit equipment', 'net price per unit'],
+      total_cost: ['total cost equipment', 'total cost', 'extended cost', 'total cost equipment usd', 'total cost equipment sar'],
+      unit_sell: ['unit price equipment sar', 'unit price equipment', 'selling price', 'list price', 'unit price', 'list price equipment sar', 'list price sar'],
+      total_sell: ['total equipment sar', 'total selling', 'total price', 'amount', 'total equipment'],
       markup_pct: ['materials markup to customer', 'material markup', 'markup'],
     };
 

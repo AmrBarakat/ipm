@@ -5,6 +5,7 @@
 
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 import * as XLSX from 'npm:xlsx@0.18.5';
+import { classifyItem, buildPanelLookup, allocationPanelName, addAllocation } from '../../shared/bomClassify.ts';
 
 function toNumber(v) {
   if (v == null || v === '') return null;
@@ -60,8 +61,6 @@ Deno.serve(async (req) => {
     } catch (_) {}
 
     const panelKeyword = config.panel_keyword || 'panel';
-    const networkKeywords = config.networking_keywords || ['switch', 'router', 'firewall', 'fiber', 'sfp', 'ethernet', 'patch panel'];
-    const softwareKeywords = config.software_keywords || ['license', 'licence', 'sql', 'scada', 'software'];
     const defaultMarkup = config.default_markup_factor || 1.37;
     const shouldAggregate = config.aggregate_by_category || {};
 
@@ -92,6 +91,8 @@ Deno.serve(async (req) => {
         continue;
       }
 
+      if (!currentGroup) { currentGroup = { name: '', isPanel: false, items: [] }; groups.push(currentGroup); }
+
       const descRaw = get(row, 'description', fieldMap);
       const partNoRaw = get(row, 'part_no', fieldMap);
       if (!descRaw && !partNoRaw) continue;
@@ -117,34 +118,23 @@ Deno.serve(async (req) => {
       }
       const totalSell = totalSellRaw ?? (unitSell != null ? unitSell * qty : null);
 
-      // Classify
-      const descLower = `${description} ${partNo}`.toLowerCase();
-      const noSupplier = !supplier || ['', '-', 'n/a', 'na'].includes(supplier.toLowerCase());
-      let category;
-      if (noSupplier && networkKeywords.some(kw => descLower.includes(kw.toLowerCase()))) {
-        category = 'network';
-      } else if (noSupplier) {
-        category = 'it_hardware';
-      } else if (softwareKeywords.some(kw => descLower.includes(kw.toLowerCase()))) {
-        category = 'software_license';
-      } else {
-        category = 'plc';
-      }
+      const category = classifyItem(description, partNo, currentGroup.name);
 
       const item = { description, partNo, supplier, qty, unit, unitCost, totalCost, unitSell, totalSell, totalSellRaw, category, markupUsed };
-
-      if (!currentGroup) { currentGroup = { name: '', isPanel: false, items: [] }; groups.push(currentGroup); }
       currentGroup.items.push(item);
     }
 
     // Build preview rows
     const previewRows = [];
     const panelParents = [];
+    const panelLookup = buildPanelLookup(groups);
 
     for (const group of groups) {
       if (group.isPanel && group.items.length > 0) {
-        const totalCost = group.items.reduce((s, i) => s + (i.totalCost ?? 0), 0);
-        const totalSell = group.items.reduce((s, i) => s + (i.totalSell ?? (i.totalCost ?? 0) * defaultMarkup), 0);
+        // Panel parent pricing = sum of child (unit cost × qty), not the
+        // total-cost column (which may be in a different currency).
+        const totalCost = group.items.reduce((s, i) => s + (i.unitCost != null ? i.unitCost * i.qty : (i.totalCost ?? 0)), 0);
+        const totalSell = group.items.reduce((s, i) => s + (i.unitSell != null ? i.unitSell * i.qty : (i.totalSell ?? (i.unitCost != null ? i.unitCost * i.qty : (i.totalCost ?? 0)) * defaultMarkup)), 0);
         const parent = {
           preview_id: `panel_${previewRows.length}`,
           description: group.name,
@@ -155,7 +145,8 @@ Deno.serve(async (req) => {
           unit: 'set',
           planned_cost_price: totalCost,
           actual_cost_price: totalCost,
-          selling_price: totalSell > 0 ? totalSell / 1 : null,
+          selling_price: totalSell > 0 ? totalSell : null,
+          panel_allocations: [],
           stock_qty: 0,
           order_status: 'not_ordered',
           delivery_status: 'not_delivered',
@@ -189,7 +180,8 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // Non-panel: aggregate by part_no within category
+      // Non-panel: aggregate by part_no within category, tracking panel allocations
+      const panelName = allocationPanelName(group, panelLookup, panelKeyword);
       for (const item of group.items) {
         const agg = shouldAggregate[item.category] !== false;
         if (agg && item.partNo && item.partNo !== item.description) {
@@ -206,9 +198,12 @@ Deno.serve(async (req) => {
               existing.actual_cost_price = existing.planned_cost_price;
             }
             existing.quantity = newQty;
+            addAllocation(existing.panel_allocations, panelName, item.qty);
             continue;
           }
         }
+        const allocations = [];
+        addAllocation(allocations, panelName, item.qty);
         previewRows.push({
           preview_id: `item_${previewRows.length}`,
           description: item.description,
@@ -220,6 +215,7 @@ Deno.serve(async (req) => {
           planned_cost_price: item.unitCost,
           actual_cost_price: item.unitCost,
           selling_price: item.unitSell,
+          panel_allocations: allocations,
           stock_qty: 0,
           order_status: 'not_ordered',
           delivery_status: 'not_delivered',
