@@ -4,11 +4,11 @@ import { base44 } from '@/api/base44Client';
 import { formatCurrency, TYPE_LABELS } from '@/lib/constants';
 import { Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   LineChart, Line, ComposedChart, ResponsiveContainer,
-  PieChart, Pie, Cell } from
+  PieChart, Pie, Cell, Area, ReferenceLine } from
 'recharts';
 import {
   TrendingUp, DollarSign, Wallet,
-  ReceiptText, ArrowUpCircle, ArrowDownCircle, Activity } from
+  ReceiptText, ArrowUpCircle, ArrowDownCircle, Activity, Package } from
 'lucide-react';
 
 const PIE_COLORS = ['#f59e0b', '#3b82f6', '#10b981', '#8b5cf6', '#ef4444', '#06b6d4'];
@@ -255,6 +255,49 @@ export default function FinancialDashboard({ projects }) {
     return String(v);
   };
 
+  // ── Budget Health: BOM planned-cost baseline vs actual payments ─────────
+  // Flat material budget (sum of BOMItem planned_cost × qty, excl. service &
+  // panel children) taken from portfolioSummary, against cumulative collections
+  // and actual invoicing over time (month buckets, clamped to last 12 months).
+  const totalBomPlanned = useMemo(() =>
+    projects.filter((p) => filteredProjectIds.has(p.id))
+      .reduce((s, p) => s + (summary?.totalsByProject?.[p.id]?.bomPlannedCost || 0), 0),
+    [projects, filteredProjectIds, summary]);
+
+  const budgetHealth = useMemo(() => {
+    const collectedByMonth = {};
+    const invoicedByMonth = {};
+    for (const c of fCollections) {
+      const d = (c.received_date || '').slice(0, 7);
+      if (d) collectedByMonth[d] = (collectedByMonth[d] || 0) + (Number(c.amount) || 0);
+    }
+    for (const i of fInvoices) {
+      if (!['invoiced', 'paid', 'partial', 'overdue'].includes(i.status)) continue;
+      const d = (i.actual_invoice_date || i.planned_date || '').slice(0, 7);
+      if (d) invoicedByMonth[d] = (invoicedByMonth[d] || 0) + (Number(i.actual_amount || i.planned_amount) || 0);
+    }
+    const allMonths = [...new Set([...Object.keys(collectedByMonth), ...Object.keys(invoicedByMonth)])].sort();
+    if (allMonths.length === 0) return { data: [], hasActivity: false };
+    let cumCol = 0, cumInv = 0;
+    const full = allMonths.map((mk) => {
+      cumCol += collectedByMonth[mk] || 0;
+      cumInv += invoicedByMonth[mk] || 0;
+      const [y, mo] = mk.split('-').map(Number);
+      return {
+        period: new Date(y, mo - 1, 1).toLocaleDateString('en', { month: 'short', year: '2-digit' }),
+        'Cum Collected': Math.round(cumCol),
+        'Cum Invoiced': Math.round(cumInv),
+      };
+    });
+    // Cumulative totals already include earlier months; only display last 12.
+    const data = full.length > 12 ? full.slice(full.length - 12) : full;
+    return { data, hasActivity: true };
+  }, [fCollections, fInvoices]);
+
+  const coveragePct = totalBomPlanned > 0 ? totalCashIn / totalBomPlanned : null;
+  const coverageColor = coveragePct == null ? null : coveragePct >= 0.9 ? 'green' : coveragePct >= 0.6 ? 'amber' : 'red';
+  const coverageValue = coveragePct == null ? '—' : `${Math.round(coveragePct * 100)}%`;
+
   if (loading) return (
     <div className="flex justify-center py-16">
       <div className="w-8 h-8 border-4 border-slate-200 border-t-amber-500 rounded-full animate-spin" />
@@ -334,11 +377,26 @@ export default function FinancialDashboard({ projects }) {
       
 
       {allKeys.length === 0 ?
-      <div className="bg-white rounded-lg shadow-sm p-12 text-center text-slate-400">
+      <div className="space-y-6">
+        {totalBomPlanned > 0 && (
+          <BudgetHealthSection
+            totalBomPlanned={totalBomPlanned}
+            totalInvoiced={totalActualInvoiced}
+            totalCollected={totalCashIn}
+            coverageValue={coverageValue}
+            coverageColor={coverageColor}
+            data={budgetHealth.data}
+            hasActivity={budgetHealth.hasActivity}
+            currency={currency}
+            fmt={fmt}
+          />
+        )}
+        <div className="bg-white rounded-lg shadow-sm p-12 text-center text-slate-400">
           <Activity className="w-10 h-10 mx-auto mb-2 opacity-30" />
           <p className="text-sm">No financial data available for the selected filters.</p>
           <p className="text-xs mt-1">Add invoices, collections, and expenses to projects to populate these charts.</p>
-        </div> :
+        </div>
+      </div> :
 
       <div key={`charts-${period}-${view}`} className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           {/* Chart 1 — Booking & Invoicing (Plan vs Actual) */}
@@ -389,6 +447,19 @@ export default function FinancialDashboard({ projects }) {
               </LineChart>
             </ResponsiveContainer>
           </ChartCard>
+
+          {/* Chart 3b — Budget Health (Planned Cost vs Payments) */}
+          <BudgetHealthSection
+            totalBomPlanned={totalBomPlanned}
+            totalInvoiced={totalActualInvoiced}
+            totalCollected={totalCashIn}
+            coverageValue={coverageValue}
+            coverageColor={coverageColor}
+            data={budgetHealth.data}
+            hasActivity={budgetHealth.hasActivity}
+            currency={currency}
+            fmt={fmt}
+          />
 
           {/* Chart 4 — Booking by Project Type */}
           <ChartCard title="Booking by Project Type" subtitle="Portfolio contract value mix">
@@ -454,4 +525,44 @@ function ChartCard({ title, subtitle, children }) {
       {children}
     </div>);
 
+}
+
+// Budget Health — BOM planned-cost baseline (flat reference line) overlaid with
+// cumulative collections (area) and cumulative actual invoiced (line). Distinct
+// from "Cash In vs Cash Out" (which uses expenses): this is BOM material
+// commitment vs money actually received. Full-width grid item (xl:col-span-2).
+function BudgetHealthSection({ totalBomPlanned, totalInvoiced, totalCollected, coverageValue, coverageColor, data, hasActivity, currency, fmt }) {
+  return (
+    <div className="xl:col-span-2 space-y-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <KpiCard label="BOM Planned Cost" value={formatCurrency(totalBomPlanned, currency)} icon={<Package className="w-5 h-5" />} color="border-slate-500" sub="Material budget baseline" />
+        <KpiCard label="Total Invoiced (Act)" value={formatCurrency(totalInvoiced, currency)} icon={<ReceiptText className="w-5 h-5" />} color="border-purple-500" />
+        <KpiCard label="Total Collected" value={formatCurrency(totalCollected, currency)} icon={<ArrowUpCircle className="w-5 h-5" />} color="border-emerald-500" />
+        <KpiCard label="Coverage" value={coverageValue} icon={<Wallet className="w-5 h-5" />} color="border-amber-500" highlight={coverageColor} sub="Collected / BOM Planned" />
+      </div>
+      <ChartCard title="Budget Health — Planned Cost vs Payments" subtitle="Cumulative collections & invoicing against the BOM material-cost baseline">
+        {!hasActivity ? (
+          <div className="flex flex-col items-center justify-center h-[280px] text-center">
+            <Activity className="w-8 h-8 text-slate-300 mb-2" />
+            <p className="text-sm text-slate-500">No invoice or collection activity in range.</p>
+            <p className="text-xs text-slate-400 mt-1">BOM planned cost baseline: <strong className="text-slate-600">{formatCurrency(totalBomPlanned, currency)}</strong></p>
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={280}>
+            <ComposedChart data={data} margin={{ top: 4, right: 16, left: 0, bottom: 40 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <XAxis dataKey="period" tick={{ fontSize: 10, fill: '#94a3b8' }} angle={-30} textAnchor="end" interval={0} />
+              <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={fmt} width={55} />
+              <Tooltip formatter={(v) => formatCurrency(v, currency)} contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e2e8f0' }} />
+              <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
+              <ReferenceLine y={totalBomPlanned} stroke="#ef4444" strokeDasharray="6 4"
+                label={{ value: 'BOM Planned Cost', position: 'insideTopRight', fontSize: 10, fill: '#ef4444' }} />
+              <Area dataKey="Cum Collected" type="monotone" stroke="#10b981" fill="rgba(16,185,129,0.18)" strokeWidth={2} />
+              <Line dataKey="Cum Invoiced" type="monotone" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 2 }} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        )}
+      </ChartCard>
+    </div>
+  );
 }

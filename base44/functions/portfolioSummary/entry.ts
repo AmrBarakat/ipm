@@ -25,13 +25,14 @@ Deno.serve(async (req) => {
     try { user = await base44.auth.me(); } catch (_) { user = null; }
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const [projects, invoices, collections, expenses, purchaseOrders, milestones] = await Promise.all([
+    const [projects, invoices, collections, expenses, purchaseOrders, milestones, bomItems] = await Promise.all([
       base44.asServiceRole.entities.Project.list('-updated_date', 5000),
       base44.asServiceRole.entities.Invoice.filter({}, '-planned_date', 2000),
       base44.asServiceRole.entities.Collection.filter({}, '-received_date', 2000),
       base44.asServiceRole.entities.Expense.filter({}, '-planned_date', 2000),
       base44.asServiceRole.entities.PurchaseOrder.filter({}, '-created_date', 2000),
       base44.asServiceRole.entities.Milestone.filter({}, '-created_date', 2000),
+      base44.asServiceRole.entities.BOMItem.filter({}, '-created_date', 5000),
     ]);
 
     const today = new Date().toISOString().slice(0, 10);
@@ -55,6 +56,7 @@ Deno.serve(async (req) => {
         milestoneCompleted: 0,
         milestoneOverdue: 0,
         milestoneProgress: 0,
+        bomPlannedCost: 0,
       };
     }
 
@@ -94,6 +96,16 @@ Deno.serve(async (req) => {
         (po.expected_delivery_date && po.expected_delivery_date < today &&
           po.status !== 'delivered' && po.status !== 'cancelled');
       if (overdue) t.overduePoCount += 1;
+    }
+
+    // BOM planned cost per project — material commitment baseline.
+    // Excludes panel child rows (parent_id set) and service line items.
+    for (const b of bomItems) {
+      const t = totalsByProject[b.project_id];
+      if (!t) continue;
+      if (b.parent_id) continue;
+      if (b.category === 'service') continue;
+      t.bomPlannedCost += (Number(b.planned_cost_price) || Number(b.cost_price) || 0) * (Number(b.quantity) || 1);
     }
 
     for (const ms of milestones) {
@@ -143,6 +155,7 @@ Deno.serve(async (req) => {
       milestoneProgress: portMsTotalWeight > 0
         ? Math.round((portMsCompletedWeight / portMsTotalWeight) * 100)
         : 0,
+      bomPlannedCost: 0,
     };
     for (const id of Object.keys(totalsByProject)) {
       const t = totalsByProject[id];
@@ -156,6 +169,7 @@ Deno.serve(async (req) => {
       portfolioTotals.milestoneTotal += t.milestoneTotal;
       portfolioTotals.milestoneCompleted += t.milestoneCompleted;
       portfolioTotals.milestoneOverdue += t.milestoneOverdue;
+      portfolioTotals.bomPlannedCost += t.bomPlannedCost;
     }
 
     const projectsCompact = projects.map((p) => ({
