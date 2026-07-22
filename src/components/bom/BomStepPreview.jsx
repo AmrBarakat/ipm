@@ -137,7 +137,6 @@ export default function BomStepPreview({ fileUrl, profile, onPreviewReady, previ
                 <th className="px-2 py-2.5 text-right w-14">QTY</th>
                 <th className="px-2 py-2.5 text-right w-14">STOCK</th>
                 <th className="px-2 py-2.5 text-right w-14">ORD QTY</th>
-                <th className="px-2 py-2.5 text-left w-14">UNIT</th>
                 <th className="px-2 py-2.5 text-right w-24">UNIT COST</th>
                 <th className="px-2 py-2.5 text-right w-24">TOTAL PLANNED</th>
                 <th className="px-2 py-2.5 text-right w-24">UNIT SELL</th>
@@ -151,7 +150,7 @@ export default function BomStepPreview({ fileUrl, profile, onPreviewReady, previ
                 const catSell = catRows.reduce((s, r) => s + ((r.selling_price ?? 0) * (r.quantity ?? 1)), 0);
                 return [
                   <tr key={`hdr_${cat}`} className="bg-slate-100 border-t-2 border-slate-300">
-                    <td colSpan={14} className="px-4 py-1.5">
+                    <td colSpan={13} className="px-4 py-1.5">
                       <div className="flex items-center gap-4 flex-wrap">
                         <span className="font-bold text-slate-700 text-xs uppercase tracking-wide">{CATEGORY_LABELS[cat] || cat} · {catRows.length} items</span>
                         {catCost > 0 && <span className="text-xs text-slate-500">Planned: <b className="text-slate-700">SAR {fmt(catCost)}</b></span>}
@@ -192,7 +191,6 @@ export default function BomStepPreview({ fileUrl, profile, onPreviewReady, previ
                         <td className="px-1 py-1.5"><input type="number" min="0" value={row.quantity ?? ''} onChange={e => updateRow(row.preview_id, 'quantity', Number(e.target.value))} className={INP_NUM} /></td>
                         <td className="px-1 py-1.5"><input type="number" min="0" value={row.stock_qty ?? 0} onChange={e => updateRow(row.preview_id, 'stock_qty', Number(e.target.value))} className={INP_NUM} /></td>
                         <td className="px-2 py-2 text-right font-semibold text-orange-600">{orderQty}</td>
-                        <td className="px-1 py-1.5"><input value={row.unit || ''} onChange={e => updateRow(row.preview_id, 'unit', e.target.value)} className={INP} /></td>
                         <td className="px-1 py-1.5"><input type="number" step="0.01" value={row.planned_cost_price ?? ''} onChange={e => updateRow(row.preview_id, 'planned_cost_price', Number(e.target.value))} className={INP_NUM} /></td>
                         <td className="px-2 py-2 text-right font-semibold text-slate-700">{fmt(totalPlanned)}</td>
                         <td className="px-1 py-1.5"><input type="number" step="0.01" value={row.selling_price ?? ''} onChange={e => updateRow(row.preview_id, 'selling_price', Number(e.target.value))} className={INP_NUM} /></td>
@@ -206,7 +204,7 @@ export default function BomStepPreview({ fileUrl, profile, onPreviewReady, previ
                       // Expanded panel children
                       isExpanded && children.length > 0 && (
                         <tr key={`${row.preview_id}_children`}>
-                          <td colSpan={14} className="p-0">
+                          <td colSpan={13} className="p-0">
                             <table className="w-full text-xs bg-orange-50/60 border-t border-orange-100">
                               <thead className="bg-orange-100 text-orange-800">
                                 <tr>
@@ -238,7 +236,7 @@ export default function BomStepPreview({ fileUrl, profile, onPreviewReady, previ
                   }),
                   // Subtotal row
                   <tr key={`sub_${cat}`} className="border-t border-slate-200 bg-slate-50">
-                    <td colSpan={10} className="px-4 py-1.5 text-xs text-slate-500 font-semibold">Subtotal ({catRows.length})</td>
+                    <td colSpan={9} className="px-4 py-1.5 text-xs text-slate-500 font-semibold">Subtotal ({catRows.length})</td>
                     <td className="px-2 py-1.5 text-right text-xs font-semibold text-slate-700">{fmt(catCost)}</td>
                     <td className="px-2 py-1.5"></td>
                     <td className="px-2 py-1.5 text-right text-xs font-semibold text-emerald-700">{fmt(catSell)}</td>
@@ -249,7 +247,7 @@ export default function BomStepPreview({ fileUrl, profile, onPreviewReady, previ
 
               {/* Grand total */}
               <tr className="border-t-2 border-slate-400 bg-slate-800 text-white">
-                <td colSpan={10} className="px-4 py-2 text-sm font-bold">GRAND TOTAL · {topLevel.length} items</td>
+                <td colSpan={9} className="px-4 py-2 text-sm font-bold">GRAND TOTAL · {topLevel.length} items</td>
                 <td className="px-2 py-2 text-right font-bold text-amber-300">{fmt(grandCost)}</td>
                 <td className="px-2 py-2"></td>
                 <td className="px-2 py-2 text-right font-bold text-emerald-300">{fmt(grandSell)}</td>

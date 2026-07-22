@@ -60,10 +60,30 @@
       "type": "string",
       "default": "pcs"
     },
+    "list_price": {
+      "type": "number",
+      "default": 0,
+      "description": "Per-unit vendor list price (before discount)"
+    },
+    "discount_pct": {
+      "type": "number",
+      "default": 0,
+      "description": "Vendor discount as a fraction 0\u20131"
+    },
+    "transport_pct": {
+      "type": "number",
+      "default": 0,
+      "description": "Transport & customs uplift as a fraction 0\u20131"
+    },
+    "margin_pct": {
+      "type": "number",
+      "default": 0.37,
+      "description": "Customer margin as a fraction (selling = cost \u00d7 (1 + margin))"
+    },
     "planned_cost_price": {
       "type": "number",
       "default": 0,
-      "description": "Per-unit planned cost"
+      "description": "Per-unit planned cost = list \u00d7 (1\u2212discount) \u00d7 (1+transport)"
     },
     "actual_cost_price": {
       "type": "number",
@@ -78,7 +98,7 @@
     "selling_price": {
       "type": "number",
       "default": 0,
-      "description": "Per-unit selling price"
+      "description": "Per-unit selling price = planned_cost_price \u00d7 (1 + margin_pct)"
     },
     "currency": {
       "type": "string",

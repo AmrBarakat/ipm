@@ -101,26 +101,38 @@ Deno.serve(async (req) => {
       const partNo = String(partNoRaw ?? description).trim();
       const supplier = String(get(row, 'supplier', fieldMap) ?? '').trim();
       const qty = toNumber(get(row, 'qty', fieldMap)) ?? 1;
-      const unit = String(get(row, 'unit', fieldMap) ?? 'pcs').trim() || 'pcs';
-      const unitCost = toNumber(get(row, 'unit_cost', fieldMap));
+      const listPrice = toNumber(get(row, 'list_price', fieldMap));
+      const discountPct = toNumber(get(row, 'discount_pct', fieldMap)) ?? 0;
+      const transportPct = toNumber(get(row, 'transport_pct', fieldMap)) ?? 0;
+      const marginPct = toNumber(get(row, 'margin_pct', fieldMap));
+      const mappedUnitCost = toNumber(get(row, 'unit_cost', fieldMap));
       const totalCostRaw = toNumber(get(row, 'total_cost', fieldMap));
-      const totalCost = totalCostRaw ?? (unitCost != null ? unitCost * qty : null);
+      let unitCost = mappedUnitCost;
       let unitSell = toNumber(get(row, 'unit_sell', fieldMap));
       const totalSellRaw = toNumber(get(row, 'total_sell', fieldMap));
-      const markupPct = toNumber(get(row, 'markup_pct', fieldMap));
 
-      let markupUsed = false;
-      if (unitSell == null && unitCost != null) {
-        const factor = markupPct != null ? 1 + markupPct : defaultMarkup;
+      // Commercial chain: net = list × (1−disc); cost = net × (1+transport); sell = cost × (1+margin)
+      let chainUsed = false;
+      if (listPrice != null) {
+        chainUsed = true;
+        const net = listPrice * (1 - discountPct);
+        const cost = net * (1 + transportPct);
+        unitCost = cost;
+        unitSell = cost * (1 + (marginPct ?? 0.37));
+        if (mappedUnitCost != null && Math.abs(mappedUnitCost - cost) > Math.abs(cost) * 0.02) {
+          warnings.push(`"${partNo || description}": computed cost ${cost.toFixed(2)} differs from file cost column ${mappedUnitCost.toFixed(2)} (>2%) — using computed value`);
+        }
+      } else if (unitSell == null && unitCost != null) {
+        const factor = marginPct != null ? 1 + marginPct : defaultMarkup;
         unitSell = unitCost * factor;
-        markupUsed = true;
         if (!fieldMap.unit_sell) warnings.push(`"${description}": sell price defaulted from cost × ${factor.toFixed(2)} (not in file)`);
       }
+      const totalCost = chainUsed ? (unitCost != null ? unitCost * qty : null) : (totalCostRaw ?? (unitCost != null ? unitCost * qty : null));
       const totalSell = totalSellRaw ?? (unitSell != null ? unitSell * qty : null);
 
       const category = classifyItem(description, partNo, currentGroup.name);
 
-      const item = { description, partNo, supplier, qty, unit, unitCost, totalCost, unitSell, totalSell, totalSellRaw, category, markupUsed };
+      const item = { description, partNo, supplier, qty, unit: 'pcs', listPrice, discountPct, transportPct, marginPct, unitCost, totalCost, unitSell, totalSell, totalSellRaw, category, chainUsed };
       currentGroup.items.push(item);
     }
 
@@ -143,6 +155,7 @@ Deno.serve(async (req) => {
           manufacturer_part_number: '',
           quantity: 1,
           unit: 'set',
+          list_price: 0, discount_pct: 0, transport_pct: 0,
           planned_cost_price: totalCost,
           actual_cost_price: totalCost,
           selling_price: totalSell > 0 ? totalSell : null,
@@ -168,6 +181,10 @@ Deno.serve(async (req) => {
             manufacturer_part_number: c.partNo,
             quantity: c.qty,
             unit: c.unit,
+            list_price: c.listPrice ?? 0,
+            discount_pct: c.discountPct ?? 0,
+            transport_pct: c.transportPct ?? 0,
+            margin_pct: c.marginPct,
             planned_cost_price: c.unitCost,
             actual_cost_price: c.unitCost,
             selling_price: c.unitSell,
@@ -212,6 +229,10 @@ Deno.serve(async (req) => {
           manufacturer_part_number: item.partNo,
           quantity: item.qty,
           unit: item.unit,
+          list_price: item.listPrice ?? 0,
+          discount_pct: item.discountPct ?? 0,
+          transport_pct: item.transportPct ?? 0,
+          margin_pct: item.marginPct,
           planned_cost_price: item.unitCost,
           actual_cost_price: item.unitCost,
           selling_price: item.unitSell,

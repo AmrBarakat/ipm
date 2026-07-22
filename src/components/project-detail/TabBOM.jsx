@@ -120,6 +120,28 @@ export default function TabBOM({ projectId }) {
     saveTimers.current[item.id] = setTimeout(() => saveItem(updated), 600);
   }
 
+  // Inline edit of a commercial-chain field (list_price / discount_pct /
+  // transport_pct / margin_pct). Recomputes planned_cost_price + selling_price
+  // from the chain and saves everything in one debounced update.
+  function handlePricingBlur(item, field, parsedValue) {
+    const updated = { ...item, [field]: parsedValue };
+    const lp = Number(updated.list_price) || 0;
+    if (lp > 0) {
+      const disc = Number(updated.discount_pct) || 0;
+      const trans = Number(updated.transport_pct) || 0;
+      const margRaw = updated.margin_pct;
+      const marg = (margRaw != null && margRaw !== '' && !isNaN(Number(margRaw))) ? Number(margRaw) : 0.37;
+      const net = lp * (1 - disc);
+      const cost = net * (1 + trans);
+      updated.planned_cost_price = cost;
+      updated.actual_cost_price = cost;
+      updated.selling_price = cost * (1 + marg);
+    }
+    setItems(prev => prev.map(i => i.id === item.id ? updated : i));
+    if (saveTimers.current[item.id]) clearTimeout(saveTimers.current[item.id]);
+    saveTimers.current[item.id] = setTimeout(() => saveItem(updated), 600);
+  }
+
   // Selection helpers
   function toggleSelect(id) {
     setSelectedIds(prev => {
@@ -413,7 +435,6 @@ export default function TabBOM({ projectId }) {
           <input value={form.manufacturer_part_number} onChange={e => setForm(f => ({ ...f, manufacturer_part_number: e.target.value }))} placeholder="Part Number" className={addInp} />
           <input type="number" value={form.quantity} onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))} placeholder="Qty" className={addInp} min="0" />
           <input type="number" value={form.stock_qty} onChange={e => setForm(f => ({ ...f, stock_qty: e.target.value }))} placeholder="Stock Qty" className={addInp} min="0" />
-          <input value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value }))} placeholder="Unit" className={addInp} />
           <input type="number" value={form.planned_cost_price} onChange={e => setForm(f => ({ ...f, planned_cost_price: e.target.value }))} placeholder="Planned Cost/Unit" className={addInp} min="0" />
           <input type="number" value={form.actual_cost_price} onChange={e => setForm(f => ({ ...f, actual_cost_price: e.target.value }))} placeholder="Actual Cost/Unit" className={addInp} min="0" />
           <input type="number" value={form.selling_price} onChange={e => setForm(f => ({ ...f, selling_price: e.target.value }))} placeholder="Selling Price" className={addInp} min="0" />
@@ -456,7 +477,6 @@ export default function TabBOM({ projectId }) {
             qty: i.quantity,
             stock_qty: i.stock_qty || 0,
             order_qty: orderQty(i),
-            unit: i.unit,
             planned_cost_unit: Number(i.planned_cost_price) || Number(i.cost_price) || 0,
             actual_cost_unit: Number(i.actual_cost_price) || 0,
             total_planned: (Number(i.planned_cost_price) || Number(i.cost_price) || 0) * (Number(i.quantity) || 1),
@@ -522,6 +542,9 @@ export default function TabBOM({ projectId }) {
                     <th className="px-3 py-3 text-right">Qty</th>
                     <th className="px-3 py-3 text-right">Stock</th>
                     <th className="px-3 py-3 text-right">Order Qty</th>
+                    <th className="px-3 py-3 text-right">List Price</th>
+                    <th className="px-3 py-3 text-right">Disc %</th>
+                    <th className="px-3 py-3 text-right">Margin %</th>
                     <th className="px-3 py-3 text-right">Planned Cost</th>
                     <th className="px-3 py-3 text-right">Actual Cost</th>
                     <th className="px-3 py-3 text-right">Sell Value</th>
@@ -613,16 +636,22 @@ export default function TabBOM({ projectId }) {
                                     <input className={inp} value={item.supplier || ''} onChange={e => updateField(item.id, 'supplier', e.target.value)} onBlur={e => handleBlur(item, 'supplier', e.target.value)} placeholder="Supplier" />
                                   </td>
                                   <td className="px-1 py-1 text-right">
-                                    <div className="flex gap-1 justify-end items-center">
-                                      <input type="number" className={inp + ' text-right'} style={{ width: 55 }} value={item.quantity ?? 1} onChange={e => updateField(item.id, 'quantity', e.target.value)} onBlur={e => handleBlur(item, 'quantity', e.target.value)} min="0" />
-                                      <input className={inp} style={{ width: 40 }} value={item.unit || 'pcs'} onChange={e => updateField(item.id, 'unit', e.target.value)} onBlur={e => handleBlur(item, 'unit', e.target.value)} />
-                                    </div>
+                                    <input type="number" className={inp + ' text-right'} style={{ width: 55 }} value={item.quantity ?? 1} onChange={e => updateField(item.id, 'quantity', e.target.value)} onBlur={e => handleBlur(item, 'quantity', e.target.value)} min="0" />
                                   </td>
                                   <td className="px-1 py-1 text-right">
                                     <input type="number" className={inp + ' text-right'} style={{ width: 65 }} value={item.stock_qty ?? 0} onChange={e => updateField(item.id, 'stock_qty', e.target.value)} onBlur={e => handleBlur(item, 'stock_qty', e.target.value)} min="0" />
                                   </td>
                                   <td className="px-3 py-2 text-right">
                                     <span className={`font-semibold text-xs ${oQty > 0 ? 'text-amber-700' : 'text-emerald-600'}`}>{oQty}</span>
+                                  </td>
+                                  <td className="px-1 py-1 text-right">
+                                    <input type="number" className={inp + ' text-right'} style={{ width: 80 }} value={item.list_price ?? ''} onChange={e => updateField(item.id, 'list_price', e.target.value)} onBlur={e => handlePricingBlur(item, 'list_price', Number(e.target.value) || 0)} min="0" placeholder="0" />
+                                  </td>
+                                  <td className="px-1 py-1 text-right">
+                                    <input type="number" className={inp + ' text-right'} style={{ width: 56 }} value={(Number(item.discount_pct) || 0) * 100} onChange={e => updateField(item.id, 'discount_pct', Number(e.target.value) / 100)} onBlur={e => handlePricingBlur(item, 'discount_pct', Number(e.target.value) / 100)} min="0" step="0.1" placeholder="0" />
+                                  </td>
+                                  <td className="px-1 py-1 text-right">
+                                    <input type="number" className={inp + ' text-right'} style={{ width: 56 }} value={(Number(item.margin_pct) || 0) * 100} onChange={e => updateField(item.id, 'margin_pct', Number(e.target.value) / 100)} onBlur={e => handlePricingBlur(item, 'margin_pct', Number(e.target.value) / 100)} min="0" step="0.1" placeholder="0" />
                                   </td>
                                   <td className="px-1 py-1 text-right">
                                     <div className="flex flex-col items-end">
@@ -670,7 +699,7 @@ export default function TabBOM({ projectId }) {
                                 // Panel children expanded sub-table
                                 isPanel && isPanelExpanded && panelChildren.length > 0 && (
                                   <tr key={`${item.id}_children`}>
-                                    <td colSpan={19} className="p-0">
+                                    <td colSpan={22} className="p-0">
                                       <div className="bg-orange-50/60 border-t border-orange-100 pl-8">
                                         <table className="w-full text-xs">
                                           <thead className="bg-orange-100 text-orange-800">
@@ -713,7 +742,7 @@ export default function TabBOM({ projectId }) {
                           </tbody>
                           <tfoot className="bg-slate-50 border-t border-slate-200 text-xs font-semibold text-slate-600">
                             <tr>
-                              <td colSpan={7} className="px-3 py-2">Subtotal ({catItems.length})</td>
+                              <td colSpan={10} className="px-3 py-2">Subtotal ({catItems.length})</td>
                               <td className="px-3 py-2"></td>
                               <td className="px-3 py-2"></td>
                               <td className="px-3 py-2"></td>

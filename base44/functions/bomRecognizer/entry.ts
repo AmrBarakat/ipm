@@ -347,24 +347,40 @@ function extractRows(sheetData, profile, config) {
     const partNo = String(partNoRaw ?? '').trim();
     const supplier = String(get(row, 'supplier') ?? '').trim();
     const qty = toNumber(get(row, 'qty')) ?? 1;
-    const unit = String(get(row, 'unit') ?? 'pcs').trim() || 'pcs';
-    const unitCost = toNumber(get(row, 'unit_cost'));
-    const totalCost = toNumber(get(row, 'total_cost')) ?? (unitCost != null ? unitCost * qty : null);
+    const listPrice = toNumber(get(row, 'list_price'));
+    const discountPct = toNumber(get(row, 'discount_pct')) ?? 0;
+    const transportPct = toNumber(get(row, 'transport_pct')) ?? 0;
+    const marginPct = toNumber(get(row, 'margin_pct'));
+    const mappedUnitCost = toNumber(get(row, 'unit_cost'));
+    const totalCostRaw = toNumber(get(row, 'total_cost'));
+    let unitCost = mappedUnitCost;
     let unitSell = toNumber(get(row, 'unit_sell'));
-    const totalSell = toNumber(get(row, 'total_sell')) ?? (unitSell != null ? unitSell * qty : null);
-    const markupPct = toNumber(get(row, 'markup_pct'));
 
-    // Derive sell from cost if missing
-    if (unitSell == null && unitCost != null) {
-      const factor = markupPct != null ? 1 + markupPct : defaultMarkup;
+    // Commercial chain: net = list × (1−disc); cost = net × (1+transport); sell = cost × (1+margin)
+    let chainUsed = false;
+    if (listPrice != null) {
+      chainUsed = true;
+      const net = listPrice * (1 - discountPct);
+      const cost = net * (1 + transportPct);
+      unitCost = cost;
+      unitSell = cost * (1 + (marginPct ?? 0.37));
+      if (mappedUnitCost != null && Math.abs(mappedUnitCost - cost) > Math.abs(cost) * 0.02) {
+        warnings.push(`"${partNo || description}": computed cost ${cost.toFixed(2)} differs from file cost column ${mappedUnitCost.toFixed(2)} (>2%) — using computed value`);
+      }
+    } else if (unitSell == null && unitCost != null) {
+      const factor = marginPct != null ? 1 + marginPct : defaultMarkup;
       unitSell = unitCost * factor;
       warnings.push(`Selling price for "${description}" defaulted using markup factor ${factor.toFixed(2)} (not read from file)`);
     }
+    const totalCost = chainUsed ? (unitCost != null ? unitCost * qty : null) : (totalCostRaw ?? (unitCost != null ? unitCost * qty : null));
+    const totalSell = toNumber(get(row, 'total_sell')) ?? (unitSell != null ? unitSell * qty : null);
 
     const category = classifyItem(description, partNo, currentGroup.name);
 
     const item = {
-      description, partNo, supplier, qty, unit, unitCost, totalCost, unitSell, totalSell,
+      description, partNo, supplier, qty, unit: 'pcs',
+      listPrice, discountPct, transportPct, marginPct,
+      unitCost, totalCost, unitSell, totalSell,
       category, raw_row: row,
     };
     currentGroup.items.push(item);
@@ -397,6 +413,7 @@ function aggregateGroups(groups, config) {
         manufacturer_part_number: '',
         quantity: 1,
         unit: 'set',
+        list_price: 0, discount_pct: 0, transport_pct: 0,
         planned_cost_price: totalCost,
         actual_cost_price: totalCost,
         selling_price: totalSell,
@@ -418,6 +435,10 @@ function aggregateGroups(groups, config) {
           manufacturer_part_number: c.partNo,
           quantity: c.qty,
           unit: c.unit,
+          list_price: c.listPrice ?? 0,
+          discount_pct: c.discountPct ?? 0,
+          transport_pct: c.transportPct ?? 0,
+          margin_pct: c.marginPct,
           planned_cost_price: c.unitCost,
           actual_cost_price: c.unitCost,
           selling_price: c.unitSell,
@@ -454,6 +475,10 @@ function aggregateGroups(groups, config) {
         manufacturer_part_number: item.partNo,
         quantity: item.qty,
         unit: item.unit,
+        list_price: item.listPrice ?? 0,
+        discount_pct: item.discountPct ?? 0,
+        transport_pct: item.transportPct ?? 0,
+        margin_pct: item.marginPct,
         planned_cost_price: item.unitCost,
         actual_cost_price: item.unitCost,
         selling_price: item.unitSell,
@@ -537,12 +562,14 @@ Deno.serve(async (req) => {
       part_no: ['part no', 'part number', 'model', 'p/n', 'material code', 'model number', 'article no', 'item code'],
       supplier: ['supplier', 'vendor', 'vendor equipment', 'manufacturer', 'make', 'brand'],
       qty: ['t.qty', 't qty', 'total qty', 'total quantity', 'qty', 'quantity', 'q.ty', 'count'],
-      unit: ['unit', 'uom', 'unit of measure', 'u/m'],
+      list_price: ['list price equipment, sar', 'list price equipment', 'list price'],
+      discount_pct: ['discount to ehs material', 'discount'],
+      transport_pct: ['transport and customs per unit', 'transport'],
       unit_cost: ['cost unit price equipment sar', 'cost unit price equipment', 'cost unit price', 'unit cost', 'cost/unit', 'buying price', 'net pricetl per unit equipment', 'net price per unit'],
       total_cost: ['total cost equipment', 'total cost', 'extended cost', 'total cost equipment usd', 'total cost equipment sar'],
-      unit_sell: ['unit price equipment sar', 'unit price equipment', 'selling price', 'list price', 'unit price', 'list price equipment sar', 'list price sar'],
+      unit_sell: ['unit price equipment sar', 'unit price equipment', 'selling price', 'unit price'],
       total_sell: ['total equipment sar', 'total selling', 'total price', 'amount', 'total equipment'],
-      markup_pct: ['materials markup to customer', 'material markup', 'markup'],
+      margin_pct: ['materials markup to customer', 'markup', 'margin'],
     };
 
     // Fetch file

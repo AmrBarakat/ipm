@@ -59,11 +59,18 @@
           "q.ty",
           "count"
         ],
-        "unit": [
-          "unit",
-          "uom",
-          "unit of measure",
-          "u/m"
+        "list_price": [
+          "list price equipment, sar",
+          "list price equipment",
+          "list price"
+        ],
+        "discount_pct": [
+          "discount to ehs material",
+          "discount"
+        ],
+        "transport_pct": [
+          "transport and customs per unit",
+          "transport"
         ],
         "unit_cost": [
           "cost unit price equipment sar",
@@ -86,10 +93,7 @@
           "unit price equipment sar",
           "unit price equipment",
           "selling price",
-          "list price",
-          "unit price",
-          "list price equipment sar",
-          "list price sar"
+          "unit price"
         ],
         "total_sell": [
           "total equipment sar",
@@ -98,11 +102,10 @@
           "amount",
           "total equipment"
         ],
-        "markup_pct": [
+        "margin_pct": [
           "materials markup to customer",
-          "material markup",
           "markup",
-          "markup %"
+          "margin"
         ],
         "lead_time": [
           "lead time",
