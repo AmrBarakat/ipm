@@ -65,6 +65,16 @@ function statusColor(s) {
   return 'text-slate-400';
 }
 
+/** Small amber "verify" badge shown next to a quantity the model read with low confidence. */
+function VerifyBadge() {
+  return (
+    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[10px] font-semibold uppercase tracking-wide"
+      title="OCR uncertainty — please verify this quantity before applying">
+      <AlertCircle className="w-2.5 h-2.5" /> verify
+    </span>
+  );
+}
+
 export default function PODNExtractionPanel({ document: doc, result, projectId, onClose, onApplied }) {
   const [docType, setDocType] = useState(result.document_type === 'po' ? 'po' : 'delivery_note');
   const { data: bomItems = [], isLoading: bomLoading } = useEntityList('BOMItem', { project_id: projectId }, ENTITY_QUERY.BOMItem.sort, ENTITY_QUERY.BOMItem.limit);
@@ -255,6 +265,12 @@ export default function PODNExtractionPanel({ document: doc, result, projectId, 
         </div>
 
         <div className="flex-1 overflow-auto p-6 space-y-4">
+          {result.extraction_method === 'vision' && (
+            <div className="flex items-center gap-2 text-sm text-amber-800 bg-amber-50 border border-amber-300 rounded p-3">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              Extracted via OCR from a scanned document — please verify quantities before applying.
+            </div>
+          )}
           {/* Detection + type override */}
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-sm">
             <span><span className="text-slate-500">Detected:</span> <span className="font-bold text-amber-600">{result.document_type === 'po' ? 'Purchase Order' : result.document_type === 'delivery_note' ? 'Packing Slip / Delivery Note' : result.document_type}</span></span>
@@ -340,12 +356,22 @@ export default function PODNExtractionPanel({ document: doc, result, projectId, 
                             </td>
                             {isPO ? (
                               <>
-                                <td className="px-3 py-2 text-right">{Number(li.ordered_qty) || Number(li.quantity) || '—'}</td>
+                                <td className="px-3 py-2 text-right">
+                                  <span className="inline-flex items-center gap-1 justify-end">
+                                    {Number(li.ordered_qty) || Number(li.quantity) || '—'}
+                                    {li.ocr_uncertain && <VerifyBadge />}
+                                  </span>
+                                </td>
                                 <td className="px-3 py-2"><span className="text-blue-600 font-semibold">Ordered</span></td>
                               </>
                             ) : (
                               <>
-                                <td className="px-3 py-2 text-right">{p.slipDelivered || '—'}</td>
+                                <td className="px-3 py-2 text-right">
+                                  <span className="inline-flex items-center gap-1 justify-end">
+                                    {p.slipDelivered || '—'}
+                                    {li.ocr_uncertain && <VerifyBadge />}
+                                  </span>
+                                </td>
                                 <td className="px-3 py-2 text-right font-medium">{m.bomId ? p.cumulative : '—'}</td>
                                 <td className="px-3 py-2 text-right">{m.bomId ? p.remaining : '—'}</td>
                                 <td className="px-3 py-2"><span className={m.bomId ? statusColor(p.status) : 'text-slate-400'}>{m.bomId ? statusLabel(p.status) : '—'}</span></td>

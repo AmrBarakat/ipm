@@ -1,5 +1,16 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
+const IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.webp'];
+const SHEET_EXTS = ['.xlsx', '.xls', '.csv', '.html', '.json'];
+const UNSUPPORTED_EXTS = ['.xlsm', '.xlsb', '.doc', '.docx', '.ppt', '.pptx'];
+
+const TEXT_EXTRACT_SCHEMA = {
+  type: 'object',
+  properties: {
+    raw_text: { type: 'string', description: 'Full text content of the document' }
+  }
+};
+
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
@@ -9,46 +20,79 @@ Deno.serve(async (req) => {
     const { file_url, document_category } = await req.json();
     if (!file_url) return Response.json({ error: 'file_url is required' }, { status: 400 });
 
-    // Check supported file types
     const urlLower = file_url.toLowerCase().split('?')[0];
-    const supported = ['.pdf', '.xlsx', '.xls', '.csv', '.html', '.png', '.jpg', '.jpeg', '.json'];
-    const unsupported = ['.xlsm', '.xlsb', '.doc', '.docx', '.ppt', '.pptx'];
     const ext = urlLower.match(/\.[^.]+$/)?.[0] || '';
-    if (unsupported.includes(ext)) {
+    if (UNSUPPORTED_EXTS.includes(ext)) {
       return Response.json({
         error: `File type "${ext}" is not supported for extraction. Please use PDF, Excel (.xlsx/.xls), CSV, or image files.`
       }, { status: 400 });
     }
 
-    // Step 1: Extract raw text content from the document
-    const extracted = await base44.asServiceRole.integrations.Core.ExtractDataFromUploadedFile({
-      file_url,
-      json_schema: {
-        type: 'object',
-        properties: {
-          raw_text: { type: 'string', description: 'Full text content of the document' }
-        }
+    const isImage = IMAGE_EXTS.includes(ext);
+    const isSheet = SHEET_EXTS.includes(ext);
+    // pdf or unknown → text-then-vision fallback
+
+    // --- Step 1: obtain text content (where applicable) ---
+    let docText = '';
+    let extractionMethod = 'text'; // text | vision | text+vision
+    let attachFile = false;
+
+    if (isImage) {
+      // Images: skip text extraction entirely, go straight to vision.
+      extractionMethod = 'vision';
+    } else if (isSheet) {
+      // Spreadsheets/CSV/HTML/JSON: text path only (exactly as before).
+      const extracted = await base44.asServiceRole.integrations.Core.ExtractDataFromUploadedFile({
+        file_url,
+        json_schema: TEXT_EXTRACT_SCHEMA
+      });
+      docText = extracted?.output?.raw_text
+        || (typeof extracted?.output === 'string' ? extracted.output : JSON.stringify(extracted?.output || ''));
+      if (!docText || docText.trim().length < 10) {
+        return Response.json({ suggestions: {} });
       }
-    });
-
-    const docText = extracted?.output?.raw_text
-      || (typeof extracted?.output === 'string' ? extracted.output : JSON.stringify(extracted?.output || ''));
-
-    if (!docText || docText.trim().length < 10) {
-      return Response.json({ suggestions: {} });
+      extractionMethod = 'text';
+    } else {
+      // PDF (or unknown): attempt text extraction, fall back to vision if thin/failed.
+      try {
+        const extracted = await base44.asServiceRole.integrations.Core.ExtractDataFromUploadedFile({
+          file_url,
+          json_schema: TEXT_EXTRACT_SCHEMA
+        });
+        docText = extracted?.output?.raw_text
+          || (typeof extracted?.output === 'string' ? extracted.output : JSON.stringify(extracted?.output || ''));
+      } catch (_e) {
+        docText = '';
+      }
+      if (!docText || docText.trim().length < 200) {
+        // Scanned/image-only PDF → vision call, no text block.
+        docText = '';
+        extractionMethod = 'vision';
+      } else {
+        // Substantial text — keep it AND attach the file (vision fills gaps like
+        // stamps, handwriting, and table structure that text extraction mangles).
+        attachFile = true;
+        extractionMethod = 'text+vision';
+      }
     }
+
+    const useVision = extractionMethod !== 'text';
+
+    const docBlock = docText
+      ? `DOCUMENT TEXT:\n${docText.slice(0, 8000)}${attachFile ? '\n\nThe document is also attached as a file. Cross-check the text above against it, paying attention to stamps, handwritten quantities, signatures, and table structure that the text extraction may have missed.' : ''}`
+      : `The document is attached as a file. Read it carefully, including any stamps, handwritten quantities, signatures, and table structure. Perform accurate OCR on all line items.`;
 
     // Step 2: Use LLM to extract structured data from the document
     const result = await base44.asServiceRole.integrations.Core.InvokeLLM({
       model: 'claude_sonnet_4_6',
+      ...(useVision ? { file_urls: [file_url] } : {}),
       prompt: `You are an expert at parsing industrial project documents (invoices, contracts, purchase orders, delivery notes).
 
 Analyze the following document and extract ALL relevant fields you can find.
 
 DOCUMENT CATEGORY: ${document_category || 'unknown'}
 
-DOCUMENT TEXT:
-${docText.slice(0, 8000)}
+${docBlock}
 
 Extract the following fields if present. Return null for fields not found.
 
@@ -106,6 +150,12 @@ Also extract these general fields that apply to all document types:
   - unit: string
   - unit_price: number
   - total: number
+  - ocr_uncertain: boolean (true when you are not confident you read this line's numbers correctly)
+
+OCR ACCURACY RULES:
+- Quantities may be handwritten or stamped over printed text; prefer the handwritten correction when both appear.
+- If a quantity, date, or number is not clearly legible, omit it (return null) rather than guessing.
+- For multi-page documents, extract line items from ALL pages and continue the same line_items array.
 
 Return a JSON object with:
 - document_type: detected type (invoice, contract, po, delivery_note, other). Packing slips and packing lists are delivery_note.
@@ -144,7 +194,8 @@ Return a JSON object with:
                 quantity: { type: 'number' },
                 unit: { type: 'string' },
                 unit_price: { type: 'number' },
-                total: { type: 'number' }
+                total: { type: 'number' },
+                ocr_uncertain: { type: 'boolean' }
               }
             }
           }
@@ -152,7 +203,7 @@ Return a JSON object with:
       }
     });
 
-    return Response.json({ result });
+    return Response.json({ result: { ...result, extraction_method: extractionMethod } });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
   }
