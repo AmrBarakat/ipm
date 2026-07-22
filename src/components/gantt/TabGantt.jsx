@@ -53,6 +53,19 @@ export default function TabGantt({ projectId, project }) {
     return () => { unsubs.forEach(u => { try { u && u(); } catch (_) {} }); };
   }, [queryClient]);
 
+  // After any WBS change lands (drag commit, reorder, external edit), re-run the
+  // WBS → project + milestone progress rollup. Debounced so a multi-item batch
+  // save triggers a single sync, not one per item.
+  const syncTimerRef = useRef(null);
+  useEffect(() => {
+    if (!qWbs.length) return;
+    if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+    syncTimerRef.current = setTimeout(() => {
+      base44.functions.invoke('syncWBSProgress', { project_id: projectId }).catch(() => {});
+    }, 700);
+    return () => { if (syncTimerRef.current) clearTimeout(syncTimerRef.current); };
+  }, [qWbs, projectId]);
+
   const [scaleKey, setScaleKey] = useState('week');
   const [leftWidth, setLeftWidth] = useState(340);
   const [expanded, setExpanded] = useState({});

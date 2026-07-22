@@ -32,3 +32,18 @@ export function toLocalDate(date) {
 }
 
 export const isIframe = window.self !== window.top;
+
+/**
+ * Sort milestones by planned_date ascending (nulls last), tie-break by title.
+ * Used everywhere milestones are listed so display order is stable regardless
+ * of fetch order.
+ */
+export function sortMilestones(list) {
+  return [...(list || [])].sort((a, b) => {
+    const ad = a?.planned_date, bd = b?.planned_date;
+    if (ad && bd) return ad < bd ? -1 : ad > bd ? 1 : (a.title || '').localeCompare(b.title || '');
+    if (ad && !bd) return -1;
+    if (!ad && bd) return 1;
+    return (a.title || '').localeCompare(b.title || '');
+  });
+}

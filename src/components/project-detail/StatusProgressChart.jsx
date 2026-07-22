@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useEntityList } from '@/hooks/useEntity';
+import { sortMilestones } from '@/lib/utils';
 import { ENTITY_QUERY } from '@/lib/entityQueryDefaults';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from 'recharts';
 import { Target, Package, Activity } from 'lucide-react';
@@ -39,7 +40,7 @@ export default function StatusProgressChart({ projectId }) {
   const loading = msLoading || delLoading;
 
   const data = useMemo(() => {
-    const ms = milestones.map(m => ({
+    const ms = sortMilestones(milestones).map(m => ({
       name: truncate(m.title),
       fullName: m.title,
       progress: Math.max(0, Math.min(100, Number(m.progress) || 0)),

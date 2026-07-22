@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useEntityList, useEntityMutation, runBatch } from '@/hooks/useEntity';
 import { ENTITY_QUERY } from '@/lib/entityQueryDefaults';
 import { useQueryClient } from '@tanstack/react-query';
@@ -110,6 +110,18 @@ export default function TabWBS({ projectId, project, onProgressChange, projectPr
       base44.entities.Project.update(projectId, { progress: computed }).catch(() => { /* silent — non-critical */ });
     }
   }, [wbsData, projectId, projectProgress]);
+
+  // After WBS edits land, re-run the WBS → project + milestone progress rollup
+  // (one debounced call per batch of edits, not one per item).
+  const syncTimerRef = useRef(null);
+  useEffect(() => {
+    if (!wbsData.length) return;
+    if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+    syncTimerRef.current = setTimeout(() => {
+      base44.functions.invoke('syncWBSProgress', { project_id: projectId }).catch(() => {});
+    }, 800);
+    return () => { if (syncTimerRef.current) clearTimeout(syncTimerRef.current); };
+  }, [wbsData, projectId]);
 
   const tree = useMemo(() => {
     const byParent = {};

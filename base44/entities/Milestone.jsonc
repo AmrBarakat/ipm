@@ -26,6 +26,11 @@
       "type": "string",
       "format": "date"
     },
+    "derived_start": {
+      "type": "string",
+      "format": "date",
+      "description": "Derived display-only start = MIN(planned_start) of linked WBS items. Populated by the syncWBSProgress rollup for WBS-driven milestones; null for task-driven milestones."
+    },
     "completed_date": {
       "type": "string",
       "format": "date"
@@ -36,7 +41,8 @@
     },
     "progress": {
       "type": "number",
-      "default": 0
+      "default": 0,
+      "description": "Rolled-up progress for WBS-driven milestones (weighted average of linked WBS items), or 100 when task-driven completion fires. Populated by syncWBSProgress / checkMilestoneCompletion."
     }
   },
   "required": [

@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useEntityList, useEntityMutation } from '@/hooks/useEntity';
+import { sortMilestones } from '@/lib/utils';
 import { ENTITY_QUERY } from '@/lib/entityQueryDefaults';
 import { formatDate } from '@/lib/constants';
 import { Plus, Flag, Pencil, Trash2, Save, X, Layers, Check } from 'lucide-react';
@@ -15,33 +16,8 @@ const STATUS_COLORS = {
   overdue:     'bg-red-100 text-red-700',
 };
 
-function buildTree(items) {
-  const tree = {};
-  items.forEach(i => {
-    const pid = i.parent_id || '__root__';
-    if (!tree[pid]) tree[pid] = [];
-    tree[pid].push(i);
-  });
-  return tree;
-}
-
-function rollupProgress(id, tree, byId) {
-  const children = tree[id] || [];
-  if (children.length === 0) return byId[id]?.progress || 0;
-  const childProgresses = children.map(c => ({ p: rollupProgress(c.id, tree, byId), w: c.weight || 1 }));
-  const totalWeight = childProgresses.reduce((s, c) => s + c.w, 0);
-  return Math.round(childProgresses.reduce((s, c) => s + c.p * c.w, 0) / (totalWeight || 1));
-}
-
-function computeMilestoneProgress(milestoneId, wbsItems) {
-  const linked = wbsItems.filter(i => i.milestone_id === milestoneId);
-  if (linked.length === 0) return null;
-  const tree = buildTree(wbsItems);
-  const byId = Object.fromEntries(wbsItems.map(i => [i.id, i]));
-  const totalWeight = linked.reduce((s, i) => s + (i.weight || 1), 0);
-  const weighted = linked.reduce((s, i) => s + rollupProgress(i.id, tree, byId) * (i.weight || 1), 0);
-  return Math.round(weighted / (totalWeight || 1));
-}
+// Milestone progress is now populated by the syncWBSProgress rollup
+// (weighted average of linked WBS items). See base44/functions/syncWBSProgress.
 
 export default function TabMilestones({ projectId }) {
   const { data: milestones = [], isLoading } = useEntityList('Milestone', { project_id: projectId }, ENTITY_QUERY.Milestone.sort, ENTITY_QUERY.Milestone.limit);
@@ -55,6 +31,9 @@ export default function TabMilestones({ projectId }) {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [bulkField, setBulkField] = useState('');
   const [bulkValue, setBulkValue] = useState('');
+
+  // Display order: planned_date ascending (nulls last), tie-break by title.
+  const sortedMilestones = useMemo(() => sortMilestones(milestones), [milestones]);
 
   async function create(e) {
     e.preventDefault();
@@ -190,11 +169,11 @@ export default function TabMilestones({ projectId }) {
                 </button>
               </div>
             )}
-            {milestones.map(m => {
+            {sortedMilestones.map(m => {
               const isEditing = editingId === m.id;
-              const wbsProgress = computeMilestoneProgress(m.id, wbsItems);
-              const displayProgress = wbsProgress !== null ? wbsProgress : (m.progress || 0);
+              const displayProgress = m.progress || 0;
               const linkedCount = wbsItems.filter(i => i.milestone_id === m.id).length;
+              const isAuto = linkedCount > 0;
               const isSelected = selectedIds.has(m.id);
 
               return (
@@ -263,8 +242,8 @@ export default function TabMilestones({ projectId }) {
                           />
                         </div>
                         <span className="text-xs font-semibold text-slate-600 w-10 text-right">{displayProgress}%</span>
-                        {wbsProgress !== null && (
-                          <span className="text-xs text-blue-500 whitespace-nowrap">← from WBS</span>
+                        {isAuto && (
+                          <span className="text-xs text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded font-medium whitespace-nowrap" title="Progress and date are derived from linked WBS items">auto</span>
                         )}
                       </div>
                     </div>
