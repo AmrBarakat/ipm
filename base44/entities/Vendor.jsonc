@@ -49,6 +49,67 @@
         "type": "string"
       },
       "description": "BOM categories this vendor supplies"
+    },
+    "documents": {
+      "type": "array",
+      "description": "Vendor-linked documents (certificates, contracts, ISO certs, etc.) \u2014 file metadata only; file_url points to UploadFile storage.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "file_url": {
+            "type": "string"
+          },
+          "file_name": {
+            "type": "string"
+          },
+          "content_type": {
+            "type": "string"
+          },
+          "file_size": {
+            "type": "number"
+          },
+          "uploaded_date": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "category": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      },
+      "default": []
+    },
+    "rating_history": {
+      "type": "array",
+      "description": "Historical performance ratings over time. Entries are appended as recorded; display sorted desc by date. The latest entry's rating is mirrored to the top-level `rating` field.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "rating": {
+            "type": "string",
+            "enum": [
+              "preferred",
+              "approved",
+              "conditional",
+              "blacklisted"
+            ]
+          },
+          "note": {
+            "type": "string"
+          },
+          "recorded_by": {
+            "type": "string"
+          }
+        }
+      },
+      "default": []
     }
   },
   "required": [

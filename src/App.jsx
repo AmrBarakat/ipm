@@ -16,6 +16,7 @@ import Resources from '@/pages/Resources';
 import Reports from '@/pages/Reports';
 import Calendar from '@/pages/Calendar';
 import Settings from '@/pages/Settings';
+import Vendors from '@/pages/Vendors';
 import { ConfirmDialogProvider } from '@/components/ui/ConfirmDialog';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
 
@@ -51,6 +52,7 @@ const AuthenticatedApp = () => {
         <Route path="/reports" element={<Reports />} />
         <Route path="/calendar" element={<Calendar />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/vendors" element={<Vendors />} />
         {/* More routes will be added here */}
       </Route>
       <Route path="*" element={<PageNotFound />} />
