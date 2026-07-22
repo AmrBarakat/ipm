@@ -13,6 +13,7 @@ import ProjectSummaryWidget from '@/components/projects/ProjectSummaryWidget';
 import { useTranslation } from '@/hooks/useTranslation';
 import SkeletonCard from '@/components/ui/SkeletonCard';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
+import { Can } from '@/lib/can';
 
 const ALL = 'all';
 const PAGE_SIZE = 25;
@@ -137,12 +138,14 @@ export default function Projects() {
             {isFetching && !isFetchingNextPage && <span className="text-slate-400"> · updating…</span>}
           </p>
         </div>
+        <Can create>
         <Link
           to="/projects/new"
           className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold rounded text-sm transition"
         >
           <Plus className="w-4 h-4" /> {t('projects.newProject')}
         </Link>
+        </Can>
       </div>
 
       {/* Summary Widget */}
@@ -202,6 +205,7 @@ export default function Projects() {
           <div className="flex items-center gap-2 ml-auto">
             {/* Bulk status update */}
             <div className="relative">
+              <Can modify>
               <button
                 onClick={() => setShowStatusMenu(v => !v)}
                 disabled={bulkLoading}
@@ -209,6 +213,7 @@ export default function Projects() {
               >
                 <RefreshCw className="w-3.5 h-3.5" /> {t('projects.setStatus')} <ChevronDown className="w-3 h-3" />
               </button>
+              </Can>
               {showStatusMenu && (
                 <div className="absolute right-0 mt-1 w-44 bg-white border border-slate-200 rounded shadow-lg z-20 py-1">
                   {Object.entries(STATUS_LABELS).map(([v, l]) => (
@@ -221,6 +226,7 @@ export default function Projects() {
               )}
             </div>
             {/* Bulk delete */}
+            <Can create>
             <button
               onClick={bulkDelete}
               disabled={bulkLoading}
@@ -228,6 +234,7 @@ export default function Projects() {
             >
               <Trash2 className="w-3.5 h-3.5" /> {t('common.delete')}
             </button>
+            </Can>
             <button onClick={() => setSelected(new Set())} className="text-xs text-slate-400 hover:text-slate-600 px-2">
               {t('common.clear')}
             </button>
@@ -242,9 +249,11 @@ export default function Projects() {
             <FolderOpen className="w-12 h-12 mx-auto mb-3 opacity-30" />
             <p className="text-sm">{t('projects.noMatch')}</p>
             {noFiltersActive && (
+              <Can create>
               <Link to="/projects/new" className="mt-4 inline-block px-4 py-2 bg-amber-500 text-slate-900 rounded font-semibold text-sm">
                 {t('projects.createFirst')}
               </Link>
+              </Can>
             )}
           </div>
         ) : (

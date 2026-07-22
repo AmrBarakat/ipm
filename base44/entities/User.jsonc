@@ -8,6 +8,63 @@
         "user"
       ]
     },
+    "account_status": {
+      "type": "string",
+      "description": "Approval state. Pending users are blocked from the app until an admin approves them. Admin-writable only (FLS).",
+      "enum": [
+        "pending",
+        "approved",
+        "suspended"
+      ],
+      "default": "pending",
+      "rls": {
+        "write": {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      }
+    },
+    "privilege": {
+      "type": "string",
+      "description": "App privilege level. view = read only; modify = edit existing records; create = create + edit + delete. Admin-writable only (FLS).",
+      "enum": [
+        "view",
+        "modify",
+        "create"
+      ],
+      "default": "view",
+      "rls": {
+        "write": {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      }
+    },
+    "approved_by": {
+      "type": "string",
+      "description": "Email of the admin who approved the account. Admin-writable only (FLS).",
+      "rls": {
+        "write": {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      }
+    },
+    "approved_at": {
+      "type": "string",
+      "format": "date",
+      "description": "Date the account was approved. Admin-writable only (FLS).",
+      "rls": {
+        "write": {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      }
+    },
     "settings": {
       "type": "object",
       "description": "Per-user app settings persisted via auth.updateMe",

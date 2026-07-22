@@ -4,6 +4,7 @@ import { base44 } from '@/api/base44Client';
 import { STATUS_COLORS, STATUS_LABELS, PRIORITY_COLORS, PRIORITY_LABELS, TYPE_LABELS, formatCurrency, formatDate } from '@/lib/constants';
 import { ArrowLeft, Pencil, FolderOpen } from 'lucide-react';
 import ProjectForm from '@/components/projects/ProjectForm';
+import { Can } from '@/lib/can';
 import { useTranslation } from '@/hooks/useTranslation';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
 
@@ -142,6 +143,7 @@ export default function ProjectDetail() {
             <div className="text-xs text-slate-500">{t('projectDetail.contractValue')}</div>
             <div className="font-bold text-slate-800">{formatCurrency(project.contract_value, project.currency)}</div>
           </div>
+          <Can modify>
           <button
             onClick={() => setEditing(v => !v)}
             className="flex items-center gap-2 px-4 py-2 rounded border border-slate-300 hover:bg-slate-100 text-sm text-slate-700 font-medium transition"
@@ -149,6 +151,7 @@ export default function ProjectDetail() {
             <Pencil className="w-4 h-4" />
             {editing ? t('projectDetail.cancelEdit') : t('projectDetail.editProject')}
           </button>
+          </Can>
         </div>
       </div>
 

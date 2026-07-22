@@ -1,4 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
+import { requirePrivilege } from '../../shared/requirePrivilege.ts';
 
 // Scored auto-link engine: for each leaf WBS item without a milestone_id, rank
 // every milestone and return a best suggestion + coverage stats so the user can
@@ -84,6 +85,8 @@ Deno.serve(async (req) => {
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me().catch(() => null);
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    const denied = requirePrivilege(user, 'view');
+    if (denied) return denied;
 
     const body = await req.json().catch(() => ({}));
     const projectId = body?.project_id || body?.data?.project_id;

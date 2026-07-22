@@ -8,6 +8,7 @@ import { formatDate } from '@/lib/constants';
 import { Plus, ChevronRight, ChevronDown, Trash2, Pencil, Save, X, Layers, AlertTriangle, Wand2, BookOpen, Check, Link2 } from 'lucide-react';
 import PanelWrapper from '@/components/ui/PanelWrapper';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
+import { Can } from '@/lib/can';
 import ScheduleAssistantModal from './ScheduleAssistantModal';
 import ProjectPlanTemplateModal from './ProjectPlanTemplateModal';
 import MilestoneLinkModal from './MilestoneLinkModal';
@@ -461,22 +462,30 @@ export default function TabWBS({ projectId, project, onProgressChange, projectPr
           )}
         </div>
         <div className="flex items-center gap-2">
+          <Can modify>
           <button onClick={() => setShowLinkModal(true)}
             className="flex items-center gap-1 px-3 py-1.5 border border-slate-300 hover:bg-slate-100 text-slate-700 font-semibold text-sm rounded">
             <Link2 className="w-4 h-4" /> Auto-link WBS
           </button>
+          </Can>
+          <Can create>
           <button onClick={() => setShowTemplates(true)}
             className="flex items-center gap-1 px-3 py-1.5 border border-slate-300 hover:bg-slate-100 text-slate-700 font-semibold text-sm rounded">
             <BookOpen className="w-4 h-4" /> Templates
           </button>
+          </Can>
+          <Can modify>
           <button onClick={() => setShowScheduleAssistant(true)}
             className="flex items-center gap-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white font-semibold text-sm rounded">
             <Wand2 className="w-4 h-4" /> Schedule Assistant
           </button>
+          </Can>
+          <Can create>
           <button onClick={() => startAdd('root')}
             className="flex items-center gap-1 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold text-sm rounded">
             <Plus className="w-4 h-4" /> Add WBS Item
           </button>
+          </Can>
         </div>
       </div>
 

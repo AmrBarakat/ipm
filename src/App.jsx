@@ -5,6 +5,7 @@ import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
+import AccountPending from '@/components/auth/AccountPending';
 import AppLayout from '@/components/layout/AppLayout';
 import { TranslationProvider } from '@/hooks/useTranslation';
 // Add page imports here
@@ -21,7 +22,7 @@ import { ConfirmDialogProvider } from '@/components/ui/ConfirmDialog';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
 
 const AuthenticatedApp = () => {
-  const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
+  const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin, user } = useAuth();
 
   if (isLoadingPublicSettings || isLoadingAuth) {
     return (
@@ -38,6 +39,12 @@ const AuthenticatedApp = () => {
       navigateToLogin();
       return null;
     }
+  }
+
+  // App approval gate: authenticated but not (yet) approved users (pending or
+  // suspended) see the pending screen instead of the app. Admins always pass.
+  if (user && user.role !== 'admin' && user.account_status !== 'approved') {
+    return <AccountPending />;
   }
 
   return (

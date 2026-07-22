@@ -14,6 +14,7 @@
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 import { applyLine } from '../../shared/podnApply.ts';
+import { requirePrivilege } from '../../shared/requirePrivilege.ts';
 
 Deno.serve(async (req) => {
   try {
@@ -22,6 +23,8 @@ Deno.serve(async (req) => {
     let user = null;
     try { user = await base44.auth.me(); } catch (_) { user = null; }
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    const denied = requirePrivilege(user, 'modify');
+    if (denied) return denied;
 
     const { note_id, row_index, bom_item_id } = await req.json();
     if (!note_id || bom_item_id == null || row_index == null)

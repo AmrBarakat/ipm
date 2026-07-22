@@ -18,6 +18,7 @@ import GanttToolbar from './GanttToolbar';
 import GanttTree from './GanttTree';
 import GanttTimeline from './GanttTimeline';
 import GanttEditorModal from './GanttEditorModal';
+import { useCan } from '@/lib/can';
 import ScheduleAssistantModal from '@/components/project-detail/ScheduleAssistantModal';
 
 export default function TabGantt({ projectId, project }) {
@@ -26,6 +27,7 @@ export default function TabGantt({ projectId, project }) {
   const wbsMutation = useEntityMutation('WBSItem', ['Task']);
   const msMutation = useEntityMutation('Milestone');
   const queryClient = useQueryClient();
+  const { canModify } = useCan();
 
   // Local optimistic copy of WBS items (for drag edits)
   const [wbsItems, setWbsItems] = useState([]);
@@ -212,6 +214,7 @@ export default function TabGantt({ projectId, project }) {
   const dragBaseRef = useRef(null); // committed start of the dragged item, captured at drag start
 
   const onMoveItem = useCallback((id, newStart, newEnd, mode, commit) => {
+    if (!canModify) return;
     const cascade = mode === 'move';
     if (!commit) isDraggingRef.current = true;
     setWbsItems(prev => {
@@ -278,10 +281,11 @@ export default function TabGantt({ projectId, project }) {
           dragBaseRef.current = null;
         });
     }
-  }, [queryClient]);
+  }, [queryClient, canModify]);
 
   // ── Tree reorder / reparent ────────────────────────────────────────────────
   function onReorder(dragId, targetId, position) {
+    if (!canModify) return;
     const updates = computeTreeMove(wbsItems, dragId, targetId, position);
     if (!updates.length) return;
     const snapshot = wbsItems;
@@ -303,6 +307,7 @@ export default function TabGantt({ projectId, project }) {
 
   // ── Editor save ────────────────────────────────────────────────────────────
   function onEditorSave(row, form) {
+    if (!canModify) return;
     if (row.kind === 'milestone') {
       const id = row.data.id;
       msMutation.mutateAsync({ action: 'update', id, data: { title: form.title, planned_date: form.planned_date, status: form.status } })

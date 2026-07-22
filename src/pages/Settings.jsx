@@ -4,6 +4,8 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { applyTheme } from '@/lib/theme';
 import { Settings as SettingsIcon, Globe, Bell, Palette, Save, Check, Loader2, Sun, Moon, Monitor, Sliders } from 'lucide-react';
 import HelpSection from '@/components/settings/HelpSection';
+import UsersSection from '@/components/settings/UsersSection';
+import { useAuth } from '@/lib/AuthContext';
 import EventLogSection from '@/components/settings/EventLogSection';
 
 const DEFAULTS = {
@@ -44,6 +46,7 @@ const inp = 'border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-
 
 export default function SettingsPage() {
   const { setLocale } = useTranslation();
+  const { user } = useAuth();
   const [settings, setSettings] = useState(DEFAULTS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -121,6 +124,8 @@ export default function SettingsPage() {
           {saving ? 'Saving…' : saved ? 'Saved' : 'Save Changes'}
         </button>
       </div>
+
+      {user?.role === 'admin' && <UsersSection currentUser={user} />}
 
       {/* Project defaults */}
       <Section icon={<Sliders className="w-4 h-4" />} title="Project Defaults" desc="Applied to new projects you create.">

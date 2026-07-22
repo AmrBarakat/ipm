@@ -9,6 +9,7 @@ import SkeletonTable from '@/components/ui/SkeletonTable';
 import EmptyState from '@/components/ui/EmptyState';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import MilestoneLinkModal from './MilestoneLinkModal';
+import { Can } from '@/lib/can';
 
 const STATUS_COLORS = {
   pending:     'bg-slate-100 text-slate-600',
@@ -98,12 +99,16 @@ export default function TabMilestones({ projectId }) {
       <div className="flex justify-between items-center mb-4">
         <p className="text-sm text-slate-500">{milestones.length} milestone{milestones.length !== 1 ? 's' : ''}</p>
         <div className="flex items-center gap-2">
+          <Can modify>
           <button onClick={() => setShowLinkModal(true)} className="flex items-center gap-1 px-3 py-1.5 border border-slate-300 hover:bg-slate-100 text-slate-700 font-semibold text-sm rounded">
             <Wand2 className="w-4 h-4" /> Auto-link WBS
           </button>
+          </Can>
+          <Can create>
           <button onClick={() => setAdding(v => !v)} className="flex items-center gap-1 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold text-sm rounded">
             <Plus className="w-4 h-4" /> Add Milestone
           </button>
+          </Can>
         </div>
       </div>
 

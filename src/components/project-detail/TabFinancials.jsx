@@ -9,6 +9,7 @@ import SpendingTrendChart from '@/components/project-detail/SpendingTrendChart';
 import SkeletonTable from '@/components/ui/SkeletonTable';
 import EmptyState from '@/components/ui/EmptyState';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
+import { Can } from '@/lib/can';
 
 const INV_STATUS_COLORS = {
   planned: 'bg-slate-100 text-slate-600',
@@ -312,9 +313,11 @@ export default function TabFinancials({ projectId, project }) {
       <div>
         <div className="flex justify-between items-center mb-3">
           <h3 className="font-semibold text-slate-700 flex items-center gap-2"><TrendingUp className="w-4 h-4 text-emerald-500" /> Invoices</h3>
+          <Can create>
           <button onClick={() => setAddingInv(v => !v)} className="flex items-center gap-1 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-white font-semibold text-sm rounded">
             <Plus className="w-4 h-4" /> Add Invoice
           </button>
+          </Can>
         </div>
         {addingInv && (
           <form onSubmit={createInvoice} className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 mb-3 grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -377,7 +380,7 @@ export default function TabFinancials({ projectId, project }) {
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex gap-1">
-                            {isEditing ? (<><button onClick={() => saveInv(inv.id)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Save className="w-4 h-4" /></button><button onClick={() => setEditingInv(null)} className="p-1 text-slate-400 hover:bg-slate-100 rounded"><X className="w-4 h-4" /></button></>) : (<><button onClick={() => startEditInv(inv)} className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded"><Pencil className="w-4 h-4" /></button><button onClick={() => deleteInv(inv.id)} className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-4 h-4" /></button></>)}
+                            {isEditing ? (<><button onClick={() => saveInv(inv.id)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Save className="w-4 h-4" /></button><button onClick={() => setEditingInv(null)} className="p-1 text-slate-400 hover:bg-slate-100 rounded"><X className="w-4 h-4" /></button></>) : (<><Can modify><button onClick={() => startEditInv(inv)} className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded"><Pencil className="w-4 h-4" /></button></Can><Can create><button onClick={() => deleteInv(inv.id)} className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-4 h-4" /></button></Can></>)}
                           </div>
                         </td>
                       </tr>
@@ -394,9 +397,11 @@ export default function TabFinancials({ projectId, project }) {
       <div>
         <div className="flex justify-between items-center mb-3">
           <h3 className="font-semibold text-slate-700 flex items-center gap-2"><Banknote className="w-4 h-4 text-blue-500" /> Collections (Received)</h3>
+          <Can create>
           <button onClick={() => setAddingCol(v => !v)} className="flex items-center gap-1 px-3 py-1.5 bg-blue-500 hover:bg-blue-400 text-white font-semibold text-sm rounded">
             <Plus className="w-4 h-4" /> Add Collection
           </button>
+          </Can>
         </div>
         {addingCol && (
           <form onSubmit={createCollection} className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-3 grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -458,7 +463,7 @@ export default function TabFinancials({ projectId, project }) {
                         <td className="px-4 py-3">{isEditing ? <input value={editColForm.reference_number} onChange={e => setEditColForm(f => ({ ...f, reference_number: e.target.value }))} placeholder="Reference" className={inp} /> : <span className="text-slate-600">{col.reference_number || '—'}</span>}</td>
                         <td className="px-4 py-3">
                           <div className="flex gap-1">
-                            {isEditing ? (<><button onClick={() => saveCol(col.id)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Save className="w-4 h-4" /></button><button onClick={() => setEditingCol(null)} className="p-1 text-slate-400 hover:bg-slate-100 rounded"><X className="w-4 h-4" /></button></>) : (<><button onClick={() => startEditCol(col)} className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded"><Pencil className="w-4 h-4" /></button><button onClick={() => deleteCol(col.id)} className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-4 h-4" /></button></>)}
+                            {isEditing ? (<><button onClick={() => saveCol(col.id)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Save className="w-4 h-4" /></button><button onClick={() => setEditingCol(null)} className="p-1 text-slate-400 hover:bg-slate-100 rounded"><X className="w-4 h-4" /></button></>) : (<><Can modify><button onClick={() => startEditCol(col)} className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded"><Pencil className="w-4 h-4" /></button></Can><Can create><button onClick={() => deleteCol(col.id)} className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-4 h-4" /></button></Can></>)}
                           </div>
                         </td>
                       </tr>
@@ -475,9 +480,11 @@ export default function TabFinancials({ projectId, project }) {
       <div>
         <div className="flex justify-between items-center mb-3">
           <h3 className="font-semibold text-slate-700 flex items-center gap-2"><TrendingDown className="w-4 h-4 text-red-500" /> Expenses</h3>
+          <Can create>
           <button onClick={() => setAddingExp(v => !v)} className="flex items-center gap-1 px-3 py-1.5 bg-red-500 hover:bg-red-400 text-white font-semibold text-sm rounded">
             <Plus className="w-4 h-4" /> Add Expense
           </button>
+          </Can>
         </div>
         {addingExp && (
           <form onSubmit={createExpense} className="bg-red-50 border border-red-200 rounded-lg p-4 mb-3 grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -547,7 +554,7 @@ export default function TabFinancials({ projectId, project }) {
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex gap-1">
-                            {isEditing ? (<><button onClick={() => saveExp(exp.id)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Save className="w-4 h-4" /></button><button onClick={() => setEditingExp(null)} className="p-1 text-slate-400 hover:bg-slate-100 rounded"><X className="w-4 h-4" /></button></>) : (<><button onClick={() => startEditExp(exp)} className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded"><Pencil className="w-4 h-4" /></button><button onClick={() => deleteExp(exp.id)} className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-4 h-4" /></button></>)}
+                            {isEditing ? (<><button onClick={() => saveExp(exp.id)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Save className="w-4 h-4" /></button><button onClick={() => setEditingExp(null)} className="p-1 text-slate-400 hover:bg-slate-100 rounded"><X className="w-4 h-4" /></button></>) : (<><Can modify><button onClick={() => startEditExp(exp)} className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded"><Pencil className="w-4 h-4" /></button></Can><Can create><button onClick={() => deleteExp(exp.id)} className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-4 h-4" /></button></Can></>)}
                           </div>
                         </td>
                       </tr>

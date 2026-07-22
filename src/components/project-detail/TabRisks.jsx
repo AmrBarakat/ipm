@@ -4,6 +4,7 @@ import { useEntityList, useEntityMutation } from '@/hooks/useEntity';
 import { formatDate } from '@/lib/constants';
 import { Plus, ShieldAlert, Sparkles, Trash2, Pencil, Save, X, ChevronDown, ChevronRight, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
+import { Can } from '@/lib/can';
 
 const PROB_SCORE  = { low: 1, medium: 2, high: 3 };
 const IMPACT_SCORE = { low: 1, medium: 2, high: 3, critical: 4 };
@@ -164,10 +165,12 @@ export default function TabRisks({ projectId }) {
             <option value="closed">Closed</option>
           </select>
         </div>
+        <Can create>
         <button onClick={() => setAdding(v => !v)}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold text-sm rounded">
           <Plus className="w-4 h-4" /> Add Risk
         </button>
+        </Can>
       </div>
 
       {/* Add form */}
@@ -320,12 +323,16 @@ export default function TabRisks({ projectId }) {
                           : <Sparkles className="w-3 h-3" />}
                         {suggesting === risk.id ? 'Thinking…' : 'Suggest Mitigation'}
                       </button>
+                      <Can modify>
                       <button onClick={() => startEdit(risk)} className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded">
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
+                      </Can>
+                      <Can create>
                       <button onClick={() => deleteRisk(risk.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
+                      </Can>
                     </div>
                   )}
                 </div>

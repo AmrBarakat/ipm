@@ -9,6 +9,7 @@ import PanelWrapper from '@/components/ui/PanelWrapper';
 import SkeletonTable from '@/components/ui/SkeletonTable';
 import EmptyState from '@/components/ui/EmptyState';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
+import { Can } from '@/lib/can';
 import PanelCompositionView from '@/components/project-detail/PanelCompositionView';
 import VendorLookup from '@/components/project-detail/VendorLookup';
 
@@ -363,9 +364,11 @@ export default function TabBOM({ projectId }) {
               className="text-xs text-slate-500 hover:text-red-500 underline">Clear</button>
           )}
         </div>
+        <Can create>
         <button onClick={() => setAdding(v => !v)} className="flex items-center gap-1 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold text-sm rounded">
           <Plus className="w-4 h-4" /> Add Item
         </button>
+        </Can>
       </div>
 
       {/* Bulk Edit Toolbar */}
@@ -411,16 +414,20 @@ export default function TabBOM({ projectId }) {
           </div>
 
           {bulkEdit && (
+            <Can modify>
             <button onClick={applyBulkEdit}
               className="flex items-center gap-1 px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold text-xs rounded">
               <Check className="w-3.5 h-3.5" /> Apply
             </button>
+            </Can>
           )}
 
+          <Can create>
           <button onClick={bulkDelete}
             className="flex items-center gap-1 px-3 py-1 bg-red-600 hover:bg-red-500 text-white font-semibold text-xs rounded ml-auto">
             <Trash2 className="w-3.5 h-3.5" /> Delete {selectedIds.size}
           </button>
+          </Can>
 
           <button onClick={() => { setSelectedIds(new Set()); setBulkEdit(null); }}
             className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-white">
@@ -686,9 +693,11 @@ export default function TabBOM({ projectId }) {
                                     <input type="date" className={inp} value={item.expected_delivery_date || ''} onChange={e => updateField(item.id, 'expected_delivery_date', e.target.value)} onBlur={e => handleBlur(item, 'expected_delivery_date', e.target.value)} />
                                   </td>
                                   <td className="px-2 py-1">
+                                    <Can create>
                                     <button onClick={() => deleteItem(item.id)} className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded">
                                       <Trash2 className="w-3.5 h-3.5" />
                                     </button>
+                                    </Can>
                                   </td>
                                 </tr>,
                                 // Panel children expanded sub-table

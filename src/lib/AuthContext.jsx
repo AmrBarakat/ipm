@@ -132,6 +132,14 @@ export const AuthProvider = ({ children }) => {
     base44.auth.redirectToLogin(window.location.href);
   };
 
+  // App-managed access layer (Base44 owns authentication). Derived from the
+  // current user's role + the admin-managed account_status / privilege fields.
+  const isAdmin = user?.role === 'admin';
+  const isApproved = isAdmin || user?.account_status === 'approved';
+  const canView = isApproved;
+  const canModify = isAdmin || user?.privilege === 'modify' || user?.privilege === 'create';
+  const canCreate = isAdmin || user?.privilege === 'create';
+
   return (
     <AuthContext.Provider value={{ 
       user, 
@@ -141,6 +149,11 @@ export const AuthProvider = ({ children }) => {
       authError,
       appPublicSettings,
       authChecked,
+      isAdmin,
+      isApproved,
+      canView,
+      canModify,
+      canCreate,
       logout,
       navigateToLogin,
       checkUserAuth,

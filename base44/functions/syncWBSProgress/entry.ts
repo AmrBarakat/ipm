@@ -1,4 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+import { requirePrivilege } from '../../shared/requirePrivilege.ts';
 
 // Business timezone — Saudi Arabia (UTC+3). Milestone completed_date is stamped
 // in Asia/Riyadh so a completion late in the local day lands on today, not
@@ -28,8 +29,9 @@ Deno.serve(async (req) => {
     const isAutomation = !!secret && secret === Deno.env.get('AUTOMATION_SECRET');
     const base44 = createClientFromRequest(req);
     if (!isAutomation) {
-      const ok = await base44.auth.isAuthenticated().catch(() => false);
-      if (!ok) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+      const user = await base44.auth.me().catch(() => null);
+      const denied = requirePrivilege(user, 'modify');
+      if (denied) return denied;
     }
 
     const body = await req.json().catch(() => ({}));

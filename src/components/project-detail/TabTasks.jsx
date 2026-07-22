@@ -5,6 +5,7 @@ import { ENTITY_QUERY } from '@/lib/entityQueryDefaults';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { Plus, Pencil, X, Trash2, RefreshCw, Layers, Check, Save, ListTodo } from 'lucide-react';
 import EmptyState from '@/components/ui/EmptyState';
+import { Can } from '@/lib/can';
 
 // Map WBS status -> Task status
 const WBS_TO_TASK_STATUS = {
@@ -201,6 +202,7 @@ export default function TabTasks({ projectId, focusTaskId }) {
             className="text-xs text-slate-500 hover:text-slate-700 underline hidden sm:block">
             {selectedIds.size === tasks.length && tasks.length > 0 ? 'Deselect all' : 'Select all'}
           </button>
+          <Can create>
           <button
             onClick={syncFromWBS}
             disabled={syncing}
@@ -209,6 +211,7 @@ export default function TabTasks({ projectId, focusTaskId }) {
             {syncing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Layers className="w-3.5 h-3.5" />}
             Sync from WBS
           </button>
+          </Can>
         </div>
       </div>
 
@@ -248,15 +251,19 @@ export default function TabTasks({ projectId, focusTaskId }) {
               className="text-xs bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white placeholder-slate-400 focus:outline-none focus:border-amber-400 w-20" />
           )}
           {bulkField && bulkValue && (
+            <Can modify>
             <button onClick={applyBulkEdit}
               className="flex items-center gap-1 px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold text-xs rounded">
               <Save className="w-3 h-3" /> Apply
             </button>
+            </Can>
           )}
+          <Can create>
           <button onClick={bulkDelete}
             className="flex items-center gap-1 px-3 py-1 bg-red-600 hover:bg-red-500 text-white font-semibold text-xs rounded ml-auto">
             <Trash2 className="w-3.5 h-3.5" /> Delete {selectedIds.size}
           </button>
+          </Can>
           <button onClick={clearSelection} className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-white">
             <X className="w-4 h-4" />
           </button>
@@ -313,8 +320,8 @@ export default function TabTasks({ projectId, focusTaskId }) {
                             <span className="font-semibold text-slate-800 leading-tight">{task.title}</span>
                           </div>
                           <div className="flex gap-0.5 shrink-0">
-                            <button onClick={() => startEdit(task)} className="p-0.5 text-slate-300 hover:text-slate-600 rounded"><Pencil className="w-3 h-3" /></button>
-                            <button onClick={() => deleteTask(task.id)} className="p-0.5 text-slate-300 hover:text-red-500 rounded"><Trash2 className="w-3 h-3" /></button>
+                            <Can modify><button onClick={() => startEdit(task)} className="p-0.5 text-slate-300 hover:text-slate-600 rounded"><Pencil className="w-3 h-3" /></button></Can>
+                            <Can create><button onClick={() => deleteTask(task.id)} className="p-0.5 text-slate-300 hover:text-red-500 rounded"><Trash2 className="w-3 h-3" /></button></Can>
                           </div>
                         </div>
                         {task.description && <p className="text-slate-400 mb-1.5 text-xs leading-relaxed">{task.description}</p>}
@@ -366,10 +373,12 @@ export default function TabTasks({ projectId, focusTaskId }) {
                   </div>
                 </form>
               ) : (
+                <Can create>
                 <button onClick={() => { setAddingCol(col.id); setNewTitle(''); setNewPriority('medium'); setNewAssignee(''); }}
                   className="w-full py-1.5 text-xs text-slate-400 hover:text-slate-600 hover:bg-white/70 rounded border border-dashed border-slate-200 flex items-center justify-center gap-1">
                   <Plus className="w-3 h-3" /> Add card
                 </button>
+                </Can>
               )}
             </div>
           </div>

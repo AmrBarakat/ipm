@@ -9,6 +9,7 @@ import PanelWrapper from '@/components/ui/PanelWrapper';
 import { isTopLevelBOM } from '@/lib/constants';
 import { todayLocal, sortMilestones } from '@/lib/utils';
 import BulkInvoiceDialog from '@/components/project-detail/BulkInvoiceDialog';
+import { Can } from '@/lib/can';
 
 const STATUS_COLORS = {
   pending:     'bg-slate-100 text-slate-600',
@@ -272,15 +273,19 @@ export default function TabDeliverables({ projectId }) {
 
       {/* Toolbar */}
       <div className="flex justify-end gap-2">
+        <Can create>
         <button onClick={autoGenerate} disabled={generating}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm rounded disabled:opacity-50">
           {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
           Auto-Generate from BOM
         </button>
+        </Can>
+        <Can create>
         <button onClick={() => { setAdding(v => !v); setForm(EMPTY); }}
           className="flex items-center gap-1 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold text-sm rounded">
           <Plus className="w-4 h-4" /> Add Deliverable
         </button>
+        </Can>
       </div>
 
       {/* Add form */}
@@ -350,19 +355,25 @@ export default function TabDeliverables({ projectId }) {
             </select>
           )}
           {bulkField && bulkValue && (
+            <Can modify>
             <button onClick={applyBulkEdit}
               className="flex items-center gap-1 px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold text-xs rounded">
               <Save className="w-3 h-3" /> Apply
             </button>
+            </Can>
           )}
+          <Can create>
           <button onClick={openInvoiceDialog}
             className="flex items-center gap-1 px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded ml-auto">
             <FileText className="w-3.5 h-3.5" /> Generate Invoices
           </button>
+          </Can>
+          <Can create>
           <button onClick={bulkDelete}
             className="flex items-center gap-1 px-3 py-1 bg-red-600 hover:bg-red-500 text-white font-semibold text-xs rounded">
             <Trash2 className="w-3.5 h-3.5" /> Delete {selectedIds.size}
           </button>
+          </Can>
           <button onClick={() => { setSelectedIds(new Set()); setBulkField(''); setBulkValue(''); }}
             className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-white">
             <X className="w-4 h-4" />
@@ -531,8 +542,8 @@ function DeliverableTable({ items, editingId, editForm, setEditForm, milestones,
                   {isEditing
                     ? <><button onClick={() => onSave(d.id)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Save className="w-4 h-4" /></button>
                         <button onClick={onCancel} className="p-1 text-slate-400 hover:bg-slate-100 rounded"><X className="w-4 h-4" /></button></>
-                    : <><button onClick={() => onEdit(d)} className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded"><Pencil className="w-4 h-4" /></button>
-                        <button onClick={() => onDelete(d.id)} className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-4 h-4" /></button></>}
+                    : <><Can modify><button onClick={() => onEdit(d)} className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded"><Pencil className="w-4 h-4" /></button></Can>
+                        <Can create><button onClick={() => onDelete(d.id)} className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-4 h-4" /></button></Can></>}
                 </div>
               </td>
             </tr>

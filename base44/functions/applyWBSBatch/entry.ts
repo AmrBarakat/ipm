@@ -1,4 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
+import { requirePrivilege } from '../../shared/requirePrivilege.ts';
 
 /**
  * applyWBSBatch
@@ -25,6 +26,8 @@ Deno.serve(async (req) => {
     let user = null;
     try { user = await base44.auth.me(); } catch (_) { user = null; }
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    const denied = requirePrivilege(user, 'modify');
+    if (denied) return denied;
 
     let body = {};
     try { body = await req.json(); } catch (_) { body = {}; }
