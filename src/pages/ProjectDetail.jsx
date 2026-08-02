@@ -65,6 +65,14 @@ export default function ProjectDetail() {
     setLastTabByGroup(prev => ({ ...prev, [activeGroup]: tabId }));
   }
 
+  // Jump straight to any tab from an assistant suggestion — switches the active
+  // group too, so the tab bar and the content stay in sync.
+  function goToTab(tabId) {
+    const group = TAB_GROUPS.find(g => g.tabs.includes(tabId));
+    if (group) { setActiveGroup(group.id); setLastTabByGroup(prev => ({ ...prev, [group.id]: tabId })); }
+    setActiveTab(tabId);
+  }
+
   useEffect(() => { loadProject(); }, [id]);
   useEffect(() => { loadOverduePOs(); }, [id]);
 
@@ -234,7 +242,7 @@ export default function ProjectDetail() {
             {activeTab === 'vendors'    && <TabVendors    projectId={id} project={project} />}
             {activeTab === 'changeOrders' && <TabChangeOrders projectId={id} project={project} />}
             {activeTab === 'scheduleAssistant' && <TabAssistant projectId={id} project={project} />}
-            {activeTab === 'projectAssistant' && <TabProjectAssistant projectId={id} project={project} />}
+            {activeTab === 'projectAssistant' && <TabProjectAssistant projectId={id} project={project} onNavigateTab={goToTab} />}
             </div>
           </Suspense>
           </ErrorBoundary>
