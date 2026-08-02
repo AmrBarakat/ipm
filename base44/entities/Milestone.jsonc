@@ -43,6 +43,11 @@
       "type": "number",
       "default": 0,
       "description": "Rolled-up progress for WBS-driven milestones (weighted average of linked WBS items), or 100 when task-driven completion fires. Populated by syncWBSProgress / checkMilestoneCompletion."
+    },
+    "delay_alerted": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether a delay/overdue notification has already been sent for this milestone (dedup)."
     }
   },
   "required": [
