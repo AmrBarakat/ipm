@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
 /**
  * projectChat — read-only general project assistant.
@@ -59,10 +59,12 @@ function rollupOverallProgress(items: any[]): number {
 }
 
 Deno.serve(async (req) => {
+  let stage = 'start';
   try {
     const base44 = createClientFromRequest(req);
 
     // ── Auth ──────────────────────────────────────────────────────────────
+    stage = 'auth';
     const secret = req.headers.get('x-automation-secret');
     const isAutomation = !!secret && secret === Deno.env.get('AUTOMATION_SECRET');
     let user: { full_name?: string; email?: string } | null = null;
@@ -73,6 +75,7 @@ Deno.serve(async (req) => {
     const actor = user ? (user.full_name || user.email || 'user') : 'system';
 
     // ── Input ─────────────────────────────────────────────────────────────
+    stage = 'input';
     const body = await req.json();
     const { project_id, conversation_id, user_message, mode } = body || {};
     if (!project_id || !user_message) {
@@ -81,6 +84,7 @@ Deno.serve(async (req) => {
     const model = mode === 'deep' ? 'claude_sonnet_4_6' : 'gemini_3_flash';
 
     // ── Ensure a project-kind conversation exists ──────────────────────────
+    stage = 'ensure_conversation';
     let convId = conversation_id;
     if (!convId) {
       const conv = await base44.asServiceRole.entities.Conversation.create({
@@ -92,6 +96,7 @@ Deno.serve(async (req) => {
     }
 
     // ── Parallel context load (allSettled → partial failures tolerated) ───
+    stage = 'load_context';
     const loads: Record<string, () => Promise<any[]>> = {
       project: () => base44.asServiceRole.entities.Project.filter({ id: project_id }),
       wbs: () => base44.asServiceRole.entities.WBSItem.filter({ project_id }, 'wbs_code', 1000),
@@ -110,14 +115,16 @@ Deno.serve(async (req) => {
       priorMessages: () => base44.asServiceRole.entities.Message.filter({ conversation_id: convId }, 'created_date', 50),
     };
     const keys = Object.keys(loads);
-    const settled = await Promise.allSettled(Object.values(loads));
+    // Invoke each loader (Object.values returns the functions, not their results).
+    const settled = await Promise.allSettled(Object.values(loads).map((fn) => fn()));
     const data: Record<string, any[]> = {};
-    const loadGaps: string[] = [];
+    const loadErrors: { entity: string; reason: string }[] = [];
     keys.forEach((k, i) => {
       const r = settled[i];
       if (r.status === 'fulfilled') data[k] = r.value || [];
-      else loadGaps.push(k);
+      else loadErrors.push({ entity: k, reason: String((r.reason as any)?.message || r.reason) });
     });
+    const loadGaps = loadErrors.map((e) => e.entity);
 
     const project = (data.project && data.project[0]) || null;
     const wbs = data.wbs || [];
@@ -138,6 +145,7 @@ Deno.serve(async (req) => {
     const today = tzDateStr(new Date());
 
     // ── Compact fact sheets ────────────────────────────────────────────────
+    stage = 'build_facts';
     const sections: string[] = [];
 
     // Project header
@@ -316,8 +324,12 @@ Deno.serve(async (req) => {
       'If the answer isn\'t in the context, say what\'s missing rather than guessing. ' +
       'You do not make changes; if the user asks to change something, tell them which tab to use.';
 
-    const raw = await base44.asServiceRole.integrations.Core.InvokeLLM({
-      prompt: `${systemInstruction}
+    // ── LLM call (guarded; falls back to schema-less + JSON.parse) ──────────
+    stage = 'invoke_llm';
+    let raw: any;
+    try {
+      raw = await base44.asServiceRole.integrations.Core.InvokeLLM({
+        prompt: `${systemInstruction}
 
 PROJECT CONTEXT:
 ${contextBlob}
@@ -326,32 +338,45 @@ Conversation so far:
 ${historyText || '(none)'}
 
 User question: ${user_message}`,
-      model,
-      response_json_schema: {
-        type: 'object',
-        properties: {
-          answer: { type: 'string' },
-          citations: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: { area: { type: 'string' }, detail: { type: 'string' } },
-              required: ['area', 'detail'],
+        model,
+        response_json_schema: {
+          type: 'object',
+          properties: {
+            answer: { type: 'string' },
+            citations: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: { area: { type: 'string' }, detail: { type: 'string' } },
+                required: ['area', 'detail'],
+              },
             },
-          },
-          suggested_actions: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: { label: { type: 'string' }, tab: { type: 'string' } },
-              required: ['label', 'tab'],
+            suggested_actions: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: { label: { type: 'string' }, tab: { type: 'string' } },
+                required: ['label', 'tab'],
+              },
             },
+            data_gaps: { type: 'array', items: { type: 'string' } },
           },
-          data_gaps: { type: 'array', items: { type: 'string' } },
+          required: ['answer', 'citations', 'suggested_actions', 'data_gaps'],
         },
-        required: ['answer', 'citations', 'suggested_actions', 'data_gaps'],
-      },
-    });
+      });
+    } catch (llmErr) {
+      // Retry once WITHOUT response_json_schema, then parse the text as JSON.
+      try {
+        const rawText = await base44.asServiceRole.integrations.Core.InvokeLLM({
+          prompt: `${systemInstruction}\n\nReturn ONLY valid JSON matching {answer, citations:[{area,detail}], suggested_actions:[{label,tab}], data_gaps:[]}. No markdown, no backticks.\n\nPROJECT CONTEXT:\n${contextBlob}\n\nConversation so far:\n${historyText || '(none)'}\n\nUser question: ${user_message}`,
+          model,
+        });
+        const txt = String((rawText?.response ?? rawText?.answer ?? rawText) || '').replace(/```json|```/g, '').trim();
+        raw = JSON.parse(txt);
+      } catch (e2) {
+        return Response.json({ error: `LLM call failed: ${(llmErr as any)?.message || llmErr}`, stage: 'invoke_llm' }, { status: 502 });
+      }
+    }
     // InvokeLLM may return the parsed object directly OR nested under `.response`.
     const result = (raw?.response || raw || {}) as Record<string, unknown>;
 
@@ -363,29 +388,37 @@ User question: ${user_message}`,
       ? (result.suggested_actions as any[]).map((a) => ({ label: String(a?.label || ''), tab: String(a?.tab || '') })).filter((a) => a.label)
       : [];
     const modelGaps = Array.isArray(result?.data_gaps) ? (result.data_gaps as unknown[]).map(String) : [];
-    const data_gaps = [...modelGaps, ...loadGaps.map((k) => `${k} context failed to load`)];
+    const data_gaps = [...modelGaps, ...loadErrors.map((e) => `${e.entity} context failed to load (${e.reason})`)];
 
     const reply = { answer, citations, suggested_actions, data_gaps };
 
-    // ── Persist user + assistant turns ─────────────────────────────────────
-    await base44.asServiceRole.entities.Message.create({ conversation_id: convId, role: 'user', content: String(user_message) });
-    await base44.asServiceRole.entities.Message.create({ conversation_id: convId, role: 'assistant', content: JSON.stringify(reply) });
+    // ── Persist user + assistant turns (non-fatal) ─────────────────────────
+    stage = 'persist';
+    try {
+      await base44.asServiceRole.entities.Message.create({ conversation_id: convId, role: 'user', content: String(user_message) });
+      await base44.asServiceRole.entities.Message.create({ conversation_id: convId, role: 'assistant', content: JSON.stringify(reply) });
+    } catch (persistErr) {
+      console.error('projectChat persist failed:', persistErr);
+    }
 
-    // Audit log — wrapped so a logging/validation failure never breaks the answer.
+    // ── Audit log (best-effort; never breaks the answer) ────────────────────
+    stage = 'audit';
     try {
       await base44.asServiceRole.entities.AuditLog.create({
         project_id,
         entity_type: 'Conversation',
         entity_id: convId,
-        action: 'project_assistant_answered',
+        action: 'updated',
         actor,
         summary: `Project assistant answered: ${String(user_message).slice(0, 80)}`,
         metadata: { conversation_id: convId, areas_cited: citations.map((c) => c.area), model },
       });
     } catch (_) { /* audit is best-effort */ }
 
+    stage = 'done';
     return Response.json({ conversation_id: convId, ...reply });
   } catch (error) {
-    return Response.json({ error: error.message }, { status: 500 });
+    console.error(`projectChat failed at stage=${stage}:`, error);
+    return Response.json({ error: `${(error as any)?.message || error} (stage: ${stage})`, stage }, { status: 500 });
   }
 });

@@ -98,7 +98,9 @@ export default function TabProjectAssistant({ projectId, onNavigateTab }) {
       queryClient.invalidateQueries({ queryKey: ['Message'] });
       queryClient.invalidateQueries({ queryKey: ['Conversation'] });
     } catch (e) {
-      setError(e?.message || 'Failed to send message');
+      const serverMsg = e?.response?.data?.error || e?.response?.data?.message || e?.data?.error;
+      setError(serverMsg ? `Assistant error: ${serverMsg}` : (e?.message || 'Failed to send message'));
+      console.error('projectChat failed:', e?.response?.data || e);
     } finally {
       setSending(false);
     }
@@ -137,7 +139,9 @@ export default function TabProjectAssistant({ projectId, onNavigateTab }) {
       ]);
       toast.success('Conversation deleted');
     } catch (e) {
-      toast.error(e?.message || 'Failed to delete conversation');
+      const serverMsg = e?.response?.data?.error || e?.response?.data?.message || e?.data?.error;
+      toast.error(serverMsg || e?.message || 'Failed to delete conversation');
+      console.error('delete conversation failed:', e?.response?.data || e);
     }
   }
 
@@ -160,7 +164,9 @@ export default function TabProjectAssistant({ projectId, onNavigateTab }) {
       ]);
       toast.success('All conversations cleared');
     } catch (e) {
-      toast.error(e?.message || 'Failed to clear conversations');
+      const serverMsg = e?.response?.data?.error || e?.response?.data?.message || e?.data?.error;
+      toast.error(serverMsg || e?.message || 'Failed to clear conversations');
+      console.error('clear conversations failed:', e?.response?.data || e);
     } finally {
       setClearing(false);
     }
