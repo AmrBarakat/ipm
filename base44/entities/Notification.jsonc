@@ -29,6 +29,16 @@
     "is_read": {
       "type": "boolean",
       "default": false
+    },
+    "snooze_until": {
+      "type": "string",
+      "format": "date-time",
+      "description": "If set and in the future, hide the notification from the active feed until this time (postpone/snooze)."
+    },
+    "dismissed": {
+      "type": "boolean",
+      "default": false,
+      "description": "Cleared/dismissed by the user; hidden from the active feed but retained for audit."
     }
   },
   "required": [
