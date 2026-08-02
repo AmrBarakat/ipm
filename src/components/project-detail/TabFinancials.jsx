@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { useEntityList, useEntityMutation } from '@/hooks/useEntity';
 import PanelWrapper from '@/components/ui/PanelWrapper';
 import { formatCurrency, formatDate, INVOICE_STATUS_LABELS, EXPENSE_CATEGORY_LABELS, EXPENSE_STATUS_LABELS } from '@/lib/constants';
-import { Plus, TrendingUp, TrendingDown, AlertTriangle, Pencil, Trash2, Save, X, Banknote, AlertCircle, FileEdit } from 'lucide-react';
+import { Plus, TrendingUp, TrendingDown, AlertTriangle, Pencil, Trash2, Save, X, Banknote, AlertCircle, FileEdit, ClipboardPaste } from 'lucide-react';
 import ExpenseCategoryChart from '@/components/project-detail/ExpenseCategoryChart';
 import BaselineManager from '@/components/project-detail/BaselineManager';
 import SpendingTrendChart from '@/components/project-detail/SpendingTrendChart';
+import BulkExpensePaste from '@/components/project-detail/BulkExpensePaste';
 import SkeletonTable from '@/components/ui/SkeletonTable';
 import EmptyState from '@/components/ui/EmptyState';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
@@ -40,6 +41,7 @@ export default function TabFinancials({ projectId, project }) {
 
   const [addingInv, setAddingInv] = useState(false);
   const [addingExp, setAddingExp] = useState(false);
+  const [bulkExp, setBulkExp] = useState(false);
   const [addingCol, setAddingCol] = useState(false);
 
   const [invForm, setInvForm] = useState({ description: '', planned_amount: '', planned_date: '' });
@@ -480,12 +482,20 @@ export default function TabFinancials({ projectId, project }) {
       <div>
         <div className="flex justify-between items-center mb-3">
           <h3 className="font-semibold text-slate-700 flex items-center gap-2"><TrendingDown className="w-4 h-4 text-red-500" /> Expenses</h3>
-          <Can create>
-          <button onClick={() => setAddingExp(v => !v)} className="flex items-center gap-1 px-3 py-1.5 bg-red-500 hover:bg-red-400 text-white font-semibold text-sm rounded">
-            <Plus className="w-4 h-4" /> Add Expense
-          </button>
-          </Can>
+          <div className="flex items-center gap-2">
+            <Can create>
+            <button onClick={() => setBulkExp(true)} className="flex items-center gap-1 px-3 py-1.5 border border-slate-300 hover:bg-slate-100 text-slate-700 font-medium text-sm rounded">
+              <ClipboardPaste className="w-4 h-4" /> Bulk Paste
+            </button>
+            </Can>
+            <Can create>
+            <button onClick={() => setAddingExp(v => !v)} className="flex items-center gap-1 px-3 py-1.5 bg-red-500 hover:bg-red-400 text-white font-semibold text-sm rounded">
+              <Plus className="w-4 h-4" /> Add Expense
+            </button>
+            </Can>
+          </div>
         </div>
+        {bulkExp && <BulkExpensePaste projectId={projectId} onClose={() => setBulkExp(false)} />}
         {addingExp && (
           <form onSubmit={createExpense} className="bg-red-50 border border-red-200 rounded-lg p-4 mb-3 grid grid-cols-1 md:grid-cols-3 gap-3">
             <input value={expForm.description} onChange={e => setExpForm(f => ({ ...f, description: e.target.value }))} placeholder="Description *" className={inp} required />
