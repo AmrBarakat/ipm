@@ -22,6 +22,7 @@ const TabVendors = lazy(() => import('@/components/project-detail/TabVendors'));
 const TabDeliverables = lazy(() => import('@/components/project-detail/TabDeliverables'));
 const TabChangeOrders = lazy(() => import('@/components/project-detail/TabChangeOrders'));
 const TabAssistant = lazy(() => import('@/components/project-detail/TabAssistant'));
+const TabProjectAssistant = lazy(() => import('@/components/project-detail/TabProjectAssistant'));
 
 const TabSpinner = () => (
   <div className="flex items-center justify-center py-20">
@@ -32,7 +33,7 @@ const TabSpinner = () => (
 const TAB_GROUPS = [
   { id: 'plan',       label: 'PLAN',       tabs: ['overview', 'gantt', 'wbs', 'tasks', 'milestones', 'deliverables'] },
   { id: 'commercial', label: 'COMMERCIAL', tabs: ['bom', 'financials', 'changeOrders', 'vendors'] },
-  { id: 'governance', label: 'GOVERNANCE', tabs: ['documents', 'notes', 'risks', 'assistant'] },
+  { id: 'governance', label: 'GOVERNANCE', tabs: ['documents', 'notes', 'risks', 'scheduleAssistant', 'projectAssistant'] },
 ];
 const DEFAULT_TAB = 'overview';
 const DEFAULT_GROUP = 'plan';
@@ -232,7 +233,8 @@ export default function ProjectDetail() {
             {activeTab === 'deliverables' && <TabDeliverables projectId={id} />}
             {activeTab === 'vendors'    && <TabVendors    projectId={id} project={project} />}
             {activeTab === 'changeOrders' && <TabChangeOrders projectId={id} project={project} />}
-            {activeTab === 'assistant'   && <TabAssistant   projectId={id} project={project} />}
+            {activeTab === 'scheduleAssistant' && <TabAssistant projectId={id} project={project} />}
+            {activeTab === 'projectAssistant' && <TabProjectAssistant projectId={id} project={project} />}
             </div>
           </Suspense>
           </ErrorBoundary>

@@ -205,6 +205,7 @@ Deno.serve(async (req) => {
     if (!convId) {
       const conv = await base44.asServiceRole.entities.Conversation.create({
         project_id,
+        kind: 'schedule',
         title: String(user_message).slice(0, 60) || 'New Conversation',
       });
       convId = conv.id;

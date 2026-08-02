@@ -9,6 +9,15 @@
     "title": {
       "type": "string",
       "description": "Short title for the conversation"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "schedule",
+        "project"
+      ],
+      "default": "project",
+      "description": "Which assistant owns this conversation. Existing conversations without a kind are treated as 'project' on read."
     }
   },
   "required": [
