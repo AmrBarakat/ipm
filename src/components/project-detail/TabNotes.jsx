@@ -3,6 +3,7 @@ import { useEntityList, useEntityMutation } from '@/hooks/useEntity';
 import { base44 } from '@/api/base44Client';
 import { Plus, Trash2, StickyNote, Pencil, Save, X } from 'lucide-react';
 import SummaryNoteTable from '@/components/documents/SummaryNoteTable';
+import EditableSummaryNoteTable from '@/components/documents/EditableSummaryNoteTable';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 export default function TabNotes({ projectId }) {
@@ -13,6 +14,7 @@ export default function TabNotes({ projectId }) {
   const [body, setBody] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [editBody, setEditBody] = useState('');
+  const [editTableData, setEditTableData] = useState(null);
   const [user, setUser] = useState(null);
 
   useEffect(() => {
@@ -37,11 +39,15 @@ export default function TabNotes({ projectId }) {
   function startEdit(note) {
     setEditingId(note.id);
     setEditBody(note.body);
+    setEditTableData(note.table_data ? JSON.parse(JSON.stringify(note.table_data)) : null);
   }
 
   async function saveEdit(id) {
-    await mutation.mutateAsync({ action: 'update', id, data: { body: editBody.trim() } });
+    const data = { body: editBody.trim() };
+    if (editTableData) data.table_data = editTableData;
+    await mutation.mutateAsync({ action: 'update', id, data });
     setEditingId(null);
+    setEditTableData(null);
   }
 
   async function deleteNote(id) {
@@ -94,13 +100,26 @@ export default function TabNotes({ projectId }) {
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     {isEditing ? (
-                      <textarea
-                        value={editBody}
-                        onChange={e => setEditBody(e.target.value)}
-                        rows={4}
-                        className="w-full border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white resize-y"
-                        autoFocus
-                      />
+                      note.note_type && note.note_type !== 'plain' && note.table_data ? (
+                        <div className="space-y-2">
+                          <input
+                            value={editBody}
+                            onChange={e => setEditBody(e.target.value)}
+                            className="w-full border border-slate-200 rounded px-3 py-2 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white"
+                            placeholder="Note title"
+                            autoFocus
+                          />
+                          <EditableSummaryNoteTable tableData={editTableData} onChange={setEditTableData} />
+                        </div>
+                      ) : (
+                        <textarea
+                          value={editBody}
+                          onChange={e => setEditBody(e.target.value)}
+                          rows={4}
+                          className="w-full border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white resize-y"
+                          autoFocus
+                        />
+                      )
                     ) : note.note_type && note.note_type !== 'plain' && note.table_data ? (
                       <div className="space-y-2">
                         <p className="text-sm font-semibold text-slate-700">{note.body}</p>
@@ -118,7 +137,7 @@ export default function TabNotes({ projectId }) {
                     {isEditing ? (
                       <>
                         <button onClick={() => saveEdit(note.id)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Save className="w-4 h-4" /></button>
-                        <button onClick={() => setEditingId(null)} className="p-1 text-slate-400 hover:bg-slate-100 rounded"><X className="w-4 h-4" /></button>
+                        <button onClick={() => { setEditingId(null); setEditTableData(null); }} className="p-1 text-slate-400 hover:bg-slate-100 rounded"><X className="w-4 h-4" /></button>
                       </>
                     ) : (
                       <>
