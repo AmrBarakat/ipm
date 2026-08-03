@@ -72,8 +72,7 @@ export default function SummaryNoteTable({ tableData }) {
                       <th className="px-3 py-2 text-left">Status</th>
                     </>
                   )}
-                  <th className="px-3 py-2 text-left">Source</th>
-                </tr>
+                  </tr>
               </thead>
               <tbody>
                 {rows.map((r, i) => (
@@ -93,11 +92,8 @@ export default function SummaryNoteTable({ tableData }) {
                         <td className="px-3 py-1.5 text-right">{r.remaining ?? '—'}</td>
                         <td className="px-3 py-1.5"><span className={statusColor(r.action)}>{r.action}</span></td>
                       </>
-                    )}
-                    <td className="px-3 py-1.5 font-mono text-slate-500">
-                      {r.source_ref || '—'} <span className="text-slate-400">{r.source_date || ''}</span>
-                    </td>
-                  </tr>
+                      )}
+                      </tr>
                 ))}
               </tbody>
             </>

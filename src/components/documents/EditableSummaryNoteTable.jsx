@@ -31,8 +31,8 @@ function Cell({ value, onCommit, numeric = false, mono = false, className = '' }
 
 function blankRow(isNewShape, isPo) {
   if (isNewShape) return { part_number: '', description: '', qty: null, matched: false, applied_status: '', ocr_uncertain: false };
-  if (isPo) return { bom_description: '', part_number: '', ordered_qty: null, action: '', source_ref: '', source_date: '' };
-  return { bom_description: '', part_number: '', ordered_qty: null, delivered_this_slip: null, cumulative_delivered: null, remaining: null, action: '', source_ref: '', source_date: '' };
+  if (isPo) return { bom_description: '', part_number: '', ordered_qty: null, action: '' };
+  return { bom_description: '', part_number: '', ordered_qty: null, delivered_this_slip: null, cumulative_delivered: null, remaining: null, action: '' };
 }
 
 export default function EditableSummaryNoteTable({ tableData, onChange }) {
@@ -137,8 +137,6 @@ export default function EditableSummaryNoteTable({ tableData, onChange }) {
                       <th className={th}>Status</th>
                     </>
                   )}
-                  <th className={th}>Source Ref</th>
-                  <th className={th}>Source Date</th>
                   <th className="w-8" />
                 </tr>
               </thead>
@@ -161,8 +159,6 @@ export default function EditableSummaryNoteTable({ tableData, onChange }) {
                         <td className={tdCls}><Cell value={r.action} onCommit={(v) => updateRow(i, { action: v })} className={statusColor(r.action)} /></td>
                       </>
                     )}
-                    <td className={tdCls}><Cell value={r.source_ref} onCommit={(v) => updateRow(i, { source_ref: v })} mono /></td>
-                    <td className={tdCls}><Cell value={r.source_date} onCommit={(v) => updateRow(i, { source_date: v })} /></td>
                     <td className="px-1 text-center">
                       <button onClick={() => removeRow(i)} className="p-1 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-3.5 h-3.5" /></button>
                     </td>
