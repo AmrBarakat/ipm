@@ -14,6 +14,7 @@ import BomImportSkill from '@/components/bom/BomImportSkill';
 import DocumentExtractionModal from './DocumentExtractionModal';
 import PODNExtractionPanel from '@/components/documents/PODNExtractionPanel';
 import ExtractionsList from '@/components/documents/ExtractionsList';
+import LegacyExtractionCleanup from '@/components/documents/LegacyExtractionCleanup';
 
 const CATEGORY_ICONS = {
   drawing: '📐',
@@ -494,6 +495,8 @@ export default function TabDocuments({ projectId, project, onNavigateTab }) {
           onClose={() => setBomSkillDoc(null)}
           onImported={() => { setBomSkillDoc(null); queryClient.invalidateQueries({ queryKey: ['BOMItem'] }); queryClient.invalidateQueries({ queryKey: ['Document'] }); }} />
       )}
+
+      <LegacyExtractionCleanup projectId={projectId} />
 
       <ExtractionsList
         extractions={extractions}
