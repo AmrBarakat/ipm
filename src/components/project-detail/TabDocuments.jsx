@@ -96,9 +96,9 @@ export default function TabDocuments({ projectId, project }) {
     setCollapsed(p => ({ ...p, [cat]: !p[cat] }));
   }
 
-  // PO / Delivery-Note extraction: one server-side pipeline (extractPODN) that
-  // reads, extracts, matches, applies matched lines, writes the summary note,
-  // and returns the result rows for the results panel.
+  // PO / Delivery-Note extraction (R1): extractPODN reads + extracts + matches
+  // only — it writes a staging Extraction record and nothing else. The review
+  // modal handles all commitment on Apply.
   async function handleExtract(doc) {
     setExtractingId(doc.id);
     let res;
@@ -107,6 +107,8 @@ export default function TabDocuments({ projectId, project }) {
         file_url: doc.file_url,
         project_id: projectId,
         doc_hint: doc.category === 'po' ? 'po' : doc.category === 'delivery_note' ? 'delivery_note' : 'auto',
+        document_id: doc.id,
+        document_title: doc.title,
       });
     } catch (err) {
       setExtractingId(null);
@@ -116,11 +118,8 @@ export default function TabDocuments({ projectId, project }) {
     if (res.data?.error) { setExtractingId(null); alert(res.data.error); return; }
     setExtractingId(null);
     const r = res.data;
-    if (!r || !r.rows) { alert('No line items could be extracted from this document.'); return; }
+    if (!r || !r.extraction_id) { alert('No data could be extracted from this document.'); return; }
     setPodnResult({ document: doc, result: r });
-    queryClient.invalidateQueries({ queryKey: ['BOMItem'] });
-    queryClient.invalidateQueries({ queryKey: ['Note'] });
-    queryClient.invalidateQueries({ queryKey: ['AuditLog'] });
   }
 
   const filtered = useMemo(() =>
