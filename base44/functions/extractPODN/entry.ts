@@ -1,23 +1,12 @@
 /**
- * extractPODN — single-purpose PO / Delivery-Note pipeline.
+ * extractPODN — R1: EXTRACT ONLY. Writes a staging Extraction record (status
+ * "review") and returns structured data for the review screen. Does NOT update
+ * BOMItem, does NOT create a Note, does NOT call applyLine.
  *
- * Replaces the PO/DN branch of extractDocumentData. In one server-side call it:
- *   a. reads the document (image → vision; Excel/CSV → text; PDF → text then
- *      vision if the text is thin),
- *   b. extracts a narrow { document_type, document_number, document_date,
- *      vendor_name, line_items[{ part_number, description, qty, ocr_uncertain }] },
- *   c. matches each line to the project's BOMItems by normalized part number
- *      (manufacturer_part_number, then item_code) — exact match only,
- *   d. applies matched lines (PO → ordered; delivery note → received_qty += qty
- *      with material_status / delivery_status recompute), writing an AuditLog
- *      per changed item,
- *   e. saves a summary Note (po_summary / dn_summary) with the full row table,
- *   f. returns the result rows for the results panel.
- *
- * Auth: 401 if not logged in (pattern from applyWBSBatch).
+ * Returns: { extraction_id, header, line_items, secondary_document,
+ *            payment_schedule, duplicates, warnings }
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
-import { normalizePart, applyLine } from '../../shared/podnApply.ts';
 
 const IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.webp'];
 const SHEET_EXTS = ['.xlsx', '.xls', '.csv', '.html', '.json'];
@@ -28,45 +17,213 @@ const TEXT_EXTRACT_SCHEMA = {
   properties: { raw_text: { type: 'string', description: 'Full text content of the document' } },
 };
 
-/** If the model placed the part code only inside the description (in [brackets]),
- *  re-extract it so normalizePart can match. Mirrors the frontend fallback. */
-function extractBracketCode(description) {
-  if (!description) return '';
-  const m = String(description).match(/\[([^\]]+)\]/);
-  return m ? m[1] : '';
-}
-
+// ── Widened extraction schema (R1) ────────────────────────────────────────────
 const PODN_SCHEMA = {
   type: 'object',
   properties: {
     document_type: { type: 'string', enum: ['po', 'delivery_note'] },
     document_number: { type: 'string' },
     document_date: { type: 'string' },
-    vendor_name: { type: 'string' },
+    currency: { type: 'string' },
+    subtotal_net: { type: 'number' },
+    total_amount: { type: 'number' },
+    total_quantity: { type: 'number' },
+    vendor: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        supplier_code: { type: 'string' },
+        tax_number: { type: 'string' },
+        contact_name: { type: 'string' },
+        email: { type: 'string' },
+        phone: { type: 'string' },
+        address: { type: 'string' },
+        country: { type: 'string' },
+      },
+    },
+    terms: {
+      type: 'object',
+      properties: {
+        payment_terms: { type: 'string' },
+        incoterm: { type: 'string' },
+        mode_of_shipping: { type: 'string' },
+        warehouse_code: { type: 'string' },
+        supplier_ref: { type: 'string' },
+        pr_number: { type: 'string' },
+        purchaser: { type: 'string' },
+        requested_by: { type: 'string' },
+      },
+    },
     line_items: {
       type: 'array',
       items: {
         type: 'object',
         properties: {
+          line_no: { type: 'number' },
+          erp_item_code: { type: 'string' },
           part_number: { type: 'string' },
           description: { type: 'string' },
+          uom: { type: 'string' },
           qty: { type: 'number' },
+          unit_price: { type: 'number' },
+          net_amount: { type: 'number' },
+          supplier_delivery_date: { type: 'string' },
           ocr_uncertain: { type: 'boolean' },
+        },
+      },
+    },
+    secondary_document: {
+      type: 'object',
+      properties: {
+        present: { type: 'boolean' },
+        kind: { type: 'string' },
+        reference: { type: 'string' },
+        prices_include_tax: { type: 'boolean' },
+        lines: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              description: { type: 'string' },
+              part_number: { type: 'string' },
+              qty: { type: 'number' },
+              unit_price: { type: 'number' },
+            },
+          },
         },
       },
     },
   },
 };
 
+// ── R8: parse payment terms into a cash-flow schedule ────────────────────────
+function parsePaymentTerms(raw: string, subtotalNet: number): any[] {
+  if (!raw) return [{ label: '', percent_due: 100, trigger: 'unknown', offset_days: 0 }];
+  const s = raw.trim().toLowerCase();
+
+  // "X% advance - Y% on delivery" (or similar)
+  const splitAdvanceDel = s.match(/(\d+)%\s+advance[^-]*[-–]\s*(\d+)%\s+on\s+delivery/i);
+  if (splitAdvanceDel) {
+    const p1 = Number(splitAdvanceDel[1]);
+    const p2 = Number(splitAdvanceDel[2]);
+    const unit = subtotalNet / 100;
+    return [
+      { label: 'Advance', percent_due: p1, amount_due: +(p1 * unit).toFixed(2), trigger: 'on_order', offset_days: 0 },
+      { label: 'On delivery', percent_due: p2, amount_due: +(p2 * unit).toFixed(2), trigger: 'on_delivery', offset_days: 0 },
+    ];
+  }
+
+  // "100% advance"
+  if (/100%\s+advance/i.test(s)) {
+    return [{ label: 'Advance', percent_due: 100, amount_due: +subtotalNet.toFixed(2), trigger: 'on_order', offset_days: 0 }];
+  }
+
+  // "Net 30" / "30 Days Credit" / "30 Days" etc.
+  const netDays = s.match(/(?:net|credit)?\s*(\d+)\s*days?\s*(?:credit)?/i);
+  if (netDays) {
+    const days = Number(netDays[1]);
+    return [{ label: `Net ${days}`, percent_due: 100, amount_due: +subtotalNet.toFixed(2), trigger: 'days_after_invoice', offset_days: days }];
+  }
+
+  // "30 days credit"
+  const daysCredit = s.match(/(\d+)\s+days?\s+credit/i);
+  if (daysCredit) {
+    const days = Number(daysCredit[1]);
+    return [{ label: `Net ${days}`, percent_due: 100, amount_due: +subtotalNet.toFixed(2), trigger: 'days_after_invoice', offset_days: days }];
+  }
+
+  // fallback: verbatim
+  return [{ label: raw, percent_due: 100, amount_due: +subtotalNet.toFixed(2), trigger: 'unknown', offset_days: 0 }];
+}
+
+// ── Simple description/part normalizer for R4 quotation matching ──────────────
+function normalizeDesc(s: string): string {
+  return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+// ── R4: attach quoted_unit_price + price_variance_pct to primary lines ────────
+function attachQuotationVariance(lineItems: any[], secondary: any): any[] {
+  if (!secondary?.present || !Array.isArray(secondary.lines) || !secondary.lines.length) return lineItems;
+  const pricesIncludeTax = !!secondary.prices_include_tax;
+  return lineItems.map((li) => {
+    const liDesc = normalizeDesc(li.description);
+    const liPart = normalizeDesc(li.part_number);
+    const match = secondary.lines.find((sl: any) => {
+      const slDesc = normalizeDesc(sl.description);
+      const slPart = normalizeDesc(sl.part_number);
+      if (liPart && slPart && liPart === slPart) return true;
+      if (liDesc && slDesc && liDesc.length > 6 && (liDesc.includes(slDesc) || slDesc.includes(liDesc))) return true;
+      return false;
+    });
+    if (!match || match.unit_price == null) return li;
+    const quoted = match.unit_price;
+    const variance = li.unit_price != null && quoted !== 0
+      ? +((li.unit_price - quoted) / quoted).toFixed(6)
+      : null;
+    return {
+      ...li,
+      quoted_unit_price: quoted,
+      price_variance_pct: pricesIncludeTax ? null : variance,
+      variance_comparable: !pricesIncludeTax,
+    };
+  });
+}
+
+// ── D: server-side validation — warnings only, never fatal ───────────────────
+function validateExtraction(lineItems: any[], subtotalNet: number | null, totalAmount: number | null, totalQty: number | null): string[] {
+  const warnings: string[] = [];
+
+  let lineSum = 0;
+  let qtySum = 0;
+
+  for (const li of lineItems) {
+    if (li.qty != null && li.unit_price != null && li.net_amount != null) {
+      const computed = +(li.qty * li.unit_price).toFixed(4);
+      const diff = Math.abs(computed - li.net_amount);
+      if (diff > 0.02) {
+        li.ocr_uncertain = true;
+        warnings.push(`Line ${li.line_no ?? '?'}: ${li.qty} × ${li.unit_price} = ${computed}, document says ${li.net_amount}`);
+      }
+    }
+    if (li.net_amount != null) lineSum += li.net_amount;
+    if (li.qty != null) qtySum += li.qty;
+  }
+
+  lineSum = +lineSum.toFixed(4);
+
+  const docTotal = subtotalNet ?? totalAmount;
+  if (docTotal != null && Math.abs(lineSum - docTotal) > 0.05) {
+    warnings.push(`Line total ${lineSum} does not match document total ${docTotal}`);
+  }
+
+  if (totalQty != null && Math.abs(qtySum - totalQty) > 0.01) {
+    warnings.push(`Quantity total ${qtySum} does not match document total_quantity ${totalQty}`);
+  }
+
+  // Tax guard: if line sum ÷ 1.15 ≈ reported total (within 0.5%), likely tax-inclusive
+  if (docTotal != null && docTotal > 0) {
+    const ratio = lineSum / docTotal;
+    if (Math.abs(ratio - 1.15) / 1.15 < 0.005) {
+      warnings.push(
+        'Extracted figures appear to include 15% tax — this system stores net prices only. Confirm the unit prices before applying.'
+      );
+    }
+  }
+
+  return warnings;
+}
+
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
 
-    let user = null;
+    // ── Auth guard ──────────────────────────────────────────────────────────
+    let user: any = null;
     try { user = await base44.auth.me(); } catch (_) { user = null; }
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { file_url, project_id, doc_hint } = await req.json();
+    const body = await req.json();
+    const { file_url, project_id, doc_hint, document_id, document_title } = body;
     if (!file_url || !project_id)
       return Response.json({ error: 'file_url and project_id are required' }, { status: 400 });
     if (doc_hint && !['po', 'delivery_note', 'auto'].includes(doc_hint))
@@ -82,7 +239,7 @@ Deno.serve(async (req) => {
     const isImage = IMAGE_EXTS.includes(ext);
     const isSheet = SHEET_EXTS.includes(ext);
 
-    // --- a. READ ---
+    // ── a. READ (preserved exactly) ─────────────────────────────────────────
     let docText = '';
     let useVision = false;
     if (isImage) {
@@ -100,7 +257,7 @@ Deno.serve(async (req) => {
       } catch (_) { docText = ''; }
       if (!docText || docText.trim().length < 200) {
         docText = '';
-        useVision = true; // scanned/image-only PDF
+        useVision = true;
       } else {
         useVision = true; // substantial text + attach file (vision cross-checks stamps/handwriting)
       }
@@ -114,7 +271,7 @@ Deno.serve(async (req) => {
       ? `DOCUMENT TEXT:\n${docText.slice(0, 8000)}\n\nThe document is also attached as a file. Cross-check the text against it, paying attention to stamps, handwritten quantities, signatures, and table structure.`
       : `The document is attached as a file. Read it carefully, including any stamps, handwritten quantities, signatures, and table structure. Perform accurate OCR on all line items.`;
 
-    // --- b. EXTRACT (narrow schema) ---
+    // ── b. EXTRACT (widened schema) ─────────────────────────────────────────
     const _raw = await base44.asServiceRole.integrations.Core.InvokeLLM({
       model: 'claude_sonnet_4_6',
       ...(useVision ? { file_urls: [file_url] } : {}),
@@ -124,110 +281,146 @@ ${hint}
 
 ${docBlock}
 
-Extract a STRICT, NARROW result. Return null for any field you cannot read clearly.
+Extract a complete, accurate result. Return null for any field you cannot read clearly.
 
 RULES:
-- document_type: "po" (Purchase Order) or "delivery_note" (Delivery Note / Packing Slip / Packing List). Documents titled "Packing slip" or "Packing list" are delivery_note.
-- document_number: the PO number, or the packing-slip / delivery-note number (e.g. PCKS-00002655).
+- document_type: "po" (Purchase Order) or "delivery_note" (Delivery Note / Packing Slip / Packing List).
+- document_number: the PO number or delivery note number.
 - document_date: YYYY-MM-DD.
-- vendor_name: the supplier / vendor issuing or shipping the document.
-- line_items: array of objects with:
-  - part_number: the REAL manufacturer part code. It is embedded INSIDE SQUARE BRACKETS in the Description column, e.g. [TQ.TWDFCW30K] or [ES.TQ.TM221CE40T]. Strip the vendor prefixes TQ., ES., ES.TQ. and return the BARE code (e.g. TWDFCW30K, TM221CE40T). The supplier's "Item Number" / "Item No." column is NEVER the part number — ignore it entirely.
-  - description: the full line description including the bracketed code.
-  - qty: for POs the ORDERED quantity; for delivery notes / packing slips the quantity delivered ON THIS slip.
-  - ocr_uncertain: true when you are not confident you read this line's numbers correctly.
+- currency: 3-letter ISO code, e.g. "SAR".
+- subtotal_net: the document's sub-total / net amount before tax. Numbers only, no currency symbols.
+- total_amount: grand total including any tax. Numbers only.
+- total_quantity: sum of all line quantities printed on the document.
+
+VENDOR BLOCK:
+- vendor.name: the supplier / vendor company name.
+- vendor.supplier_code: the "Supplier Code" field on the document, e.g. SUP03-00000010.
+- vendor.tax_number: the supplier's TRN / VAT registration number (identity only — never used for price arithmetic).
+- vendor.contact_name, email, phone, address, country: extract if present.
+
+TERMS BLOCK:
+- terms.payment_terms: verbatim text of the Payment Condition / Payment Terms field.
+- terms.incoterm: Incoterm field, e.g. "Delivery at point".
+- terms.mode_of_shipping: Mode of Shipping / Delivery field.
+- terms.warehouse_code: Warehouse Code field.
+- terms.supplier_ref: Supplier Ref / Quotation number quoted on the PO header.
+- terms.pr_number: PR No. field. The value after the colon but BEFORE any " : " bank/account reference — e.g. for "SA03-000501 : Al INMAA BANK" extract just "SA03-000501".
+- terms.purchaser: Purchaser field.
+- terms.requested_by: Requested by / Requested By field.
+
+LINE ITEMS (primary document only):
+- line_no: the Sr. No. / line number.
+- erp_item_code: the value in the "Item" / "Item No." / "Material" column — a plain internal number such as 243038.
+- part_number: the code embedded in SQUARE BRACKETS inside the Description column, e.g. [ES.P78087-425] or [ES.Dell.KM3322W]. Return the code EXACTLY as printed inside the brackets, including all dots, hyphens, and prefixes. Do NOT strip anything.
+- description: the full line description text.
+- uom: the UOM / unit column (e.g. "EA").
+- qty: the quantity ordered (PO) or delivered (delivery note).
+- unit_price: from the "Unit Price" column — numbers only, no currency symbols, no thousands separators.
+- net_amount: from the "Net Amount" column — numbers only.
+- supplier_delivery_date: the per-line "Supplier Delivery Date" column, converted to YYYY-MM-DD (dates are DAY/MONTH/YEAR format — 09/07/2026 means 9 July 2026).
+- ocr_uncertain: true when you are not confident about any number on this line.
+
+ALL PRICES ARE NET OF TAX. Extract unit_price and net_amount from the columns that exclude tax. Never compute a net price by dividing a tax-inclusive figure. If a document shows only tax-inclusive amounts, return those figures as printed and set ocr_uncertain true on affected lines.
+
+DATES ARE DAY/MONTH/YEAR. A date printed 02/07/2026 is 2 July 2026, not 7 February. Convert every date to YYYY-MM-DD. If a date is genuinely ambiguous, return null rather than guessing.
 
 OCR ACCURACY:
 - Quantities may be handwritten or stamped over printed text; prefer the handwritten correction when both appear.
 - If a quantity is not clearly legible, return null rather than guessing.
-- Extract line items from ALL pages and continue the same line_items array.
+- Extract line items from ALL pages of the PRIMARY document only.
 
-Return JSON: { document_type, document_number, document_date, vendor_name, line_items: [...] }`,
+MULTIPLE DOCUMENTS IN ONE FILE: These files frequently contain the purchase order on page 1 followed by the supplier's quotation or estimate on later pages.
+- The PRIMARY document is the one whose header says "Purchase Order" (or "Delivery Note" / "Packing Slip"). Extract line_items ONLY from the primary document.
+- If a supplier quotation, estimate, or second document is also present:
+  - Set secondary_document.present = true.
+  - Set secondary_document.kind to "quotation", "estimate", "invoice", or "" as appropriate.
+  - Set secondary_document.reference to its reference/quote number.
+  - Set secondary_document.prices_include_tax = true if its amounts include VAT/tax.
+  - List its lines in secondary_document.lines (description, part_number, qty, unit_price using the Rate/Unit Price column).
+  - Do NOT merge secondary document lines into line_items.
+
+Return JSON matching the schema exactly.`,
       response_json_schema: PODN_SCHEMA,
     });
-    // InvokeLLM may return the parsed object directly OR nested under `.response`.
-    const extracted = _raw?.response || _raw || {};
+    // InvokeLLM may return the parsed object directly OR nested under `.response` (preserved).
+    const extracted = (_raw as any)?.response || _raw || {};
 
-    const document_type = extracted?.document_type === 'po' ? 'po' : 'delivery_note';
-    const document_number = extracted?.document_number || '';
-    const document_date = extracted?.document_date || '';
-    const vendor_name = extracted?.vendor_name || '';
-    const line_items = Array.isArray(extracted?.line_items) ? extracted.line_items : [];
+    const document_type: string = extracted?.document_type === 'po' ? 'po' : 'delivery_note';
+    const document_number: string = extracted?.document_number || '';
+    const document_date: string = extracted?.document_date || '';
+    const currency: string = extracted?.currency || 'SAR';
+    const subtotal_net: number | null = extracted?.subtotal_net ?? null;
+    const total_amount: number | null = extracted?.total_amount ?? null;
+    const total_quantity: number | null = extracted?.total_quantity ?? null;
+    const vendor: any = extracted?.vendor || {};
+    const terms: any = extracted?.terms || {};
+    const secondary_document: any = extracted?.secondary_document || { present: false };
+    let line_items: any[] = Array.isArray(extracted?.line_items) ? extracted.line_items : [];
 
-    // --- c. MATCH (exact normalized part number) ---
-    const bomItems = await base44.asServiceRole.entities.BOMItem.filter({ project_id }, '-created_date', 1000);
-    const byPart = new Map();
-    const byCode = new Map();
-    for (const b of bomItems) {
-      const mp = normalizePart(b.manufacturer_part_number);
-      if (mp && !byPart.has(mp)) byPart.set(mp, b);
-      const mc = normalizePart(b.item_code);
-      if (mc && !byCode.has(mc)) byCode.set(mc, b);
+    // ── D: Validation warnings ──────────────────────────────────────────────
+    const warnings = validateExtraction(line_items, subtotal_net, total_amount, total_quantity);
+
+    // ── E: R4 Quotation variance ────────────────────────────────────────────
+    line_items = attachQuotationVariance(line_items, secondary_document);
+
+    // ── C: R8 Parse payment terms ───────────────────────────────────────────
+    const effectiveNet = subtotal_net ?? total_amount ?? 0;
+    const payment_schedule = parsePaymentTerms(terms.payment_terms || '', effectiveNet);
+
+    // ── F: R5 Duplicate detection ───────────────────────────────────────────
+    const duplicates: any = {};
+    if (document_number && document_type === 'po') {
+      try {
+        const existingPOs = await base44.asServiceRole.entities.PurchaseOrder.filter({ project_id, po_number: document_number }, '-created_date', 1);
+        if (existingPOs.length > 0) {
+          duplicates.purchase_order_id = existingPOs[0].id;
+          duplicates.purchase_order_status = existingPOs[0].status;
+        }
+      } catch (_) {}
+    }
+    if (document_number) {
+      try {
+        const existingExpenses = await base44.asServiceRole.entities.Expense.filter({ project_id, reference_number: document_number }, '-created_date', 1);
+        if (existingExpenses.length > 0) {
+          duplicates.expense_id = existingExpenses[0].id;
+        }
+      } catch (_) {}
     }
 
-    const actor = user?.full_name || user?.email || 'system';
-    const rows = [];
-    let appliedCount = 0;
-    let unmatchedCount = 0;
-    let uncertainCount = 0;
-
-    // --- d. APPLY matched lines ---
-    for (const li of line_items) {
-      const part_number = li.part_number || '';
-      const description = li.description || '';
-      const qty = li.qty;
-      const ocr_uncertain = !!li.ocr_uncertain;
-      if (ocr_uncertain) uncertainCount++;
-
-      // Fallback: if the model omitted part_number, re-extract the bracketed
-      // code from the description before normalizing.
-      const code = part_number || extractBracketCode(description);
-      const norm = normalizePart(code);
-      const bom = norm ? (byPart.get(norm) || byCode.get(norm)) : null;
-
-      if (bom) {
-        const res = await applyLine({ base44, bom, document_type, document_number, document_date, qty, actor, project_id });
-        rows.push({ part_number, description, qty, matched: true, bom_item_id: res.bom_item_id, applied_status: res.applied_status, ocr_uncertain });
-        appliedCount++;
-      } else {
-        rows.push({ part_number, description, qty, matched: false, bom_item_id: null, applied_status: 'Unmatched', ocr_uncertain });
-        unmatchedCount++;
-      }
-    }
-
-    // --- e. SAVE SUMMARY NOTE ---
-    const note_type = document_type === 'po' ? 'po_summary' : 'dn_summary';
-    const emptyExtraction = line_items.length === 0;
-    const warning = emptyExtraction
-      ? 'Document may be low quality or unsupported — no line items could be read.'
-      : undefined;
-    const title = document_type === 'po'
-      ? `${document_number || 'PO'} — ${appliedCount} item${appliedCount !== 1 ? 's' : ''} marked Ordered`
-      : `${document_number || 'Delivery note'} — ${appliedCount} item${appliedCount !== 1 ? 's' : ''} updated to Received`;
-    const noteBody = emptyExtraction
-      ? `${document_number || 'Document'} — no line items could be read (check document quality)`
-      : title;
-    const note = await base44.asServiceRole.entities.Note.create({
-      project_id,
-      author: actor,
-      body: noteBody,
-      note_type,
-      table_data: { document_type, document_number, document_date, vendor_name, rows },
-    });
-
-    // --- f. RETURN ---
-    const response: any = {
-      note_id: note.id,
-      document_type,
+    // ── G: Write staging Extraction record ──────────────────────────────────
+    const header = {
       document_number,
       document_date,
-      vendor_name,
-      applied_count: appliedCount,
-      unmatched_count: unmatchedCount,
-      uncertain_count: uncertainCount,
-      rows,
+      currency,
+      subtotal_net,
+      total_amount,
+      total_quantity,
+      vendor,
+      terms,
     };
-    if (warning) response.warning = warning;
+
+    const extraction = await base44.asServiceRole.entities.Extraction.create({
+      project_id,
+      document_id: document_id || null,
+      document_title: document_title || document_number || 'Untitled',
+      status: 'review',
+      extraction_kind: document_type === 'po' ? 'po' : 'delivery_note',
+      header,
+      proposals: [],
+      summary: `${document_type === 'po' ? 'PO' : 'DN'} ${document_number} — ${line_items.length} line(s) extracted`,
+    });
+
+    // ── Return ──────────────────────────────────────────────────────────────
+    const response: any = {
+      extraction_id: extraction.id,
+      header,
+      line_items,
+      secondary_document,
+      payment_schedule,
+      duplicates,
+      warnings,
+    };
+
     if (debugMode) {
       response.debug = {
         used_vision: useVision,
@@ -236,8 +429,9 @@ Return JSON: { document_type, document_number, document_date, vendor_name, line_
         line_item_count: line_items.length,
       };
     }
+
     return Response.json(response);
   } catch (error) {
-    return Response.json({ error: error?.message || 'Extraction failed' }, { status: 500 });
+    return Response.json({ error: (error as any)?.message || 'Extraction failed' }, { status: 500 });
   }
 });
