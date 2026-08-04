@@ -34,6 +34,12 @@
         "document_date": {
           "type": "string"
         },
+        "vendor_name": {
+          "type": "string"
+        },
+        "extraction_id": {
+          "type": "string"
+        },
         "rows": {
           "type": "array",
           "items": {
@@ -47,6 +53,42 @@
               },
               "part_number": {
                 "type": "string"
+              },
+              "erp_item_code": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "qty": {
+                "type": "number"
+              },
+              "unit_price": {
+                "type": "number"
+              },
+              "net_amount": {
+                "type": "number"
+              },
+              "quoted_unit_price": {
+                "type": "number"
+              },
+              "price_variance_pct": {
+                "type": "number"
+              },
+              "matched": {
+                "type": "boolean"
+              },
+              "match_confidence": {
+                "type": "number"
+              },
+              "match_tier": {
+                "type": "string"
+              },
+              "applied_status": {
+                "type": "string"
+              },
+              "ocr_uncertain": {
+                "type": "boolean"
               },
               "ordered_qty": {
                 "type": "number"

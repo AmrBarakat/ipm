@@ -196,6 +196,38 @@
       "type": "string",
       "format": "date"
     },
+    "erp_item_code": {
+      "type": "string",
+      "description": "Internal ERP / material-master item number from the PO Item column (e.g. 243038). Most stable match key."
+    },
+    "ordered_qty": {
+      "type": "number",
+      "description": "Quantity actually ordered on the PO, which may differ from the planned BOM quantity."
+    },
+    "po_unit_price": {
+      "type": "number",
+      "description": "Unit price on the PO, net of VAT, in po_currency."
+    },
+    "po_line_net_amount": {
+      "type": "number",
+      "description": "Line net amount on the PO (qty x unit price), net of VAT."
+    },
+    "po_currency": {
+      "type": "string",
+      "default": "SAR"
+    },
+    "purchase_order_id": {
+      "type": "string",
+      "description": "Reference to the PurchaseOrder record this line was ordered on."
+    },
+    "match_aliases": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "Normalized document codes previously confirmed by a user as referring to this BOM item. Used by the tiered matcher."
+    },
     "notes": {
       "type": "string"
     }

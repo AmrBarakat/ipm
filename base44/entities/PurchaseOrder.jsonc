@@ -107,6 +107,33 @@
           },
           "unit_price": {
             "type": "number"
+          },
+          "part_number": {
+            "type": "string"
+          },
+          "erp_item_code": {
+            "type": "string"
+          },
+          "bom_item_id": {
+            "type": "string"
+          },
+          "net_amount": {
+            "type": "number"
+          },
+          "supplier_delivery_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "line_no": {
+            "type": "number"
+          },
+          "quoted_unit_price": {
+            "type": "number",
+            "description": "R4 \u2014 unit price on the supplier quotation attached to the same file, net of VAT. Null when no quotation was present."
+          },
+          "price_variance_pct": {
+            "type": "number",
+            "description": "R4 \u2014 (unit_price - quoted_unit_price) / quoted_unit_price, as a fraction. Negative means we bought below quote."
           }
         }
       }
@@ -139,6 +166,88 @@
           }
         }
       }
+    },
+    "source_document_id": {
+      "type": "string"
+    },
+    "extraction_id": {
+      "type": "string"
+    },
+    "expense_id": {
+      "type": "string"
+    },
+    "supplier_code": {
+      "type": "string"
+    },
+    "supplier_ref": {
+      "type": "string",
+      "description": "Supplier reference / quotation number quoted on the PO."
+    },
+    "pr_number": {
+      "type": "string"
+    },
+    "purchaser": {
+      "type": "string"
+    },
+    "requested_by": {
+      "type": "string"
+    },
+    "payment_terms": {
+      "type": "string",
+      "description": "Verbatim payment condition text from the document."
+    },
+    "payment_schedule": {
+      "type": "array",
+      "default": [],
+      "description": "R8 \u2014 payment_terms parsed into cash-flow milestones. Sum of percent_due should be 100 when fully parsed.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "e.g. 'Advance', 'On delivery', 'Net 30'"
+          },
+          "percent_due": {
+            "type": "number",
+            "description": "0-100"
+          },
+          "amount_due": {
+            "type": "number"
+          },
+          "trigger": {
+            "type": "string",
+            "enum": [
+              "on_order",
+              "on_delivery",
+              "days_after_invoice",
+              "days_after_delivery",
+              "milestone",
+              "unknown"
+            ]
+          },
+          "offset_days": {
+            "type": "number",
+            "default": 0
+          },
+          "expected_date": {
+            "type": "string",
+            "format": "date"
+          }
+        }
+      }
+    },
+    "incoterm": {
+      "type": "string"
+    },
+    "mode_of_shipping": {
+      "type": "string"
+    },
+    "warehouse_code": {
+      "type": "string"
+    },
+    "subtotal_net": {
+      "type": "number",
+      "description": "Sum of line net amounts. All figures in this system are net of VAT."
     },
     "notes": {
       "type": "string"

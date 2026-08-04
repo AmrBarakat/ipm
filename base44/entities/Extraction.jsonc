@@ -16,10 +16,25 @@
       "enum": [
         "pending",
         "processing",
+        "review",
         "completed",
-        "failed"
+        "failed",
+        "reverted"
       ],
       "default": "pending"
+    },
+    "extraction_kind": {
+      "type": "string",
+      "enum": [
+        "po",
+        "delivery_note",
+        "other"
+      ],
+      "default": "other"
+    },
+    "header": {
+      "type": "object",
+      "description": "Extracted document header: document_number, document_date, vendor block, totals, terms, secondary document."
     },
     "summary": {
       "type": "string"
@@ -68,9 +83,113 @@
     },
     "input_text": {
       "type": "string"
+    },
+    "applied_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "applied_by": {
+      "type": "string"
+    },
+    "reverted_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "created_entity_refs": {
+      "type": "array",
+      "default": [],
+      "description": "R9 \u2014 what this extraction created or changed, for revert. before[] holds a snapshot of only the fields this apply modified.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "entity_type": {
+            "type": "string"
+          },
+          "entity_id": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "created",
+              "updated"
+            ]
+          },
+          "before": {
+            "type": "object"
+          },
+          "applied_updated_date": {
+            "type": "string",
+            "description": "The entity's updated_date immediately after apply, so revert can detect later hand-edits."
+          }
+        }
+      }
     }
   },
   "required": [
     "project_id"
-  ]
+  ],
+  "rls": {
+    "read": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "account_status": "approved"
+          }
+        }
+      ]
+    },
+    "create": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "privilege": "create"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "privilege": "modify"
+          }
+        },
+        {
+          "user_condition": {
+            "privilege": "create"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "privilege": "create"
+          }
+        }
+      ]
+    }
+  }
 }

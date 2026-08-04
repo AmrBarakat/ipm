@@ -50,6 +50,28 @@
       },
       "description": "BOM categories this vendor supplies"
     },
+    "supplier_code": {
+      "type": "string",
+      "description": "Buyer-side ERP supplier code, e.g. SUP03-00000010. Strongest dedupe key."
+    },
+    "tax_number": {
+      "type": "string",
+      "description": "TRN / VAT registration number. Identity only \u2014 never used for price arithmetic."
+    },
+    "payment_terms": {
+      "type": "string"
+    },
+    "aliases": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "Alternative spellings seen on documents, e.g. 'Technecal Point Est (POINTEC)' for 'Technical Point Est.'"
+    },
+    "created_from_document_id": {
+      "type": "string"
+    },
     "documents": {
       "type": "array",
       "description": "Vendor-linked documents (certificates, contracts, ISO certs, etc.) \u2014 file metadata only; file_url points to UploadFile storage.",

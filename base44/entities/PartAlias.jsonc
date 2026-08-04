@@ -1,69 +1,51 @@
 {
-  "name": "Expense",
+  "name": "PartAlias",
   "type": "object",
   "properties": {
     "project_id": {
+      "type": "string",
+      "description": "Empty string = global alias, applies across all projects."
+    },
+    "normalized_code": {
+      "type": "string",
+      "description": "normalizeCode() output of the code as it appeared on the document, after ERP prefix stripping."
+    },
+    "raw_code": {
+      "type": "string",
+      "description": "The code exactly as printed, e.g. ES.Dell.KM3322W"
+    },
+    "erp_item_code": {
       "type": "string"
     },
-    "description": {
+    "bom_item_id": {
       "type": "string"
     },
-    "category": {
+    "manufacturer_part_number": {
+      "type": "string",
+      "description": "Canonical part this alias resolves to."
+    },
+    "description_sample": {
+      "type": "string"
+    },
+    "source": {
       "type": "string",
       "enum": [
-        "material",
-        "labor",
-        "subcontract",
-        "travel",
-        "other"
+        "user_confirmed",
+        "auto_high_confidence"
       ],
-      "default": "material"
+      "default": "user_confirmed"
     },
-    "status": {
-      "type": "string",
-      "enum": [
-        "planned",
-        "committed",
-        "paid",
-        "cancelled"
-      ],
-      "default": "planned"
-    },
-    "vendor": {
-      "type": "string"
-    },
-    "reference_number": {
-      "type": "string",
-      "description": "PO number or reference"
-    },
-    "planned_date": {
-      "type": "string",
-      "format": "date"
-    },
-    "planned_amount": {
+    "hit_count": {
       "type": "number",
-      "default": 0
+      "default": 1
     },
-    "actual_date": {
+    "last_used": {
       "type": "string",
-      "format": "date"
-    },
-    "actual_amount": {
-      "type": "number"
-    },
-    "purchase_order_id": {
-      "type": "string"
-    },
-    "source_document_id": {
-      "type": "string"
-    },
-    "notes": {
-      "type": "string"
+      "format": "date-time"
     }
   },
   "required": [
-    "project_id",
-    "description"
+    "normalized_code"
   ],
   "rls": {
     "read": {
