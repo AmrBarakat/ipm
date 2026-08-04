@@ -94,12 +94,21 @@ Deno.serve(async (req) => {
           const current: any = await api.get(id);
           if (!current) { skipped.push({ entity_type: type, entity_id: id, reason: `${type} ${id} no longer exists` }); continue; }
           // Safety: never restore an entity hand-edited since the apply.
-          if (ref.applied_updated_date && current.updated_date && current.updated_date !== ref.applied_updated_date) {
-            skipped.push({
-              entity_type: type, entity_id: id,
-              reason: `${type} ${id} was edited by hand after the apply (updated_date changed) — left untouched`,
-            });
-            continue;
+          // Safety: never restore an entity hand-edited since the apply. Compare
+          // at millisecond precision with a small tolerance — the update()
+          // response carries microsecond precision while the stored value is
+          // millisecond, so a naive !== check would always skip. A real hand-edit
+          // always moves updated_date by > 100ms.
+          if (ref.applied_updated_date && current.updated_date) {
+            const curMs = new Date(current.updated_date).getTime();
+            const refMs = new Date(ref.applied_updated_date).getTime();
+            if (!isNaN(curMs) && !isNaN(refMs) && Math.abs(curMs - refMs) > 100) {
+              skipped.push({
+                entity_type: type, entity_id: id,
+                reason: `${type} ${id} was edited by hand after the apply (updated_date changed) — left untouched`,
+              });
+              continue;
+            }
           }
           const before = ref.before || {};
           await api.update(id, before);
