@@ -6,6 +6,7 @@ import { base44 } from '@/api/base44Client';
 import { formatCurrency, BOM_CATEGORY_LABELS, BOM_CATEGORY_OPTIONS } from '@/lib/constants';
 import { Plus, Package, Trash2, Filter, Tag, Truck, ShoppingCart, TrendingUp, CheckCircle, Clock, X, Check, ChevronDown, ChevronRight, Layers } from 'lucide-react';
 import PanelWrapper from '@/components/ui/PanelWrapper';
+import SourceDocumentBadge from '@/components/documents/SourceDocumentBadge';
 import SkeletonTable from '@/components/ui/SkeletonTable';
 import EmptyState from '@/components/ui/EmptyState';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
@@ -635,6 +636,12 @@ export default function TabBOM({ projectId }) {
                                         <input className={inp + (isPanel ? ' font-semibold text-orange-800' : '')} value={item.description || ''} onChange={e => updateField(item.id, 'description', e.target.value)} onBlur={e => handleBlur(item, 'description', e.target.value)} placeholder="Description" />
                                       </div>
                                       {!isPanel && <input className={inp + ' text-slate-400'} value={item.manufacturer_part_number || ''} onChange={e => updateField(item.id, 'manufacturer_part_number', e.target.value)} onBlur={e => handleBlur(item, 'manufacturer_part_number', e.target.value)} placeholder="Part No." />}
+                                      {(item.source_document_id || item.purchase_order_id) && (
+                                        <div className="flex items-center gap-1 mt-0.5">
+                                          <SourceDocumentBadge sourceDocumentId={item.source_document_id} purchaseOrderId={item.purchase_order_id} />
+                                          {item.po_number && <span className="text-[10px] text-slate-400 font-mono">PO {item.po_number}</span>}
+                                        </div>
+                                      )}
                                       {isPanel && panelChildren.length > 0 && <span className="text-xs text-orange-500">{panelChildren.length} component{panelChildren.length !== 1 ? 's' : ''}</span>}
                                     </div>
                                   </td>

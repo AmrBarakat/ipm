@@ -315,20 +315,23 @@ Deno.serve(async (req) => {
       if (!bom) throw new Error(`BOM item ${bom_item_id} not found`);
 
       // R9 before snapshot — only the fields this apply changes (incl. actual_cost_price).
+      // Explicit defaults (0 / '' / false) so JSON keeps every key and revert can
+      // restore po_number, ordered_qty, material_status etc. to pre-apply values
+      // even when they were absent before the apply.
       const before = {
-        actual_cost_price: bom.actual_cost_price,
-        ordered_qty: bom.ordered_qty,
-        po_unit_price: bom.po_unit_price,
-        po_line_net_amount: bom.po_line_net_amount,
-        po_currency: bom.po_currency,
-        po_number: bom.po_number,
-        po_date: bom.po_date,
-        purchase_order_id: bom.purchase_order_id,
-        expected_delivery_date: bom.expected_delivery_date,
-        erp_item_code: bom.erp_item_code,
-        material_status: bom.material_status,
-        order_status: bom.order_status,
-        ordered: bom.ordered,
+        actual_cost_price: Number(bom.actual_cost_price) || 0,
+        ordered_qty: bom.ordered_qty != null ? Number(bom.ordered_qty) : 0,
+        po_unit_price: bom.po_unit_price != null ? Number(bom.po_unit_price) : 0,
+        po_line_net_amount: bom.po_line_net_amount != null ? Number(bom.po_line_net_amount) : 0,
+        po_currency: bom.po_currency || '',
+        po_number: bom.po_number || '',
+        po_date: bom.po_date || '',
+        purchase_order_id: bom.purchase_order_id || '',
+        expected_delivery_date: bom.expected_delivery_date || '',
+        erp_item_code: bom.erp_item_code || '',
+        material_status: bom.material_status || 'not_ordered',
+        order_status: bom.order_status || 'not_ordered',
+        ordered: !!bom.ordered,
       };
 
       const update: any = {

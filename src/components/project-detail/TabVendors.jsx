@@ -10,6 +10,9 @@ import {
   FileText, RefreshCw, ShoppingCart
 } from 'lucide-react';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
+import SourceDocumentBadge from '@/components/documents/SourceDocumentBadge';
+import POLineItemsEditor from '@/components/vendors/POLineItemsEditor';
+import POPayerScheduleEditor from '@/components/vendors/POPayerScheduleEditor';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -92,6 +95,7 @@ function SubTabBtn({ id, label, active, onClick, icon }) {
 
 function POsPanel({ projectId, project }) {
   const { data: pos = [], isLoading } = useEntityList('PurchaseOrder', { project_id: projectId }, '-created_date', 200);
+  const { data: bomItems = [] } = useEntityList('BOMItem', { project_id: projectId }, '-created_date', 1000);
   const poMutation = useEntityMutation('PurchaseOrder');
   const queryClient = useQueryClient();
   const confirmDialog = useConfirm();
@@ -129,11 +133,19 @@ function POsPanel({ projectId, project }) {
       actual_delivery_date: po.actual_delivery_date || '',
       delivery_location: po.delivery_location || '', tracking_number: po.tracking_number || '',
       notes: po.notes || '', status: po.status,
+      supplier_ref: po.supplier_ref || '', pr_number: po.pr_number || '',
+      purchaser: po.purchaser || '', requested_by: po.requested_by || '',
+      payment_terms: po.payment_terms || '', incoterm: po.incoterm || '',
+      mode_of_shipping: po.mode_of_shipping || '', warehouse_code: po.warehouse_code || '',
+      subtotal_net: po.subtotal_net ?? '',
     });
   }
 
   async function saveEdit(id) {
-    await poMutation.mutateAsync({ action: 'update', id, data: { ...editForm, amount: Number(editForm.amount) || 0 } });
+    await poMutation.mutateAsync({
+      action: 'update', id,
+      data: { ...editForm, amount: Number(editForm.amount) || 0, subtotal_net: editForm.subtotal_net === '' ? null : Number(editForm.subtotal_net) || 0 },
+    });
     setEditingId(null);
   }
 
@@ -312,6 +324,7 @@ function POsPanel({ projectId, project }) {
                       <div>
                         <div className="flex flex-wrap items-center gap-2 mb-1">
                           {po.po_number && <span className="font-mono text-xs text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{po.po_number}</span>}
+                          {po.source_document_id && <SourceDocumentBadge sourceDocumentId={po.source_document_id} />}
                           <span className="font-semibold text-slate-800">{po.description}</span>
                           <span className={`text-xs px-2 py-0.5 rounded font-semibold ${PO_STATUS_STYLES[po.status]}`}>{PO_STATUS_LABELS[po.status]}</span>
                           <span className={`text-xs px-2 py-0.5 rounded font-semibold ${PRIORITY_STYLES[po.priority]}`}>{po.priority}</span>
@@ -366,6 +379,22 @@ function POsPanel({ projectId, project }) {
                         <p className="text-xs text-slate-700 leading-relaxed">{po.notes}</p>
                       </div>
                     )}
+                    {/* Extraction-sourced terms (A) */}
+                    {(po.supplier_ref || po.pr_number || po.purchaser || po.requested_by || po.payment_terms || po.incoterm || po.mode_of_shipping || po.warehouse_code || po.subtotal_net != null) && (
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs bg-white border border-slate-200 rounded p-2">
+                        {po.supplier_ref && <Field label="Supplier Ref" value={po.supplier_ref} />}
+                        {po.pr_number && <Field label="PR Number" value={po.pr_number} />}
+                        {po.purchaser && <Field label="Purchaser" value={po.purchaser} />}
+                        {po.requested_by && <Field label="Requested By" value={po.requested_by} />}
+                        {po.payment_terms && <Field label="Payment Terms" value={po.payment_terms} />}
+                        {po.incoterm && <Field label="Incoterm" value={po.incoterm} />}
+                        {po.mode_of_shipping && <Field label="Mode of Shipping" value={po.mode_of_shipping} />}
+                        {po.warehouse_code && <Field label="Warehouse" value={po.warehouse_code} />}
+                        {po.subtotal_net != null && <Field label="Subtotal Net" value={formatCurrency(po.subtotal_net, po.currency)} />}
+                      </div>
+                    )}
+                    <POLineItemsEditor po={po} bomItems={bomItems} />
+                    <POPayerScheduleEditor po={po} />
                     <div>
                       <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Delivery Notes</p>
                       {(po.delivery_notes || []).length === 0 ? (
@@ -439,6 +468,15 @@ function EditPOForm({ form, setForm, onSave, onCancel }) {
         <input type="date" value={form.actual_delivery_date} onChange={e => setForm(f => ({ ...f, actual_delivery_date: e.target.value }))} className={inp} />
         <input value={form.tracking_number} onChange={e => setForm(f => ({ ...f, tracking_number: e.target.value }))} placeholder="Tracking Number" className={inp} />
         <input value={form.delivery_location} onChange={e => setForm(f => ({ ...f, delivery_location: e.target.value }))} placeholder="Delivery Location" className={inp} />
+        <input value={form.supplier_ref || ''} onChange={e => setForm(f => ({ ...f, supplier_ref: e.target.value }))} placeholder="Supplier Ref" className={inp} />
+        <input value={form.pr_number || ''} onChange={e => setForm(f => ({ ...f, pr_number: e.target.value }))} placeholder="PR Number" className={inp} />
+        <input value={form.purchaser || ''} onChange={e => setForm(f => ({ ...f, purchaser: e.target.value }))} placeholder="Purchaser" className={inp} />
+        <input value={form.requested_by || ''} onChange={e => setForm(f => ({ ...f, requested_by: e.target.value }))} placeholder="Requested By" className={inp} />
+        <input value={form.payment_terms || ''} onChange={e => setForm(f => ({ ...f, payment_terms: e.target.value }))} placeholder="Payment Terms" className={inp} />
+        <input value={form.incoterm || ''} onChange={e => setForm(f => ({ ...f, incoterm: e.target.value }))} placeholder="Incoterm" className={inp} />
+        <input value={form.mode_of_shipping || ''} onChange={e => setForm(f => ({ ...f, mode_of_shipping: e.target.value }))} placeholder="Mode of Shipping" className={inp} />
+        <input value={form.warehouse_code || ''} onChange={e => setForm(f => ({ ...f, warehouse_code: e.target.value }))} placeholder="Warehouse Code" className={inp} />
+        <input type="number" step="0.01" value={form.subtotal_net ?? ''} onChange={e => setForm(f => ({ ...f, subtotal_net: e.target.value }))} placeholder="Subtotal Net" className={inp} min="0" />
       </div>
       <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Notes" className={inp + ' resize-none'} rows={2} />
       <div className="flex gap-2">
@@ -449,6 +487,15 @@ function EditPOForm({ form, setForm, onSave, onCancel }) {
           <X className="w-3 h-3" />
         </button>
       </div>
+    </div>
+  );
+}
+
+function Field({ label, value }) {
+  return (
+    <div className="flex flex-col">
+      <span className="text-slate-400 text-[10px] uppercase tracking-wide">{label}</span>
+      <span className="text-slate-700 font-medium truncate">{value}</span>
     </div>
   );
 }

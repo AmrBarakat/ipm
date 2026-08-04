@@ -235,7 +235,7 @@ export default function ProjectDetail() {
             {activeTab === 'milestones' && <TabMilestones projectId={id} />}
             {activeTab === 'bom'        && <TabBOM        projectId={id} />}
             {activeTab === 'financials' && <TabFinancials projectId={id} project={project} />}
-            {activeTab === 'documents'  && <TabDocuments  projectId={id} project={project} />}
+            {activeTab === 'documents'  && <TabDocuments  projectId={id} project={project} onNavigateTab={goToTab} />}
             {activeTab === 'notes'      && <TabNotes      projectId={id} />}
             {activeTab === 'risks'      && <TabRisks      projectId={id} />}
             {activeTab === 'deliverables' && <TabDeliverables projectId={id} />}

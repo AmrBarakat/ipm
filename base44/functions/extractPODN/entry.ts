@@ -439,6 +439,18 @@ Return JSON matching the schema exactly.`,
       terms,
     };
 
+    // Store the full extract result so a "review" extraction can be resumed
+    // from the Extractions list without re-running extraction.
+    const storable = {
+      header,
+      line_items,
+      secondary_document,
+      payment_schedule,
+      duplicates,
+      warnings,
+      counts: { auto_selected, needs_review },
+      extraction_kind: document_type,
+    };
     const extraction = await base44.asServiceRole.entities.Extraction.create({
       project_id,
       document_id: document_id || null,
@@ -447,6 +459,7 @@ Return JSON matching the schema exactly.`,
       extraction_kind: document_type === 'po' ? 'po' : 'delivery_note',
       header,
       proposals: [],
+      input_text: JSON.stringify(storable),
       summary: `${document_type === 'po' ? 'PO' : 'DN'} ${document_number} — ${line_items.length} line(s), ${auto_selected} auto-selected, ${needs_review} need review`,
     });
 

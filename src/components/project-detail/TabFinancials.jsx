@@ -11,6 +11,7 @@ import SkeletonTable from '@/components/ui/SkeletonTable';
 import EmptyState from '@/components/ui/EmptyState';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { Can } from '@/lib/can';
+import SourceDocumentBadge from '@/components/documents/SourceDocumentBadge';
 
 const INV_STATUS_COLORS = {
   planned: 'bg-slate-100 text-slate-600',
@@ -550,7 +551,7 @@ export default function TabFinancials({ projectId, project }) {
                     const isEditing = editingExp === exp.id;
                     return (
                       <tr key={exp.id} className="border-t border-slate-100 hover:bg-slate-50">
-                        <td className="px-4 py-3">{isEditing ? <input value={editExpForm.description} onChange={e => setEditExpForm(f => ({ ...f, description: e.target.value }))} className={inp} /> : <span className="font-medium text-slate-800">{exp.description}</span>}</td>
+                        <td className="px-4 py-3">{isEditing ? <input value={editExpForm.description} onChange={e => setEditExpForm(f => ({ ...f, description: e.target.value }))} className={inp} /> : <span className="font-medium text-slate-800 flex items-center gap-1.5">{exp.description}{exp.source_document_id && <SourceDocumentBadge sourceDocumentId={exp.source_document_id} />}</span>}</td>
                         <td className="px-4 py-3">
                           {isEditing ? (<select value={editExpForm.category} onChange={e => setEditExpForm(f => ({ ...f, category: e.target.value }))} className={inp}>{Object.entries(EXPENSE_CATEGORY_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>) : <span className="text-slate-600">{EXPENSE_CATEGORY_LABELS[exp.category] || exp.category}</span>}
                         </td>

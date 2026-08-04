@@ -6,12 +6,13 @@ import { base44 } from '@/api/base44Client';
 import { formatDate, formatBytes, CATEGORY_LABELS } from '@/lib/constants';
 import {
   FileText, Upload, ExternalLink, Pencil, Trash2, Save,
-  Cpu, Filter, Link2, ChevronDown, ChevronRight, FileCheck, Wand2, Loader2
+  Cpu, Filter, Link2, ChevronDown, ChevronRight, FileCheck, Wand2, Loader2, Sparkles
 } from 'lucide-react';
 import ProjectPlanExtractModal from './ProjectPlanExtractModal';
 import BomImportSkill from '@/components/bom/BomImportSkill';
 import DocumentExtractionModal from './DocumentExtractionModal';
 import PODNExtractionPanel from '@/components/documents/PODNExtractionPanel';
+import ExtractionsList from '@/components/documents/ExtractionsList';
 
 const CATEGORY_ICONS = {
   drawing: '📐',
@@ -36,8 +37,15 @@ const EMPTY_FORM = {
 
 const inp = 'border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white w-full';
 
-export default function TabDocuments({ projectId, project }) {
+function summarizeRefs(refs) {
+  const counts = {};
+  for (const r of refs || []) counts[r.entity_type] = (counts[r.entity_type] || 0) + 1;
+  return { vendor: counts.Vendor || 0, po: counts.PurchaseOrder || 0, expense: counts.Expense || 0, bom: counts.BOMItem || 0 };
+}
+
+export default function TabDocuments({ projectId, project, onNavigateTab }) {
   const { data: docs = [], isLoading } = useEntityList('Document', { project_id: projectId }, '-created_date', 200);
+  const { data: extractions = [] } = useEntityList('Extraction', { project_id: projectId }, '-created_date', 200);
   const { data: milestones = [] } = useEntityList('Milestone', { project_id: projectId }, ENTITY_QUERY.Milestone.sort, ENTITY_QUERY.Milestone.limit);
   const { data: tasks = [] } = useEntityList('Task', { project_id: projectId }, ENTITY_QUERY.Task.sort, ENTITY_QUERY.Task.limit);
   const docMutation = useEntityMutation('Document');
@@ -122,6 +130,20 @@ export default function TabDocuments({ projectId, project }) {
     setPodnResult({ document: doc, result: r });
   }
 
+  // D — resume an in-review extraction (rebuild draft from stored result) or
+  // re-apply a reverted one (re-extract from the source document).
+  function handleReApply(ext) {
+    if (ext.status === 'review') {
+      try {
+        const parsed = JSON.parse(ext.input_text || '{}');
+        setPodnResult({ document: docsById[ext.document_id], result: { ...parsed, extraction_id: ext.id } });
+      } catch (_) { alert('Could not resume review — stored extraction data is missing.'); }
+    } else if (ext.status === 'reverted') {
+      const doc = docsById[ext.document_id];
+      if (doc) handleExtract(doc);
+    }
+  }
+
   const filtered = useMemo(() =>
     filterCategory ? docs.filter(d => d.category === filterCategory) : docs,
     [docs, filterCategory]
@@ -141,6 +163,16 @@ export default function TabDocuments({ projectId, project }) {
 
   const milestoneById = Object.fromEntries(milestones.map(m => [m.id, m]));
   const taskById = Object.fromEntries(tasks.map(t => [t.id, t]));
+  const docsById = Object.fromEntries(docs.map(d => [d.id, d]));
+  const extractionsByDoc = useMemo(() => {
+    const map = {};
+    for (const ext of extractions) {
+      if (!ext.document_id) continue;
+      if (!map[ext.document_id]) map[ext.document_id] = [];
+      map[ext.document_id].push(ext);
+    }
+    return map;
+  }, [extractions]);
 
   if (isLoading) return <Spinner />;
 
@@ -288,6 +320,19 @@ export default function TabDocuments({ projectId, project }) {
                                     <Link2 className="w-3 h-3" /> ✅ {linkedTask.title}
                                   </span>
                                 )}
+                                {(extractionsByDoc[doc.id] || []).filter(e => e.status === 'completed').map(ext => {
+                                  const c = summarizeRefs(ext.created_entity_refs);
+                                  const poNum = ext.header?.document_number;
+                                  if (!c.po && !c.expense && !c.bom) return null;
+                                  return (
+                                    <span key={ext.id} className="flex items-center gap-1.5 text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 rounded px-2 py-0.5 flex-wrap">
+                                      <Sparkles className="w-3 h-3 shrink-0" /> Created
+                                      {c.po > 0 && poNum && <button onClick={() => onNavigateTab?.('vendors')} className="underline hover:text-emerald-900 font-medium">PO {poNum}</button>}
+                                      {c.expense > 0 && <button onClick={() => onNavigateTab?.('financials')} className="underline hover:text-emerald-900">{c.expense} expense{c.expense !== 1 ? 's' : ''}</button>}
+                                      {c.bom > 0 && <button onClick={() => onNavigateTab?.('bom')} className="underline hover:text-emerald-900">{c.bom} BOM rows</button>}
+                                    </span>
+                                  );
+                                })}
                               </div>
                             </div>
                             <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
@@ -344,7 +389,7 @@ export default function TabDocuments({ projectId, project }) {
           result={podnResult.result}
           projectId={projectId}
           onClose={() => setPodnResult(null)}
-          onApplied={() => { setPodnResult(null); queryClient.invalidateQueries({ queryKey: ['BOMItem'] }); queryClient.invalidateQueries({ queryKey: ['Note'] }); }} />
+          onApplied={() => { setPodnResult(null); queryClient.invalidateQueries({ queryKey: ['BOMItem'] }); queryClient.invalidateQueries({ queryKey: ['Note'] }); queryClient.invalidateQueries({ queryKey: ['Extraction'] }); queryClient.invalidateQueries({ queryKey: ['PurchaseOrder'] }); queryClient.invalidateQueries({ queryKey: ['Expense'] }); queryClient.invalidateQueries({ queryKey: ['Vendor'] }); }} />
       )}
       {standardDoc && (
         <DocumentExtractionModal
@@ -369,6 +414,11 @@ export default function TabDocuments({ projectId, project }) {
           onClose={() => setBomSkillDoc(null)}
           onImported={() => { setBomSkillDoc(null); queryClient.invalidateQueries({ queryKey: ['BOMItem'] }); queryClient.invalidateQueries({ queryKey: ['Document'] }); }} />
       )}
+
+      <ExtractionsList
+        extractions={extractions}
+        docsById={docsById}
+        onReApply={handleReApply} />
     </div>
   );
 }
