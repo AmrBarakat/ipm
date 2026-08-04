@@ -3,7 +3,7 @@ import { useEntityList } from '@/hooks/useEntity';
 import { ENTITY_QUERY } from '@/lib/entityQueryDefaults';
 import { base44 } from '@/api/base44Client';
 import { useQueryClient } from '@tanstack/react-query';
-import { X, PackageCheck, Truck, Loader2 } from 'lucide-react';
+import { X, PackageCheck, Truck, Loader2, ScanEye } from 'lucide-react';
 import { buildInitialDraft, liveSummary } from './podn-review/helpers';
 import DuplicateBanner from './podn-review/DuplicateBanner';
 import StepDocument from './podn-review/StepDocument';
@@ -25,6 +25,7 @@ export default function PODNExtractionPanel({ document: doc, result, projectId, 
   const [draft, setDraft] = useState(() => buildInitialDraft(result));
   const [step, setStep] = useState(0);
   const [applying, setApplying] = useState(false);
+  const [reExtracting, setReExtracting] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: vendors = [] } = useEntityList('Vendor', {}, '-created_date', 500);
@@ -69,6 +70,31 @@ export default function PODNExtractionPanel({ document: doc, result, projectId, 
       }
     } catch (_) {}
     onClose();
+  }
+
+  async function reExtractWithVision() {
+    setReExtracting(true);
+    try {
+      const res = await base44.functions.invoke('extractPODN', {
+        file_url: doc?.file_url,
+        project_id: projectId,
+        doc_hint: doc?.category === 'po' ? 'po' : doc?.category === 'delivery_note' ? 'delivery_note' : 'auto',
+        document_id: doc?.id,
+        document_title: doc?.title,
+        force_vision: true,
+      });
+      const r = res?.data;
+      if (r?.extraction_id) {
+        setDraft(buildInitialDraft(r));
+        setStep(0);
+      } else if (r?.error) {
+        alert(r.error + (r.stage ? ` (stage: ${r.stage})` : ''));
+      }
+    } catch (err) {
+      alert(err?.response?.data?.error || err?.message || 'Re-extraction failed.');
+    } finally {
+      setReExtracting(false);
+    }
   }
 
   return (
@@ -116,6 +142,11 @@ export default function PODNExtractionPanel({ document: doc, result, projectId, 
         <div className="px-6 py-3 border-t border-slate-200 flex items-center justify-between gap-3 shrink-0 bg-slate-50">
           <div className="text-xs text-slate-500 truncate">{summary}</div>
           <div className="flex items-center gap-2 shrink-0">
+            <button onClick={reExtractWithVision} disabled={reExtracting || applying}
+              className="flex items-center gap-1.5 px-3 py-2 border border-blue-300 text-blue-700 text-sm rounded-lg hover:bg-blue-50 disabled:opacity-40">
+              {reExtracting ? <Loader2 className="w-4 h-4 animate-spin" /> : <ScanEye className="w-4 h-4" />}
+              Re-extract with image reading
+            </button>
             <button onClick={cancel} className="px-3 py-2 border border-slate-300 text-slate-600 text-sm rounded-lg hover:bg-slate-100">Cancel</button>
             <button onClick={() => setStep((s) => Math.max(0, s - 1))} disabled={step === 0} className="px-3 py-2 border border-slate-300 text-slate-600 text-sm rounded-lg hover:bg-slate-100 disabled:opacity-40">Back</button>
             {step < 4 ? (
