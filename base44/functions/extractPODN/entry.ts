@@ -26,6 +26,10 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 import { matchLine } from '../../shared/matchLine.ts';
 import { buildProfileAssertions } from '../../shared/documentProfile.ts';
 
+// BUILD_ID — bump the date suffix on every edit to this function so it is
+// always provable which build is live.
+const BUILD_ID = 'podn-2026-08-04-a';
+
 const IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.webp'];
 const SHEET_EXTS = ['.xlsx', '.xls', '.csv', '.html', '.json'];
 const UNSUPPORTED_EXTS = ['.xlsm', '.xlsb', '.doc', '.docx', '.ppt', '.pptx'];
@@ -257,9 +261,15 @@ function deriveObservedConventions(docText: string, currency: string, subtotalNe
   return oc;
 }
 
+// ── safe: wrap a promise so it can never reject (Deno kills unhandled rejections) ──
+const safe = <T,>(p: Promise<T>, label: string) =>
+  p.then((v) => ({ ok: true as const, value: v }))
+   .catch((e: any) => ({ ok: false as const, label, error: e?.message || String(e) }));
+
 Deno.serve(async (req) => {
   let stage = 'init';
   let extractionId = '';
+  let extractionPersistError = '';
   let base44: any;
   try {
     base44 = createClientFromRequest(req);
@@ -268,23 +278,23 @@ Deno.serve(async (req) => {
     stage = 'auth';
     let user: any = null;
     try { user = await base44.auth.me(); } catch (_) { user = null; }
-    if (!user) return Response.json({ error: 'Unauthorized', stage, partial: true }, { status: 401 });
+    if (!user) return Response.json({ build_id: BUILD_ID, error: 'Unauthorized', stage, partial: true }, { status: 401 });
 
     // ── input ─────────────────────────────────────────────────────────────
     stage = 'input';
     const body = await req.json();
     const { file_url, project_id, doc_hint, document_id, document_title, force_vision } = body;
     if (!file_url || !project_id)
-      return Response.json({ error: 'file_url and project_id are required', stage, partial: true }, { status: 400 });
+      return Response.json({ build_id: BUILD_ID, error: 'file_url and project_id are required', stage, partial: true }, { status: 400 });
     if (doc_hint && !['po', 'delivery_note', 'auto'].includes(doc_hint))
-      return Response.json({ error: "doc_hint must be 'po', 'delivery_note', or 'auto'", stage, partial: true }, { status: 400 });
+      return Response.json({ build_id: BUILD_ID, error: "doc_hint must be 'po', 'delivery_note', or 'auto'", stage, partial: true }, { status: 400 });
 
     const debugMode = new URL(req.url).searchParams.get('debug') === '1';
 
     const urlLower = file_url.toLowerCase().split('?')[0];
     const ext = urlLower.match(/\.[^.]+$/)?.[0] || '';
     if (UNSUPPORTED_EXTS.includes(ext))
-      return Response.json({ error: `File type "${ext}" is not supported for extraction.`, stage, partial: true }, { status: 400 });
+      return Response.json({ build_id: BUILD_ID, error: `File type "${ext}" is not supported for extraction.`, stage, partial: true }, { status: 400 });
 
     const isImage = IMAGE_EXTS.includes(ext);
     const isSheet = SHEET_EXTS.includes(ext);
@@ -304,18 +314,23 @@ Deno.serve(async (req) => {
         summary: `Processing — stage: ${stage}`,
       });
       extractionId = extraction.id;
-    } catch (_) { extraction = null; }
+    } catch (e: any) { extraction = null; extractionPersistError = e?.message || String(e); }
 
     // Fire ALL entity lookups BEFORE the file read + LLM so they run
     // concurrently with the slow integration calls. Awaited later via
     // Promise.allSettled. Duplicate PO/Expense detection is done in memory
     // against the project-wide fetch (no per-document filter call).
-    const bomP = base44.asServiceRole.entities.BOMItem.filter({ project_id }, '-created_date', 1000);
-    const aliasesProjP = base44.asServiceRole.entities.PartAlias.filter({ project_id }, '-created_date', 1000);
-    const aliasesGlobalP = base44.asServiceRole.entities.PartAlias.filter({ project_id: '' }, '-created_date', 1000);
-    const posP = base44.asServiceRole.entities.PurchaseOrder.filter({ project_id }, '-created_date', 200);
-    const expensesP = base44.asServiceRole.entities.Expense.filter({ project_id }, '-created_date', 200);
-    const profilesP = base44.asServiceRole.entities.DocumentProfile.list('-last_seen', 20);
+    // Fire ALL entity lookups BEFORE the file read + LLM so they run
+    // concurrently with the slow integration calls. Each is wrapped with `safe`
+    // so an unhandled rejection can never kill the Deno isolate — failures are
+    // surfaced as warnings after the LLM returns. Duplicate PO/Expense detection
+    // is done in memory against the project-wide fetch (no per-document call).
+    const bomP = safe(base44.asServiceRole.entities.BOMItem.filter({ project_id }, '-created_date', 1000), 'BOMItem');
+    const aliasesProjP = safe(base44.asServiceRole.entities.PartAlias.filter({ project_id }, '-created_date', 1000), 'PartAlias(project)');
+    const aliasesGlobalP = safe(base44.asServiceRole.entities.PartAlias.filter({ project_id: '' }, '-created_date', 1000), 'PartAlias(global)');
+    const posP = safe(base44.asServiceRole.entities.PurchaseOrder.filter({ project_id }, '-created_date', 200), 'PurchaseOrder');
+    const expensesP = safe(base44.asServiceRole.entities.Expense.filter({ project_id }, '-created_date', 200), 'Expense');
+    const profilesP = safe(base44.asServiceRole.entities.DocumentProfile.list('-last_seen', 20), 'DocumentProfile');
 
     // ── read_file (text-first, vision only when needed) ────────────────────
     stage = 'read_file';
@@ -346,9 +361,10 @@ Deno.serve(async (req) => {
     let profileBlock = '';
     let profileWarning = '';
     if (docText) {
-      try {
-        const profiles: any[] = await profilesP;
-        if (profiles && profiles.length) {
+      const profilesRes = await profilesP;
+      if (profilesRes.ok) {
+        const profiles: any[] = profilesRes.value || [];
+        if (profiles.length) {
           const dtLower = docText.toLowerCase();
           const relevant = profiles.filter((p) =>
             (p?.issuer_key && docText.includes(p.issuer_key)) ||
@@ -359,8 +375,8 @@ Deno.serve(async (req) => {
             if (block) profileBlock = block.slice(0, 1500);
           }
         }
-      } catch (e) {
-        profileWarning = `Document profiles could not be loaded — issuer conventions were not applied: ${(e as any)?.message || 'unknown error'}`;
+      } else {
+        profileWarning = `DocumentProfile could not be loaded — issuer conventions were not applied: ${profilesRes.error}`;
       }
     }
 
@@ -455,7 +471,7 @@ Return JSON matching the schema exactly.`;
           try { await base44.asServiceRole.entities.Extraction.update(extraction.id, { status: 'failed', summary: `Failed at stage: ${stage}` }); } catch (_) {}
         }
         return Response.json(
-          { extraction_id: extractionId, error: (e2 as any)?.message || 'LLM invocation failed on both attempts', stage, partial: true },
+          { build_id: BUILD_ID, extraction_id: extractionId || null, error: (e2 as any)?.message || 'LLM invocation failed on both attempts', stage, partial: true },
           { status: 200 },
         );
       }
@@ -496,20 +512,24 @@ Return JSON matching the schema exactly.`;
     let projectPOs: any[] = [];
     let projectExpenses: any[] = [];
 
-    const [bomRes, aliasesProjRes, aliasesGlobalRes, posRes, expensesRes] = await Promise.allSettled([
-      bomP, aliasesProjP, aliasesGlobalP, posP, expensesP,
-    ]);
-    if (bomRes.status === 'fulfilled') bomItems = bomRes.value || [];
-    else sideWarnings.push(`BOM could not be loaded — line matching was skipped: ${(bomRes as any).reason?.message || 'unknown error'}`);
-    if (aliasesProjRes.status === 'fulfilled' && aliasesGlobalRes.status === 'fulfilled') {
-      aliases = [...(aliasesProjRes.value || []), ...(aliasesGlobalRes.value || [])];
-    } else {
-      sideWarnings.push(`Part aliases could not be loaded — matching may be incomplete.`);
-    }
-    if (posRes.status === 'fulfilled') projectPOs = posRes.value || [];
-    if (expensesRes.status === 'fulfilled') projectExpenses = expensesRes.value || [];
+    const bomRes = await bomP;
+    const aliasesProjRes = await aliasesProjP;
+    const aliasesGlobalRes = await aliasesGlobalP;
+    const posRes = await posP;
+    const expensesRes = await expensesP;
 
-    const bomLoadFailed = bomRes.status !== 'fulfilled';
+    if (bomRes.ok) bomItems = bomRes.value || [];
+    else sideWarnings.push(`${bomRes.label} could not be loaded: ${bomRes.error}`);
+    if (aliasesProjRes.ok) aliases = aliases.concat(aliasesProjRes.value || []);
+    else sideWarnings.push(`${aliasesProjRes.label} could not be loaded: ${aliasesProjRes.error}`);
+    if (aliasesGlobalRes.ok) aliases = aliases.concat(aliasesGlobalRes.value || []);
+    else sideWarnings.push(`${aliasesGlobalRes.label} could not be loaded: ${aliasesGlobalRes.error}`);
+    if (posRes.ok) projectPOs = posRes.value || [];
+    else sideWarnings.push(`${posRes.label} could not be loaded: ${posRes.error}`);
+    if (expensesRes.ok) projectExpenses = expensesRes.value || [];
+    else sideWarnings.push(`${expensesRes.label} could not be loaded: ${expensesRes.error}`);
+
+    const bomLoadFailed = !bomRes.ok;
     let auto_selected = 0;
     let needs_review = 0;
     if (bomLoadFailed) {
@@ -604,19 +624,27 @@ Return JSON matching the schema exactly.`;
           summary: `${document_type === 'po' ? 'PO' : 'DN'} ${document_number} — ${line_items.length} line(s), ${auto_selected} auto-selected, ${needs_review} need review`,
         });
         extractionId = ext.id;
-      } catch (_) { /* nothing more we can do */ }
+      } catch (e: any) { extractionPersistError = e?.message || String(e); }
     }
 
     // ── Return ──────────────────────────────────────────────────────────────
+    const responseExtractionId: string | null = extractionId || null;
+    const responseWarnings = [...allWarnings];
+    if (!responseExtractionId) {
+      responseWarnings.push(
+        `This extraction could not be saved for later review (${extractionPersistError || 'unknown persistence error'}). You can still apply it now, but you will not be able to resume or revert it.`,
+      );
+    }
     const response: any = {
-      extraction_id: extractionId,
+      build_id: BUILD_ID,
+      extraction_id: responseExtractionId,
       header,
       line_items,
       secondary_document,
       observed_conventions,
       payment_schedule,
       duplicates,
-      warnings: allWarnings,
+      warnings: responseWarnings,
       counts: { auto_selected, needs_review },
       used_vision: useVision,
       llm_attempt,
@@ -638,7 +666,7 @@ Return JSON matching the schema exactly.`;
       try { await base44.asServiceRole.entities.Extraction.update(extractionId, { status: 'failed', summary: `Failed at stage: ${stage}` }); } catch (_) {}
     }
     return Response.json(
-      { extraction_id: extractionId, error: (error as any)?.message || 'Extraction failed', stage, partial: true },
+      { build_id: BUILD_ID, extraction_id: extractionId || null, error: (error as any)?.message || 'Extraction failed', stage, partial: true },
       { status: 200 },
     );
   }

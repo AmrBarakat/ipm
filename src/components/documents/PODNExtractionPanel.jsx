@@ -21,7 +21,7 @@ const STEPS = ['Document', 'Vendor', 'Line items', 'Purchase Order', 'Expense'];
  * applyPODNExtraction (PROMPT 5) with the fully-edited payload; Cancel marks the
  * Extraction "failed" and writes nothing else. No VAT field anywhere.
  */
-export default function PODNExtractionPanel({ document: doc, result, projectId, onClose, onApplied }) {
+export default function PODNExtractionPanel({ document: doc, result, projectId, canPersist = true, onClose, onApplied }) {
   const [draft, setDraft] = useState(() => buildInitialDraft(result));
   const [step, setStep] = useState(0);
   const [applying, setApplying] = useState(false);
@@ -64,11 +64,13 @@ export default function PODNExtractionPanel({ document: doc, result, projectId, 
   }
 
   async function cancel() {
-    try {
-      if (draft.extraction_id) {
+    // Only mark the staging record when it was actually persisted — a null
+    // extraction_id (canPersist=false) means there is no record to update.
+    if (canPersist && draft.extraction_id) {
+      try {
         await base44.entities.Extraction.update(draft.extraction_id, { status: 'failed', summary: 'Cancelled by user' });
-      }
-    } catch (_) {}
+      } catch (_) {}
+    }
     onClose();
   }
 
@@ -140,7 +142,12 @@ export default function PODNExtractionPanel({ document: doc, result, projectId, 
 
         {/* Footer */}
         <div className="px-6 py-3 border-t border-slate-200 flex items-center justify-between gap-3 shrink-0 bg-slate-50">
-          <div className="text-xs text-slate-500 truncate">{summary}</div>
+          <div className="text-xs text-slate-500 truncate flex items-center gap-2">
+            {summary}
+            {!canPersist && (
+              <span className="text-amber-700 font-medium">· Not saved — apply now or lose this extraction (resume/revert unavailable).</span>
+            )}
+          </div>
           <div className="flex items-center gap-2 shrink-0">
             <button onClick={reExtractWithVision} disabled={reExtracting || applying}
               className="flex items-center gap-1.5 px-3 py-2 border border-blue-300 text-blue-700 text-sm rounded-lg hover:bg-blue-50 disabled:opacity-40">

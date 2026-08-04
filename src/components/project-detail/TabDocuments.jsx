@@ -151,19 +151,20 @@ export default function TabDocuments({ projectId, project, onNavigateTab }) {
       });
       return;
     }
-    if (!r.extraction_id) {
+    if (!('extraction_id' in r)) {
+      const hasBuild = r?.build_id != null;
       setExtractError({
         message: 'The extraction service replied, but in an unexpected shape.',
-        detail: r.note_id || r.rows
-          ? 'The response looks like the previous version of extractPODN — the backend function may not have redeployed.'
-          : 'No extraction_id was returned.',
+        detail: hasBuild
+          ? `Build ${r.build_id} — response was missing extraction_id for an unexpected reason.`
+          : 'The response carried no build_id, which means it came from a build older than 2026-08-04 — the function has not redeployed.',
         raw: JSON.stringify(r).slice(0, 2000),
       });
       return;
     }
     // Zero line items is NOT an error — open the review modal and let step 1
     // surface warnings; the user may still want to create the vendor / PO / expense.
-    setPodnResult({ document: doc, result: r });
+    setPodnResult({ document: doc, result: r, canPersist: !!r.extraction_id });
   }
 
   async function copyExtractError() {
@@ -465,6 +466,7 @@ export default function TabDocuments({ projectId, project, onNavigateTab }) {
           document={podnResult.document}
           result={podnResult.result}
           projectId={projectId}
+          canPersist={podnResult.canPersist !== false}
           onClose={() => setPodnResult(null)}
           onApplied={() => { setPodnResult(null); queryClient.invalidateQueries({ queryKey: ['BOMItem'] }); queryClient.invalidateQueries({ queryKey: ['Note'] }); queryClient.invalidateQueries({ queryKey: ['Extraction'] }); queryClient.invalidateQueries({ queryKey: ['PurchaseOrder'] }); queryClient.invalidateQueries({ queryKey: ['Expense'] }); queryClient.invalidateQueries({ queryKey: ['Vendor'] }); }} />
       )}
