@@ -7,6 +7,7 @@
  *            payment_schedule, duplicates, warnings }
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
+import { matchLine } from '../../shared/matchLine.ts';
 
 const IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.webp'];
 const SHEET_EXTS = ['.xlsx', '.xls', '.csv', '.html', '.json'];
@@ -367,6 +368,45 @@ Return JSON matching the schema exactly.`,
     const effectiveNet = subtotal_net ?? total_amount ?? 0;
     const payment_schedule = parsePaymentTerms(terms.payment_terms || '', effectiveNet);
 
+    // ── C: Tiered match (R6) — load BOMItems + PartAliases, match per line ───
+    let bomItems: any[] = [];
+    let aliases: any[] = [];
+    try {
+      bomItems = await base44.asServiceRole.entities.BOMItem.filter({ project_id }, '-created_date', 1000);
+    } catch (_) {}
+    try {
+      const projAliases = await base44.asServiceRole.entities.PartAlias.filter({ project_id }, '-created_date', 1000);
+      const globalAliases = await base44.asServiceRole.entities.PartAlias.filter({ project_id: '' }, '-created_date', 1000);
+      aliases = [...(projAliases || []), ...(globalAliases || [])];
+    } catch (_) {}
+
+    let auto_selected = 0;
+    let needs_review = 0;
+    line_items = line_items.map((li) => {
+      const m = matchLine({
+        line: {
+          erp_item_code: li.erp_item_code,
+          part_number: li.part_number,
+          description: li.description,
+          ocr_uncertain: li.ocr_uncertain,
+          qty: li.qty,
+          unit_price: li.unit_price,
+        },
+        bomItems,
+        aliases,
+      });
+      if (m.selected) auto_selected++;
+      else needs_review++;
+      return {
+        ...li,
+        bom_item_id: m.bom_item_id,
+        match_confidence: m.confidence,
+        match_tier: m.tier,
+        candidates: m.candidates,
+        selected: m.selected,
+      };
+    });
+
     // ── F: R5 Duplicate detection ───────────────────────────────────────────
     const duplicates: any = {};
     if (document_number && document_type === 'po') {
@@ -407,7 +447,7 @@ Return JSON matching the schema exactly.`,
       extraction_kind: document_type === 'po' ? 'po' : 'delivery_note',
       header,
       proposals: [],
-      summary: `${document_type === 'po' ? 'PO' : 'DN'} ${document_number} — ${line_items.length} line(s) extracted`,
+      summary: `${document_type === 'po' ? 'PO' : 'DN'} ${document_number} — ${line_items.length} line(s), ${auto_selected} auto-selected, ${needs_review} need review`,
     });
 
     // ── Return ──────────────────────────────────────────────────────────────
@@ -419,6 +459,7 @@ Return JSON matching the schema exactly.`,
       payment_schedule,
       duplicates,
       warnings,
+      counts: { auto_selected, needs_review },
     };
 
     if (debugMode) {
