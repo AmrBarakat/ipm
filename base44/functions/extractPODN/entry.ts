@@ -3,8 +3,15 @@
  * "review") and returns structured data for the review screen. Does NOT update
  * BOMItem, does NOT create a Note, does NOT call applyLine.
  *
+ * Hardened: every phase sets a `stage`; no single sub-step kills the whole
+ * call; a staging Extraction record is created early so failed runs are visible
+ * in the Extractions list; InvokeLLM is retried schema-less if the typed call
+ * fails or returns a non-array line_items; the full result always lives in
+ * input_text (the reliable store, since the `header` object field is schema-less).
+ *
  * Returns: { extraction_id, header, line_items, secondary_document,
- *            payment_schedule, duplicates, warnings }
+ *            observed_conventions, payment_schedule, duplicates, warnings,
+ *            counts, llm_attempt, stage? }
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 import { matchLine } from '../../shared/matchLine.ts';
@@ -235,41 +242,99 @@ function validateExtraction(lineItems: any[], subtotalNet: number | null, totalA
   return warnings;
 }
 
-Deno.serve(async (req) => {
-  try {
-    const base44 = createClientFromRequest(req);
+// ── Schema-less retry: coerce a flat/string LLM reply into the nested shape ──
+function coerceRetryResult(raw: any): any {
+  let obj: any = raw;
+  if (typeof raw === 'string') {
+    let s = raw.trim();
+    s = s.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
+    try { obj = JSON.parse(s); } catch (_) { obj = {}; }
+  }
+  if (!obj || typeof obj !== 'object') obj = {};
 
-    // ── Auth guard ──────────────────────────────────────────────────────────
+  // Map flat vendor_* fields back into the nested vendor object.
+  const vendor = obj.vendor && typeof obj.vendor === 'object' ? { ...obj.vendor } : {};
+  if (obj.vendor_name != null && vendor.name == null) vendor.name = obj.vendor_name;
+  if (obj.vendor_supplier_code != null && vendor.supplier_code == null) vendor.supplier_code = obj.vendor_supplier_code;
+  if (obj.vendor_tax_number != null && vendor.tax_number == null) vendor.tax_number = obj.vendor_tax_number;
+  if (obj.vendor_contact_name != null && vendor.contact_name == null) vendor.contact_name = obj.vendor_contact_name;
+  if (obj.vendor_email != null && vendor.email == null) vendor.email = obj.vendor_email;
+  if (obj.vendor_phone != null && vendor.phone == null) vendor.phone = obj.vendor_phone;
+  if (obj.vendor_address != null && vendor.address == null) vendor.address = obj.vendor_address;
+
+  // Map flat terms fields back into the nested terms object.
+  const terms = obj.terms && typeof obj.terms === 'object' ? { ...obj.terms } : {};
+  const termsFields = ['payment_terms', 'incoterm', 'mode_of_shipping', 'warehouse_code', 'supplier_ref', 'pr_number', 'purchaser', 'requested_by'];
+  for (const f of termsFields) {
+    if (obj[f] != null && terms[f] == null) terms[f] = obj[f];
+  }
+
+  return { ...obj, vendor, terms };
+}
+
+Deno.serve(async (req) => {
+  let stage = 'init';
+  let extractionId = '';
+  let base44: any;
+  try {
+    base44 = createClientFromRequest(req);
+
+    // ── auth ──────────────────────────────────────────────────────────────
+    stage = 'auth';
     let user: any = null;
     try { user = await base44.auth.me(); } catch (_) { user = null; }
-    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!user) return Response.json({ error: 'Unauthorized', stage, partial: true }, { status: 401 });
 
+    // ── input ─────────────────────────────────────────────────────────────
+    stage = 'input';
     const body = await req.json();
     const { file_url, project_id, doc_hint, document_id, document_title } = body;
     if (!file_url || !project_id)
-      return Response.json({ error: 'file_url and project_id are required' }, { status: 400 });
+      return Response.json({ error: 'file_url and project_id are required', stage, partial: true }, { status: 400 });
     if (doc_hint && !['po', 'delivery_note', 'auto'].includes(doc_hint))
-      return Response.json({ error: "doc_hint must be 'po', 'delivery_note', or 'auto'" }, { status: 400 });
+      return Response.json({ error: "doc_hint must be 'po', 'delivery_note', or 'auto'", stage, partial: true }, { status: 400 });
 
     const debugMode = new URL(req.url).searchParams.get('debug') === '1';
 
     const urlLower = file_url.toLowerCase().split('?')[0];
     const ext = urlLower.match(/\.[^.]+$/)?.[0] || '';
     if (UNSUPPORTED_EXTS.includes(ext))
-      return Response.json({ error: `File type "${ext}" is not supported for extraction.` }, { status: 400 });
+      return Response.json({ error: `File type "${ext}" is not supported for extraction.`, stage, partial: true }, { status: 400 });
 
     const isImage = IMAGE_EXTS.includes(ext);
     const isSheet = SHEET_EXTS.includes(ext);
 
-    // ── a. READ (preserved exactly) ─────────────────────────────────────────
+    // Create the Extraction record EARLY with status 'processing' so this run
+    // is visible in the Extractions list even if a later stage fails. Keep its
+    // id in scope; patch it as the run progresses.
+    let extraction: any = null;
+    try {
+      extraction = await base44.asServiceRole.entities.Extraction.create({
+        project_id,
+        document_id: document_id || '',
+        document_title: document_title || 'Untitled',
+        status: 'processing',
+        extraction_kind: 'other',
+        header: {},
+        proposals: [],
+        input_text: JSON.stringify({ stage, file_url, project_id, doc_hint }),
+        summary: `Processing — stage: ${stage}`,
+      });
+      extractionId = extraction.id;
+    } catch (_) { extraction = null; }
+
+    // ── read_file ──────────────────────────────────────────────────────────
+    stage = 'read_file';
     let docText = '';
     let useVision = false;
     if (isImage) {
       useVision = true;
     } else if (isSheet) {
-      const extracted = await base44.asServiceRole.integrations.Core.ExtractDataFromUploadedFile({ file_url, json_schema: TEXT_EXTRACT_SCHEMA });
-      docText = extracted?.output?.raw_text
-        || (typeof extracted?.output === 'string' ? extracted.output : JSON.stringify(extracted?.output || ''));
+      try {
+        const extracted = await base44.asServiceRole.integrations.Core.ExtractDataFromUploadedFile({ file_url, json_schema: TEXT_EXTRACT_SCHEMA });
+        docText = extracted?.output?.raw_text
+          || (typeof extracted?.output === 'string' ? extracted.output : JSON.stringify(extracted?.output || ''));
+      } catch (_) { docText = ''; }
     } else {
       // PDF / unknown: try text, fall back to vision if thin.
       try {
@@ -285,12 +350,16 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── Load learned DocumentProfiles to inject as LLM assertions ───────────
+    // ── load_profiles ─────────────────────────────────────────────────────
+    stage = 'load_profiles';
     let profileBlock = '';
+    const sideWarnings: string[] = [];
     try {
       const profiles = await base44.asServiceRole.entities.DocumentProfile.list('-last_seen', 100);
       profileBlock = buildProfileAssertions(profiles || []);
-    } catch (_) { profileBlock = ''; }
+    } catch (e) {
+      sideWarnings.push(`Document profiles could not be loaded — issuer conventions were not applied: ${(e as any)?.message || 'unknown error'}`);
+    }
 
     const hint = doc_hint === 'po' ? 'This document is a Purchase Order.'
       : doc_hint === 'delivery_note' ? 'This document is a Delivery Note / Packing Slip.'
@@ -298,13 +367,9 @@ Deno.serve(async (req) => {
 
     const docBlock = docText
       ? `DOCUMENT TEXT:\n${docText.slice(0, 8000)}\n\nThe document is also attached as a file. Cross-check the text against it, paying attention to stamps, handwritten quantities, signatures, and table structure.`
-      : `The document is attached as a file. Read it carefully, including any stamps, handwritten quantities, signatures, and table structure. Perform accurate OCR on all line items.`;
+      : `The document is attached as a file. Read it carefully, including any stamps, handwritten quantities, signatures, and table structure. Perform accurate OCR on all line items.`
 
-    // ── b. EXTRACT (widened schema) ─────────────────────────────────────────
-    const _raw = await base44.asServiceRole.integrations.Core.InvokeLLM({
-      model: 'claude_sonnet_4_6',
-      ...(useVision ? { file_urls: [file_url] } : {}),
-      prompt: `You are an expert at parsing Purchase Orders, Delivery Notes, and Packing Slips for industrial automation projects.
+    const fullPrompt = `You are an expert at parsing Purchase Orders, Delivery Notes, and Packing Slips for industrial automation projects.
 
 ${hint}
 
@@ -375,12 +440,57 @@ OBSERVED CONVENTIONS — report what the document actually shows in observed_con
 - part_code_location: "bracketed_in_description" if part codes appear inside [brackets] in the Description column, "separate_column" if in a dedicated column, or "none".
 - column_labels: the exact header text of the quantity, unit price, net amount, delivery date, and ERP/item code columns (use the keys qty, unit_price, net_amount, delivery_date, erp_code).
 
-Return JSON matching the schema exactly.`,
-      response_json_schema: PODN_SCHEMA,
-    });
-    // InvokeLLM may return the parsed object directly OR nested under `.response` (preserved).
-    const extracted = (_raw as any)?.response || _raw || {};
+Return JSON matching the schema exactly.`;
 
+    // ── invoke_llm (schema-less retry on failure or non-array line_items) ──
+    stage = 'invoke_llm';
+    let llm_attempt: 1 | 2 = 1;
+    let extracted: any = {};
+
+    const llmCall = (withSchema: boolean) => base44.asServiceRole.integrations.Core.InvokeLLM({
+      model: 'claude_sonnet_4_6',
+      ...(useVision ? { file_urls: [file_url] } : {}),
+      prompt: withSchema
+        ? fullPrompt
+        : `${fullPrompt}\n\nReturn ONLY a JSON object matching this structure, with no markdown fences and no commentary: { document_type, document_number, document_date, currency, subtotal_net, total_amount, total_quantity, vendor_name, vendor_supplier_code, vendor_tax_number, vendor_contact_name, vendor_email, vendor_phone, vendor_address, payment_terms, incoterm, mode_of_shipping, warehouse_code, supplier_ref, pr_number, purchaser, requested_by, line_items: [{ line_no, erp_item_code, part_number, description, uom, qty, unit_price, net_amount, supplier_delivery_date, ocr_uncertain }] }`,
+      ...(withSchema ? { response_json_schema: PODN_SCHEMA } : {}),
+    });
+
+    let attempt1Ok = false;
+    let _raw1: any;
+    try {
+      _raw1 = await llmCall(true);
+      extracted = (_raw1 as any)?.response || _raw1 || {};
+      if (Array.isArray(extracted?.line_items)) {
+        attempt1Ok = true;
+      }
+    } catch (_) {
+      attempt1Ok = false;
+    }
+
+    // If attempt 1 threw OR returned line_items that is not an array, retry once
+    // schema-less and parse the flat reply defensively.
+    if (!attempt1Ok) {
+      llm_attempt = 2;
+      let _raw2: any;
+      try {
+        _raw2 = await llmCall(false);
+        extracted = coerceRetryResult((_raw2 as any)?.response || _raw2 || {});
+      } catch (e2) {
+        // Both attempts failed. Patch the extraction to 'failed' and return a
+        // 200 so the SDK hands the body (with extraction_id) to the client.
+        if (extraction) {
+          try { await base44.asServiceRole.entities.Extraction.update(extraction.id, { status: 'failed', summary: `Failed at stage: ${stage}` }); } catch (_) {}
+        }
+        return Response.json(
+          { extraction_id: extractionId, error: (e2 as any)?.message || 'LLM invocation failed on both attempts', stage, partial: true },
+          { status: 200 },
+        );
+      }
+    }
+
+    // ── parse ──────────────────────────────────────────────────────────────
+    stage = 'parse';
     const document_type: string = extracted?.document_type === 'po' ? 'po' : 'delivery_note';
     const document_number: string = extracted?.document_number || '';
     const document_date: string = extracted?.document_date || '';
@@ -394,56 +504,84 @@ Return JSON matching the schema exactly.`,
     const observed_conventions: any = extracted?.observed_conventions || {};
     let line_items: any[] = Array.isArray(extracted?.line_items) ? extracted.line_items : [];
 
-    // ── D: Validation warnings ──────────────────────────────────────────────
+    // ── validate ───────────────────────────────────────────────────────────
+    stage = 'validate';
     const warnings = validateExtraction(line_items, subtotal_net, total_amount, total_quantity);
 
-    // ── E: R4 Quotation variance ────────────────────────────────────────────
+    // ── E: R4 Quotation variance ───────────────────────────────────────────
     line_items = attachQuotationVariance(line_items, secondary_document);
 
-    // ── C: R8 Parse payment terms ───────────────────────────────────────────
+    // ── C: R8 Parse payment terms ──────────────────────────────────────────
     const effectiveNet = subtotal_net ?? total_amount ?? 0;
     const payment_schedule = parsePaymentTerms(terms.payment_terms || '', effectiveNet);
 
-    // ── C: Tiered match (R6) — load BOMItems + PartAliases, match per line ───
+    // ── match (R6) — load BOMItems + PartAliases, match per line ───────────
+    stage = 'match';
     let bomItems: any[] = [];
     let aliases: any[] = [];
+    let bomLoadFailed = false;
     try {
       bomItems = await base44.asServiceRole.entities.BOMItem.filter({ project_id }, '-created_date', 1000);
-    } catch (_) {}
-    try {
-      const projAliases = await base44.asServiceRole.entities.PartAlias.filter({ project_id }, '-created_date', 1000);
-      const globalAliases = await base44.asServiceRole.entities.PartAlias.filter({ project_id: '' }, '-created_date', 1000);
-      aliases = [...(projAliases || []), ...(globalAliases || [])];
-    } catch (_) {}
+    } catch (e) {
+      bomLoadFailed = true;
+      sideWarnings.push(`BOM could not be loaded — line matching was skipped: ${(e as any)?.message || 'unknown error'}`);
+    }
+    if (!bomLoadFailed) {
+      try {
+        const projAliases = await base44.asServiceRole.entities.PartAlias.filter({ project_id }, '-created_date', 1000);
+        const globalAliases = await base44.asServiceRole.entities.PartAlias.filter({ project_id: '' }, '-created_date', 1000);
+        aliases = [...(projAliases || []), ...(globalAliases || [])];
+      } catch (e) {
+        sideWarnings.push(`Part aliases could not be loaded — matching may be incomplete: ${(e as any)?.message || 'unknown error'}`);
+      }
+    }
 
     let auto_selected = 0;
     let needs_review = 0;
-    line_items = line_items.map((li) => {
-      const m = matchLine({
-        line: {
-          erp_item_code: li.erp_item_code,
-          part_number: li.part_number,
-          description: li.description,
-          ocr_uncertain: li.ocr_uncertain,
-          qty: li.qty,
-          unit_price: li.unit_price,
-        },
-        bomItems,
-        aliases,
+    if (bomLoadFailed) {
+      // BOM unavailable — surface every line as needs-review with a 'skipped' tier
+      // so the review screen can explain why nothing matched instead of silently
+      // showing all lines unmatched.
+      line_items = line_items.map((li) => {
+        needs_review++;
+        return {
+          ...li,
+          bom_item_id: null,
+          match_confidence: 0,
+          match_tier: 'skipped',
+          candidates: [],
+          selected: false,
+        };
       });
-      if (m.selected) auto_selected++;
-      else needs_review++;
-      return {
-        ...li,
-        bom_item_id: m.bom_item_id,
-        match_confidence: m.confidence,
-        match_tier: m.tier,
-        candidates: m.candidates,
-        selected: m.selected,
-      };
-    });
+    } else {
+      line_items = line_items.map((li) => {
+        const m = matchLine({
+          line: {
+            erp_item_code: li.erp_item_code,
+            part_number: li.part_number,
+            description: li.description,
+            ocr_uncertain: li.ocr_uncertain,
+            qty: li.qty,
+            unit_price: li.unit_price,
+          },
+          bomItems,
+          aliases,
+        });
+        if (m.selected) auto_selected++;
+        else needs_review++;
+        return {
+          ...li,
+          bom_item_id: m.bom_item_id,
+          match_confidence: m.confidence,
+          match_tier: m.tier,
+          candidates: m.candidates,
+          selected: m.selected,
+        };
+      });
+    }
 
-    // ── F: R5 Duplicate detection ───────────────────────────────────────────
+    // ── duplicates ─────────────────────────────────────────────────────────
+    stage = 'duplicates';
     const duplicates: any = {};
     if (document_number && document_type === 'po') {
       try {
@@ -452,7 +590,9 @@ Return JSON matching the schema exactly.`,
           duplicates.purchase_order_id = existingPOs[0].id;
           duplicates.purchase_order_status = existingPOs[0].status;
         }
-      } catch (_) {}
+      } catch (e) {
+        sideWarnings.push(`Duplicate PO check skipped: ${(e as any)?.message || 'unknown error'}`);
+      }
     }
     if (document_number) {
       try {
@@ -460,10 +600,13 @@ Return JSON matching the schema exactly.`,
         if (existingExpenses.length > 0) {
           duplicates.expense_id = existingExpenses[0].id;
         }
-      } catch (_) {}
+      } catch (e) {
+        sideWarnings.push(`Duplicate expense check skipped: ${(e as any)?.message || 'unknown error'}`);
+      }
     }
 
-    // ── G: Write staging Extraction record ──────────────────────────────────
+    // ── create_extraction: patch the staging record to 'review' ─────────────
+    stage = 'create_extraction';
     const header = {
       document_number,
       document_date,
@@ -475,8 +618,9 @@ Return JSON matching the schema exactly.`,
       terms,
     };
 
-    // Store the full extract result so a "review" extraction can be resumed
-    // from the Extractions list without re-running extraction.
+    // input_text is the reliable store (the `header` object field is schema-less
+    // and may strip nested values on write). handleReApply reads from input_text.
+    const allWarnings = [...warnings, ...sideWarnings];
     const storable = {
       header,
       line_items,
@@ -484,46 +628,81 @@ Return JSON matching the schema exactly.`,
       observed_conventions,
       payment_schedule,
       duplicates,
-      warnings,
+      warnings: allWarnings,
       counts: { auto_selected, needs_review },
       extraction_kind: document_type,
+      llm_attempt,
     };
-    const extraction = await base44.asServiceRole.entities.Extraction.create({
-      project_id,
-      document_id: document_id || null,
-      document_title: document_title || document_number || 'Untitled',
-      status: 'review',
-      extraction_kind: document_type === 'po' ? 'po' : 'delivery_note',
-      header,
-      proposals: [],
-      input_text: JSON.stringify(storable),
-      summary: `${document_type === 'po' ? 'PO' : 'DN'} ${document_number} — ${line_items.length} line(s), ${auto_selected} auto-selected, ${needs_review} need review`,
-    });
+
+    if (extraction) {
+      try {
+        await base44.asServiceRole.entities.Extraction.update(extraction.id, {
+          document_title: document_title || document_number || 'Untitled',
+          status: 'review',
+          extraction_kind: document_type === 'po' ? 'po' : 'delivery_note',
+          header,
+          proposals: [],
+          input_text: JSON.stringify(storable),
+          summary: `${document_type === 'po' ? 'PO' : 'DN'} ${document_number} — ${line_items.length} line(s), ${auto_selected} auto-selected, ${needs_review} need review`,
+        });
+        extractionId = extraction.id;
+      } catch (_) {
+        // patch failed — keep the early id; the response still carries everything
+      }
+    } else {
+      // The early create failed; create the review record now as a fallback.
+      try {
+        const ext = await base44.asServiceRole.entities.Extraction.create({
+          project_id,
+          document_id: document_id || '',
+          document_title: document_title || document_number || 'Untitled',
+          status: 'review',
+          extraction_kind: document_type === 'po' ? 'po' : 'delivery_note',
+          header,
+          proposals: [],
+          input_text: JSON.stringify(storable),
+          summary: `${document_type === 'po' ? 'PO' : 'DN'} ${document_number} — ${line_items.length} line(s), ${auto_selected} auto-selected, ${needs_review} need review`,
+        });
+        extractionId = ext.id;
+      } catch (_) { /* nothing more we can do */ }
+    }
 
     // ── Return ──────────────────────────────────────────────────────────────
     const response: any = {
-      extraction_id: extraction.id,
+      extraction_id: extractionId,
       header,
       line_items,
       secondary_document,
       observed_conventions,
       payment_schedule,
       duplicates,
-      warnings,
+      warnings: allWarnings,
       counts: { auto_selected, needs_review },
+      llm_attempt,
     };
 
     if (debugMode) {
       response.debug = {
         used_vision: useVision,
         text_len: docText.length,
-        raw_had_response_key: !!(_raw && (_raw as any).response),
+        llm_attempt,
         line_item_count: line_items.length,
+        stage,
       };
     }
 
     return Response.json(response);
   } catch (error) {
-    return Response.json({ error: (error as any)?.message || 'Extraction failed' }, { status: 500 });
+    // Outer catch: never let one sub-step kill the whole call. Patch the staging
+    // extraction to 'failed' with the stage in its summary, and return a 200 so
+    // the SDK hands the body (with extraction_id + stage) to the client instead
+    // of the error being swallowed.
+    if (base44 && extractionId) {
+      try { await base44.asServiceRole.entities.Extraction.update(extractionId, { status: 'failed', summary: `Failed at stage: ${stage}` }); } catch (_) {}
+    }
+    return Response.json(
+      { extraction_id: extractionId, error: (error as any)?.message || 'Extraction failed', stage, partial: true },
+      { status: 200 },
+    );
   }
 });
