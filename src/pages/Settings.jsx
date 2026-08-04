@@ -7,6 +7,7 @@ import HelpSection from '@/components/settings/HelpSection';
 import UsersSection from '@/components/settings/UsersSection';
 import { useAuth } from '@/lib/AuthContext';
 import EventLogSection from '@/components/settings/EventLogSection';
+import DocumentProfilesSection from '@/components/settings/DocumentProfilesSection';
 
 const DEFAULTS = {
   default_currency: 'SAR',
@@ -191,6 +192,7 @@ export default function SettingsPage() {
 
       <HelpSection />
       <EventLogSection />
+      <DocumentProfilesSection />
     </div>
   );
 }

@@ -203,6 +203,7 @@ export function buildInitialDraft(result) {
     po,
     expense,
     secondary: result.secondary_document || { present: false },
+    observed_conventions: result.observed_conventions || {},
     duplicates,
     warnings: result.warnings || [],
     counts: result.counts || { auto_selected: lines.filter((l) => l.selected).length, needs_review: lines.filter((l) => !l.selected).length },

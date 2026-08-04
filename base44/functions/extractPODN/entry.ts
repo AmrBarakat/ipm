@@ -8,6 +8,7 @@
  */
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 import { matchLine } from '../../shared/matchLine.ts';
+import { buildProfileAssertions } from '../../shared/documentProfile.ts';
 
 const IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.webp'];
 const SHEET_EXTS = ['.xlsx', '.xls', '.csv', '.html', '.json'];
@@ -70,6 +71,26 @@ const PODN_SCHEMA = {
           net_amount: { type: 'number' },
           supplier_delivery_date: { type: 'string' },
           ocr_uncertain: { type: 'boolean' },
+        },
+      },
+    },
+    observed_conventions: {
+      type: 'object',
+      description: 'What the document actually shows — used to learn/update the issuer profile.',
+      properties: {
+        date_format: { type: 'string', description: 'The date format printed on the document, e.g. DD/MM/YYYY' },
+        currency: { type: 'string' },
+        prices_appear_net: { type: 'boolean', description: 'true if line prices appear to exclude tax/VAT' },
+        part_code_location: { type: 'string', enum: ['bracketed_in_description', 'separate_column', 'none'] },
+        column_labels: {
+          type: 'object',
+          properties: {
+            qty: { type: 'string' },
+            unit_price: { type: 'string' },
+            net_amount: { type: 'string' },
+            delivery_date: { type: 'string' },
+            erp_code: { type: 'string' },
+          },
         },
       },
     },
@@ -264,6 +285,13 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ── Load learned DocumentProfiles to inject as LLM assertions ───────────
+    let profileBlock = '';
+    try {
+      const profiles = await base44.asServiceRole.entities.DocumentProfile.list('-last_seen', 100);
+      profileBlock = buildProfileAssertions(profiles || []);
+    } catch (_) { profileBlock = ''; }
+
     const hint = doc_hint === 'po' ? 'This document is a Purchase Order.'
       : doc_hint === 'delivery_note' ? 'This document is a Delivery Note / Packing Slip.'
       : 'Detect whether this document is a Purchase Order or a Delivery Note / Packing Slip.';
@@ -281,7 +309,7 @@ Deno.serve(async (req) => {
 ${hint}
 
 ${docBlock}
-
+${profileBlock ? `\nKNOWN ISSUER PROFILES (conventions learned from previously processed documents):\n${profileBlock}\n\nIf the vendor on this document matches one of the known issuers above (by supplier code, tax number, or name), apply that issuer's conventions as assertions — do not second-guess them. If the document plainly contradicts a profile assertion (e.g. the date format is visibly different, or a column header differs), the document wins.\n` : ''}
 Extract a complete, accurate result. Return null for any field you cannot read clearly.
 
 RULES:
@@ -340,6 +368,13 @@ MULTIPLE DOCUMENTS IN ONE FILE: These files frequently contain the purchase orde
   - List its lines in secondary_document.lines (description, part_number, qty, unit_price using the Rate/Unit Price column).
   - Do NOT merge secondary document lines into line_items.
 
+OBSERVED CONVENTIONS — report what the document actually shows in observed_conventions:
+- date_format: the date format as printed, e.g. "DD/MM/YYYY".
+- currency: the currency code.
+- prices_appear_net: true if line prices exclude tax/VAT.
+- part_code_location: "bracketed_in_description" if part codes appear inside [brackets] in the Description column, "separate_column" if in a dedicated column, or "none".
+- column_labels: the exact header text of the quantity, unit price, net amount, delivery date, and ERP/item code columns (use the keys qty, unit_price, net_amount, delivery_date, erp_code).
+
 Return JSON matching the schema exactly.`,
       response_json_schema: PODN_SCHEMA,
     });
@@ -356,6 +391,7 @@ Return JSON matching the schema exactly.`,
     const vendor: any = extracted?.vendor || {};
     const terms: any = extracted?.terms || {};
     const secondary_document: any = extracted?.secondary_document || { present: false };
+    const observed_conventions: any = extracted?.observed_conventions || {};
     let line_items: any[] = Array.isArray(extracted?.line_items) ? extracted.line_items : [];
 
     // ── D: Validation warnings ──────────────────────────────────────────────
@@ -445,6 +481,7 @@ Return JSON matching the schema exactly.`,
       header,
       line_items,
       secondary_document,
+      observed_conventions,
       payment_schedule,
       duplicates,
       warnings,
@@ -469,6 +506,7 @@ Return JSON matching the schema exactly.`,
       header,
       line_items,
       secondary_document,
+      observed_conventions,
       payment_schedule,
       duplicates,
       warnings,

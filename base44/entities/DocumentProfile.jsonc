@@ -1,0 +1,157 @@
+{
+  "name": "DocumentProfile",
+  "type": "object",
+  "properties": {
+    "issuer_key": {
+      "type": "string",
+      "description": "Stable issuer identity key: supplier_code, else tax_number, else normalized vendor name. Used to dedupe profiles per issuer."
+    },
+    "issuer_display_name": {
+      "type": "string",
+      "description": "Human-readable vendor name for display"
+    },
+    "document_kind": {
+      "type": "string",
+      "enum": [
+        "po",
+        "delivery_note",
+        "other"
+      ],
+      "default": "po"
+    },
+    "date_format": {
+      "type": "string",
+      "description": "Date format printed on this issuer's documents, e.g. DD/MM/YYYY"
+    },
+    "currency": {
+      "type": "string",
+      "default": "SAR"
+    },
+    "prices_are_net": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this issuer's line prices exclude tax/VAT"
+    },
+    "column_hints": {
+      "type": "object",
+      "description": "Header labels this issuer uses for key columns",
+      "properties": {
+        "qty": {
+          "type": "string"
+        },
+        "unit_price": {
+          "type": "string"
+        },
+        "net_amount": {
+          "type": "string"
+        },
+        "delivery_date": {
+          "type": "string"
+        },
+        "erp_code": {
+          "type": "string"
+        }
+      },
+      "default": {}
+    },
+    "part_code_pattern": {
+      "type": "string",
+      "description": "Where part codes appear, e.g. bracketed_in_description, separate_column, none"
+    },
+    "known_prefixes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [
+        "ES.",
+        "TQ.",
+        "ES.TQ.",
+        "TQ.ES."
+      ]
+    },
+    "payment_terms_seen": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "Distinct payment-terms strings observed on this issuer's documents"
+    },
+    "sample_count": {
+      "type": "number",
+      "default": 0
+    },
+    "last_seen": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "issuer_key",
+    "document_kind"
+  ],
+  "rls": {
+    "read": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "account_status": "approved"
+          }
+        }
+      ]
+    },
+    "create": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "privilege": "create"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "privilege": "modify"
+          }
+        },
+        {
+          "user_condition": {
+            "privilege": "create"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "privilege": "create"
+          }
+        }
+      ]
+    }
+  }
+}

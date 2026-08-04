@@ -22,6 +22,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 import { requirePrivilege } from '../../shared/requirePrivilege.ts';
 import { normalizeCode, stripErpPrefix } from '../../shared/matchLine.ts';
 import { deriveMaterialStatus } from '../../shared/podnApply.ts';
+import { upsertProfile } from '../../shared/documentProfile.ts';
 
 /** Drop undefined/null/'' keys, keeping 0 and false. */
 function cleanObj(o: any): Record<string, any> {
@@ -529,6 +530,18 @@ Deno.serve(async (req) => {
       applied_by: actor,
       created_entity_refs: refs,
     });
+
+    // ── 8. LEARN — upsert the issuer's DocumentProfile (fail-soft) ────────────────
+    try {
+      await upsertProfile(base44, {
+        vendor: { supplier_code: vendor.supplier_code, tax_number: vendor.tax_number, name: vendor_name || vendor.name },
+        document_kind: isPO ? 'po' : 'delivery_note',
+        observed: payload.observed_conventions || {},
+        payment_terms: purchase_order.payment_terms || vendor.payment_terms || '',
+        currency: purchase_order.currency || header.currency || '',
+        now,
+      });
+    } catch (_) {}
 
     return Response.json({
       extraction_id,
