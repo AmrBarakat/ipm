@@ -6,7 +6,8 @@ import { base44 } from '@/api/base44Client';
 import { formatDate, formatBytes, CATEGORY_LABELS } from '@/lib/constants';
 import {
   FileText, Upload, ExternalLink, Pencil, Trash2, Save,
-  Cpu, Filter, Link2, ChevronDown, ChevronRight, FileCheck, Wand2, Loader2, Sparkles
+  Cpu, Filter, Link2, ChevronDown, ChevronRight, FileCheck, Wand2, Loader2, Sparkles,
+  AlertCircle, X, Copy
 } from 'lucide-react';
 import ProjectPlanExtractModal from './ProjectPlanExtractModal';
 import BomImportSkill from '@/components/bom/BomImportSkill';
@@ -61,6 +62,7 @@ export default function TabDocuments({ projectId, project, onNavigateTab }) {
   const [filterCategory, setFilterCategory] = useState('');
   const [collapsed, setCollapsed] = useState({});
   const [extractingId, setExtractingId] = useState(null);
+  const [extractError, setExtractError] = useState(null); // { message, stage, detail, raw }
   const [podnResult, setPodnResult] = useState(null); // { document, result }
   const [standardDoc, setStandardDoc] = useState(null); // { document, result }
 
@@ -120,14 +122,52 @@ export default function TabDocuments({ projectId, project, onNavigateTab }) {
       });
     } catch (err) {
       setExtractingId(null);
-      alert(err?.response?.data?.error || err?.message || 'Extraction failed.');
+      setExtractError({
+        message: err?.message || 'Extraction request failed.',
+        stage: err?.response?.data?.stage,
+        detail: err?.response?.status
+          ? `HTTP ${err.response.status} — ${err?.response?.data?.error || err?.response?.data?.message || err?.message || ''}`.trim()
+          : (err?.response?.data?.error || err?.message || 'No HTTP status available.'),
+        raw: JSON.stringify({ status: err?.response?.status, data: err?.response?.data, message: err?.message }).slice(0, 2000),
+      });
       return;
     }
-    if (res.data?.error) { setExtractingId(null); alert(res.data.error); return; }
     setExtractingId(null);
-    const r = res.data;
-    if (!r || !r.extraction_id) { alert('No data could be extracted from this document.'); return; }
+    const r = res?.data;
+    if (!r) {
+      setExtractError({
+        message: 'The extraction service returned an empty response.',
+        detail: `HTTP ${res?.status ?? 'unknown'}. This usually means the function timed out or was cut off before it could reply.`,
+        raw: JSON.stringify(res ?? null).slice(0, 2000),
+      });
+      return;
+    }
+    if (r.error) {
+      setExtractError({
+        message: r.error,
+        stage: r.stage,
+        detail: r.stage ? `Failed at stage: ${r.stage}` : undefined,
+        raw: JSON.stringify(r).slice(0, 2000),
+      });
+      return;
+    }
+    if (!r.extraction_id) {
+      setExtractError({
+        message: 'The extraction service replied, but in an unexpected shape.',
+        detail: r.note_id || r.rows
+          ? 'The response looks like the previous version of extractPODN — the backend function may not have redeployed.'
+          : 'No extraction_id was returned.',
+        raw: JSON.stringify(r).slice(0, 2000),
+      });
+      return;
+    }
+    // Zero line items is NOT an error — open the review modal and let step 1
+    // surface warnings; the user may still want to create the vendor / PO / expense.
     setPodnResult({ document: doc, result: r });
+  }
+
+  async function copyExtractError() {
+    try { await navigator.clipboard.writeText(extractError?.raw ?? ''); } catch (_) {}
   }
 
   // D — resume an in-review extraction (rebuild draft from stored result) or
@@ -137,7 +177,13 @@ export default function TabDocuments({ projectId, project, onNavigateTab }) {
       try {
         const parsed = JSON.parse(ext.input_text || '{}');
         setPodnResult({ document: docsById[ext.document_id], result: { ...parsed, extraction_id: ext.id } });
-      } catch (_) { alert('Could not resume review — stored extraction data is missing.'); }
+      } catch (_) {
+        setExtractError({
+          message: 'Could not resume review — stored extraction data is missing.',
+          detail: `Extraction ${ext.id} has no parseable input_text.`,
+          raw: JSON.stringify(ext).slice(0, 2000),
+        });
+      }
     } else if (ext.status === 'reverted') {
       const doc = docsById[ext.document_id];
       if (doc) handleExtract(doc);
@@ -178,6 +224,37 @@ export default function TabDocuments({ projectId, project, onNavigateTab }) {
 
   return (
     <div className="space-y-4">
+      {/* Extraction error panel */}
+      {extractError && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold text-red-800 text-sm">{extractError.message}</div>
+              {extractError.stage && (
+                <div className="text-xs text-red-700 mt-0.5">Stage: {extractError.stage}</div>
+              )}
+              {extractError.detail && (
+                <div className="text-xs text-red-700 mt-0.5">{extractError.detail}</div>
+              )}
+              {extractError.raw && (
+                <pre className="mt-2 text-xs text-red-800 bg-red-100/60 rounded p-2 overflow-auto max-h-40 font-mono whitespace-pre-wrap break-all">{extractError.raw}</pre>
+              )}
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              <button onClick={copyExtractError}
+                className="flex items-center gap-1 px-2 py-1 text-xs border border-red-300 rounded text-red-700 hover:bg-red-100">
+                <Copy className="w-3 h-3" /> Copy details
+              </button>
+              <button onClick={() => setExtractError(null)}
+                className="p-1 text-red-500 hover:text-red-700 hover:bg-red-100 rounded">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
