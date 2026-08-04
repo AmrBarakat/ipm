@@ -77,7 +77,7 @@ export default function PODNExtractionPanel({ document: doc, result, projectId, 
   async function reExtractWithVision() {
     setReExtracting(true);
     try {
-      const res = await base44.functions.invoke('extractPODN', {
+      const res = await base44.functions.invoke('extractPODNv2', {
         file_url: doc?.file_url,
         project_id: projectId,
         doc_hint: doc?.category === 'po' ? 'po' : doc?.category === 'delivery_note' ? 'delivery_note' : 'auto',

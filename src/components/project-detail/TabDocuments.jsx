@@ -113,7 +113,7 @@ export default function TabDocuments({ projectId, project, onNavigateTab }) {
     setExtractingId(doc.id);
     let res;
     try {
-      res = await base44.functions.invoke('extractPODN', {
+      res = await base44.functions.invoke('extractPODNv2', {
         file_url: doc.file_url,
         project_id: projectId,
         doc_hint: doc.category === 'po' ? 'po' : doc.category === 'delivery_note' ? 'delivery_note' : 'auto',
@@ -151,13 +151,14 @@ export default function TabDocuments({ projectId, project, onNavigateTab }) {
       });
       return;
     }
-    if (!('extraction_id' in r)) {
-      const hasBuild = r?.build_id != null;
+    const EXPECTED_BUILD_PREFIX = 'podnv2-';
+    const gotBuild = r?.build_id;
+    if (!gotBuild || !String(gotBuild).startsWith(EXPECTED_BUILD_PREFIX)) {
       setExtractError({
-        message: 'The extraction service replied, but in an unexpected shape.',
-        detail: hasBuild
-          ? `Build ${r.build_id} — response was missing extraction_id for an unexpected reason.`
-          : 'The response carried no build_id, which means it came from a build older than 2026-08-04 — the function has not redeployed.',
+        message: 'The extraction service is running the wrong build.',
+        detail: gotBuild
+          ? `Expected a build starting with "${EXPECTED_BUILD_PREFIX}", got "${gotBuild}". The function has not redeployed.`
+          : 'The response carried no build_id at all, which means it came from the retired extractPODN. The function has not redeployed.',
         raw: JSON.stringify(r).slice(0, 2000),
       });
       return;
