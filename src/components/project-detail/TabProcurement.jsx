@@ -174,8 +174,10 @@ export default function TabProcurement({ projectId, project }) {
   }
 
   function handleMaterialStatusChange(item, value) {
-    const changes = { material_status: value, ...legacyFieldsFor(value, item) };
-    if (value === 'delivered') {
+    // 'partially_received' is a display-only status — persist as 'received'.
+    const persistAs = value === 'partially_received' ? 'received' : value;
+    const changes = { material_status: persistAs, ...legacyFieldsFor(persistAs, item) };
+    if (persistAs === 'delivered') {
       changes.site_delivered_date = new Date().toISOString().slice(0, 10);
     }
     patchAndSave(item, changes);
@@ -460,7 +462,8 @@ export default function TabProcurement({ projectId, project }) {
                                 <td className="px-3 py-2 text-right text-slate-700">{oQty}</td>
                                 <td className="px-1 py-1">
                                   <select onClick={stop} value={ms} onChange={e => handleMaterialStatusChange(item, e.target.value)} className={`text-[10px] font-semibold border-0 rounded px-1.5 py-1 cursor-pointer ${msMeta.cls}`}>
-                                    {MATERIAL_STATUS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                                    {Object.entries(MATERIAL_STATUS).map(([key, s]) => <option key={key} value={key}>{s.label}</option>)}
+                                    <option value="partially_received">Partially Received</option>
                                   </select>
                                   {partial && <div className="text-[10px] text-amber-600 mt-0.5">partial {received}/{qty}</div>}
                                 </td>

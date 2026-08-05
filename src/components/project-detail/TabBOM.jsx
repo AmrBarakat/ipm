@@ -194,8 +194,10 @@ export default function TabBOM({ projectId }) {
   }
 
   function handleMaterialStatusChange(item, value) {
-    const legacy = legacyFieldsFor(value, item);
-    const updated = { ...item, material_status: value, ...legacy };
+    // 'partially_received' is a display-only status — persist as 'received'.
+    const persistAs = value === 'partially_received' ? 'received' : value;
+    const legacy = legacyFieldsFor(persistAs, item);
+    const updated = { ...item, material_status: persistAs, ...legacy };
     setItems(prev => prev.map(i => i.id === item.id ? updated : i));
     if (saveTimers.current[item.id]) clearTimeout(saveTimers.current[item.id]);
     saveTimers.current[item.id] = setTimeout(() => saveItem(updated), 300);
@@ -701,7 +703,8 @@ export default function TabBOM({ projectId }) {
                                   <td className="px-3 py-2 text-right">{marginPill(item)}</td>
                                   <td className="px-1 py-1">
                                     <select className={`text-xs px-2 py-1 rounded font-semibold border-0 cursor-pointer ${msMeta.cls}`} value={ms} onChange={e => handleMaterialStatusChange(item, e.target.value)}>
-                                      {Object.values(MATERIAL_STATUS).map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                                      {Object.entries(MATERIAL_STATUS).map(([key, s]) => <option key={key} value={key}>{s.label}</option>)}
+                                      <option value="partially_received">Partially Received</option>
                                     </select>
                                     {msMeta.partial && <span className="text-[10px] text-slate-500 mt-0.5 block">{msMeta.label}</span>}
                                   </td>
