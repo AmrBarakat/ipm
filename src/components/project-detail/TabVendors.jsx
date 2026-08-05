@@ -13,6 +13,7 @@ import { useConfirm } from '@/components/ui/ConfirmDialog';
 import SourceDocumentBadge from '@/components/documents/SourceDocumentBadge';
 import POLineItemsEditor from '@/components/vendors/POLineItemsEditor';
 import POPayerScheduleEditor from '@/components/vendors/POPayerScheduleEditor';
+import POReceiptsPanel from '@/components/vendors/POReceiptsPanel';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -108,6 +109,7 @@ function POsPanel({ projectId, project }) {
   const [dnForm, setDNForm] = useState(EMPTY_DN);
   const [filterStatus, setFilterStatus] = useState('');
   const [filterType, setFilterType] = useState('');
+  const [filterReceipt, setFilterReceipt] = useState('');
   const [checkingDelays, setCheckingDelays] = useState(false);
 
   async function createPO(e) {
@@ -196,9 +198,27 @@ function POsPanel({ projectId, project }) {
     return Math.round((today - new Date(po.expected_delivery_date)) / 86400000);
   }
 
+  function receiptCategory(po) {
+    const items = po.items || [];
+    if (items.length === 0) return 'none';
+    const anyReceived = items.some(it => (Number(it.received_qty) || 0) > 0);
+    const allReceived = items.length > 0 && items.every(it => {
+      const q = Number(it.quantity) || 0;
+      const rq = Number(it.received_qty) || 0;
+      return q > 0 && rq >= q;
+    });
+    if (allReceived) return 'full';
+    if (anyReceived) return 'partial';
+    return 'none';
+  }
+
   const filtered = useMemo(() =>
-    pos.filter(p => (!filterStatus || p.status === filterStatus) && (!filterType || p.type === filterType)),
-    [pos, filterStatus, filterType]
+    pos.filter(p =>
+      (!filterStatus || p.status === filterStatus) &&
+      (!filterType || p.type === filterType) &&
+      (!filterReceipt || receiptCategory(p) === filterReceipt)
+    ),
+    [pos, filterStatus, filterType, filterReceipt]
   );
 
   const totalValue     = pos.reduce((s, p) => s + (p.amount || 0), 0);
@@ -241,8 +261,14 @@ function POsPanel({ projectId, project }) {
             <option value="">All Types</option>
             {Object.entries(PO_TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
-          {(filterStatus || filterType) && (
-            <button onClick={() => { setFilterStatus(''); setFilterType(''); }} className="text-xs text-slate-400 hover:text-red-500 underline">Clear</button>
+          <select value={filterReceipt} onChange={e => setFilterReceipt(e.target.value)} className={inp} style={{ width: 'auto' }}>
+            <option value="">All Receipts</option>
+            <option value="none">Not Received</option>
+            <option value="partial">Partially Received</option>
+            <option value="full">Fully Received</option>
+          </select>
+          {(filterStatus || filterType || filterReceipt) && (
+            <button onClick={() => { setFilterStatus(''); setFilterType(''); setFilterReceipt(''); }} className="text-xs text-slate-400 hover:text-red-500 underline">Clear</button>
           )}
         </div>
         <button onClick={() => setAdding(v => !v)}
@@ -395,6 +421,7 @@ function POsPanel({ projectId, project }) {
                     )}
                     <POLineItemsEditor po={po} bomItems={bomItems} />
                     <POPayerScheduleEditor po={po} />
+                    <POReceiptsPanel po={po} projectId={projectId} />
                     <div>
                       <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Delivery Notes</p>
                       {(po.delivery_notes || []).length === 0 ? (
