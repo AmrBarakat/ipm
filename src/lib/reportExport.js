@@ -164,9 +164,23 @@ export function drawLines(doc, lines, x, topY, size, align, rightX) {
 
 // Convert column width fractions to absolute widths, guarding a minimum.
 export function colWidths(fracs, totalW) {
+  const ABSOLUTE_MIN = 12;
   let widths = fracs.map((f) => Math.max(MIN_COL_W, f * totalW));
-  const sum = widths.reduce((a, b) => a + b, 0);
-  if (sum > totalW) widths = widths.map((w) => (w * totalW) / sum);
+  let sum = widths.reduce((a, b) => a + b, 0);
+  if (sum > totalW) {
+    // Shrink only columns above the absolute minimum, proportionally to their
+    // excess above ABSOLUTE_MIN. Never let a column fall below ABSOLUTE_MIN.
+    const excessTotal = widths.reduce((s, w) => s + Math.max(0, w - ABSOLUTE_MIN), 0);
+    const toRemove = sum - totalW;
+    if (excessTotal > 0) {
+      widths = widths.map((w) => {
+        if (w <= ABSOLUTE_MIN) return w;
+        const excess = w - ABSOLUTE_MIN;
+        const share = excess / excessTotal;
+        return Math.max(ABSOLUTE_MIN, w - toRemove * share);
+      });
+    }
+  }
   return widths;
 }
 
@@ -193,7 +207,18 @@ export function measureRow(doc, row, columns, widths, size) {
 // Draw a data row's cells inside the computed rowHeight. Returns nothing.
 // A column may declare cellColor(row) → [r,g,b] to override the cell's text
 // color (e.g. overdue dates in red); defaults to ink.
-export function drawRow(doc, x, topY, widths, columns, row, size) {
+const _widthWarnings = new Set();
+
+export function drawRow(doc, x, topY, widths, columns, row, size, totalW, sectionTitle) {
+  // Development guard: warn if column widths don't sum to the table width.
+  if (totalW != null && sectionTitle != null) {
+    const sum = widths.reduce((a, b) => a + b, 0);
+    if (Math.abs(sum - totalW) > 0.5 && !_widthWarnings.has(sectionTitle)) {
+      _widthWarnings.add(sectionTitle);
+      console.warn(`[reportExport] Column width mismatch in "${sectionTitle}": sum=${sum.toFixed(2)}mm, table=${totalW.toFixed(2)}mm`);
+    }
+  }
+  let cx = x;
   columns.forEach((c, i) => {
     const cw = widths[i];
     const inner = cw - 2 * PAD_X;
@@ -201,7 +226,8 @@ export function drawRow(doc, x, topY, widths, columns, row, size) {
     const align = c.align === 'right' ? 'right' : 'left';
     const cellColor = c.cellColor ? c.cellColor(row) : null;
     setColor(doc, cellColor || C.ink, 'text');
-    drawLines(doc, lines, x + PAD_X, topY + PAD_Y, size, align, x + cw - PAD_X);
+    drawLines(doc, lines, cx + PAD_X, topY + PAD_Y, size, align, cx + cw - PAD_X);
+    cx += cw;
   });
 }
 
@@ -218,9 +244,11 @@ export function drawHeaderRow(doc, x, topY, totalW, widths, columns) {
   setColor(doc, C.headerFill, 'fill');
   doc.rect(x, topY, totalW, h, 'F');
   setColor(doc, C.white, 'text');
+  let cx = x;
   cellLines.forEach((lines, i) => {
     const cw = widths[i];
-    drawLines(doc, lines, x + PAD_X, topY + PAD_Y, size, 'left', x + cw - PAD_X);
+    drawLines(doc, lines, cx + PAD_X, topY + PAD_Y, size, 'left', cx + cw - PAD_X);
+    cx += cw;
   });
   // Accent underline beneath the header band.
   setColor(doc, C.accent, 'draw');
@@ -379,14 +407,14 @@ export function exportSectionsPDF(filename, reportTitle, sections, opts = {}) {
     if (!section.rows || section.rows.length === 0) {
       // Empty table → single "No data" row spanning the table.
       const rh = MIN_ROW;
-      if (rowTop + rh > maxY) { doc.addPage(); rowTop = topMargin; headerH = drawHeaderRow(doc, margin, rowTop, colW, widths, section.columns); rowTop += headerH; }
+      if (rowTop + rh > maxY) { doc.addPage(); rowTop = topMargin; sectionTitle(doc, section.title + ' (continued)', margin, rowTop); rowTop += 8; headerH = drawHeaderRow(doc, margin, rowTop, colW, widths, section.columns); rowTop += headerH; }
       setColor(doc, C.zebra, 'fill'); doc.rect(margin, rowTop, colW, rh, 'F');
       setColor(doc, C.muted, 'text'); doc.setFontSize(size); doc.setFont(FONT, 'italic');
       doc.text('No data', margin + PAD_X, rowTop + PAD_Y + ascentMm(size));
       setColor(doc, C.hairline, 'draw'); doc.setLineWidth(0.1);
       doc.line(margin, rowTop + rh, margin + colW, rowTop + rh);
       rowTop += rh;
-      y = rowTop + 4;
+      y = rowTop + 8;
       return;
     }
 
@@ -396,15 +424,17 @@ export function exportSectionsPDF(filename, reportTitle, sections, opts = {}) {
       if (rowTop + rh > maxY) {
         doc.addPage();
         rowTop = topMargin;
+        sectionTitle(doc, section.title + ' (continued)', margin, rowTop);
+        rowTop += 8;
         headerH = drawHeaderRow(doc, margin, rowTop, colW, widths, section.columns);
         rowTop += headerH;
       }
+      // Zebra fill + hairline BEFORE text so text is never overpainted.
       if (i % 2 === 0) { setColor(doc, C.zebra, 'fill'); doc.rect(margin, rowTop, colW, rh, 'F'); }
-      drawRow(doc, margin, rowTop, widths, section.columns, row, size);
-      // Horizontal hairline under each row; vertical separators for dense tables.
       setColor(doc, C.hairline, 'draw'); doc.setLineWidth(0.1);
       doc.line(margin, rowTop + rh, margin + colW, rowTop + rh);
       if (dense) drawVLines(doc, margin, rowTop, colW, widths, rh);
+      drawRow(doc, margin, rowTop, widths, section.columns, row, size, colW, section.title);
       rowTop += rh;
     });
 
@@ -412,7 +442,7 @@ export function exportSectionsPDF(filename, reportTitle, sections, opts = {}) {
     if (section.summary && section.summary.length) {
       rowTop = renderSummaryRows(section.summary, rowTop, true);
     }
-    y = rowTop + 4;
+    y = rowTop + 8;
   }
 
   sections.forEach((s) => {
