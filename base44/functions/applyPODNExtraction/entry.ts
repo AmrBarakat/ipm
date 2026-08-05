@@ -287,7 +287,8 @@ Deno.serve(async (req) => {
           planned_cost_price: Number(nb.planned_cost_price ?? li.unit_price) || 0,
           cost_price: Number(nb.planned_cost_price ?? li.unit_price) || 0,
           selling_price: Number(nb.selling_price) || 0,
-          supplier: nb.supplier || vendor_name || '',
+          supplier: vendor_name || nb.supplier || '',
+          vendor_id: vendor_id || undefined,
           notes: nb.notes || `Created from ${po_number}`,
           ordered_qty: Number(li.qty) || 0,
           po_unit_price: Number(li.unit_price) || 0,
@@ -340,6 +341,8 @@ Deno.serve(async (req) => {
         material_status: bom.material_status || 'not_ordered',
         order_status: bom.order_status || 'not_ordered',
         ordered: !!bom.ordered,
+        vendor_id: bom.vendor_id || '',
+        supplier: bom.supplier || '',
       };
 
       const update: any = {
@@ -351,6 +354,8 @@ Deno.serve(async (req) => {
         po_number,
         po_date: po_issue_date,
         purchase_order_id: purchase_order_id || undefined,
+        vendor_id: vendor_id || bom.vendor_id || undefined,
+        supplier: vendor_name || bom.supplier || '',
       };
       // erp_item_code only when currently empty
       if (!bom.erp_item_code && li.erp_item_code) update.erp_item_code = li.erp_item_code;

@@ -2,8 +2,8 @@ import { useState, useMemo } from 'react';
 import { useEntityList, useEntityMutation } from '@/hooks/useEntity';
 import { useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
-import { BOM_CATEGORY_LABELS, BOM_CATEGORY_OPTIONS } from '@/lib/constants';
-import { Building2, Plus, Search, Mail, Phone, Star, Trash2, Pencil } from 'lucide-react';
+import { BOM_CATEGORY_LABELS, BOM_CATEGORY_OPTIONS, formatCurrency } from '@/lib/constants';
+import { Building2, Plus, Search, Mail, Phone, Star, Trash2, Pencil, Package } from 'lucide-react';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import EmptyState from '@/components/ui/EmptyState';
 import VendorForm from '@/components/vendors/VendorForm';
@@ -15,6 +15,7 @@ const selCls = 'border border-slate-200 rounded px-2 py-1.5 text-xs focus:outlin
 export default function Vendors() {
   const queryClient = useQueryClient();
   const { data: vendors = [], isLoading } = useEntityList('Vendor', {}, '-updated_date', 500);
+  const { data: bomItems = [] } = useEntityList('BOMItem', {}, '-created_date', 500);
   const vendorMutation = useEntityMutation('Vendor');
   const confirmDialog = useConfirm();
 
@@ -33,6 +34,17 @@ export default function Vendors() {
     if (filterCategory && !(v.categories || []).includes(filterCategory)) return false;
     return true;
   }), [vendors, search, filterType, filterRating, filterCategory]);
+
+  const bomStatsByVendor = useMemo(() => {
+    const map = {};
+    for (const item of bomItems) {
+      if (!item.vendor_id) continue;
+      if (!map[item.vendor_id]) map[item.vendor_id] = { count: 0, totalValue: 0 };
+      map[item.vendor_id].count++;
+      map[item.vendor_id].totalValue += (Number(item.planned_cost_price) || Number(item.cost_price) || 0) * (Number(item.quantity) || 1);
+    }
+    return map;
+  }, [bomItems]);
 
   const counts = useMemo(() => ({
     total: vendors.length,
@@ -139,6 +151,8 @@ export default function Vendors() {
                 <th className="px-4 py-3 text-left">Location</th>
                 <th className="px-4 py-3 text-left">Categories</th>
                 <th className="px-4 py-3 text-left">Rating</th>
+                <th className="px-4 py-3 text-right">BOM Items</th>
+                <th className="px-4 py-3 text-right">BOM Value</th>
                 <th className="px-4 py-3 text-right">Docs</th>
                 <th className="px-4 py-3 w-20"></th>
               </tr>
@@ -175,6 +189,8 @@ export default function Vendors() {
                       </span>
                     )}
                   </td>
+                  <td className="px-4 py-3 text-right text-sm text-slate-600">{bomStatsByVendor[v.id]?.count || '—'}</td>
+                  <td className="px-4 py-3 text-right text-sm text-slate-600">{bomStatsByVendor[v.id] ? formatCurrency(bomStatsByVendor[v.id].totalValue, 'SAR') : '—'}</td>
                   <td className="px-4 py-3 text-right text-sm text-slate-500">{(v.documents || []).length || '—'}</td>
                   <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
                     <button onClick={() => setSelected(v)} className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded" title="Open"><Pencil className="w-4 h-4" /></button>
@@ -190,6 +206,7 @@ export default function Vendors() {
       {selected && (
         <VendorDrawer
           vendor={selected}
+          bomStats={bomStatsByVendor[selected.id]}
           onSave={saveVendor}
           onDelete={(v) => deleteVendor(v)}
           onClose={() => setSelected(null)}

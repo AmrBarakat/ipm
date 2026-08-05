@@ -45,6 +45,10 @@
     "supplier": {
       "type": "string"
     },
+    "vendor_id": {
+      "type": "string",
+      "description": "Reference to a Vendor record. The supplier field remains as the denormalized display name."
+    },
     "supplier_contact": {
       "type": "string"
     },

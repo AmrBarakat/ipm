@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Building2, X, Mail, Phone, Star, Trash2 } from 'lucide-react';
-import { BOM_CATEGORY_LABELS } from '@/lib/constants';
+import { Building2, X, Mail, Phone, Star, Trash2, Package, TrendingUp } from 'lucide-react';
+import { BOM_CATEGORY_LABELS, formatCurrency } from '@/lib/constants';
 import { TYPE_LABELS, RATING_STYLES, ratingLabel } from './vendorConstants';
 import VendorForm from './VendorForm';
 import VendorDocuments from './VendorDocuments';
@@ -11,7 +11,7 @@ import VendorRatingHistory from './VendorRatingHistory';
  * details (via VendorForm), manages linked documents, and records performance
  * rating history. Every change is persisted through onSave(updatedVendor).
  */
-export default function VendorDrawer({ vendor, onSave, onDelete, onClose }) {
+export default function VendorDrawer({ vendor, bomStats, onSave, onDelete, onClose }) {
   const [draft, setDraft] = useState(() => ({
     ...vendor,
     documents: vendor.documents || [],
@@ -66,6 +66,25 @@ export default function VendorDrawer({ vendor, onSave, onDelete, onClose }) {
             {vendor.email && <a href={`mailto:${vendor.email}`} className="flex items-center gap-1.5 text-blue-700 hover:underline"><Mail className="w-3.5 h-3.5" /> {vendor.email}</a>}
             {vendor.phone && <a href={`tel:${vendor.phone}`} className="flex items-center gap-1.5 text-blue-700 hover:underline"><Phone className="w-3.5 h-3.5" /> {vendor.phone}</a>}
           </div>
+
+          {/* BOM Stats */}
+          {bomStats && bomStats.count > 0 && (
+            <section>
+              <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">BOM Activity</h4>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="border border-slate-200 rounded-lg p-3 text-center">
+                  <Package className="w-4 h-4 text-amber-500 mx-auto mb-1" />
+                  <div className="text-lg font-bold text-slate-800">{bomStats.count}</div>
+                  <div className="text-[10px] text-slate-400 uppercase">Items Supplied</div>
+                </div>
+                <div className="border border-slate-200 rounded-lg p-3 text-center">
+                  <TrendingUp className="w-4 h-4 text-emerald-500 mx-auto mb-1" />
+                  <div className="text-lg font-bold text-slate-800">{formatCurrency(bomStats.totalValue, 'SAR')}</div>
+                  <div className="text-[10px] text-slate-400 uppercase">Total BOM Value</div>
+                </div>
+              </div>
+            </section>
+          )}
 
           {/* Edit details */}
           <section>

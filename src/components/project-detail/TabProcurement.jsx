@@ -4,9 +4,10 @@ import { ENTITY_QUERY } from '@/lib/entityQueryDefaults';
 import { useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { formatCurrency, formatDate, BOM_CATEGORY_LABELS, BOM_CATEGORY_OPTIONS } from '@/lib/constants';
-import { ShoppingCart, Package, ChevronDown, ChevronRight, Check, AlertCircle, X, Save, Trash2, RefreshCw, Filter } from 'lucide-react';
+import { ShoppingCart, Package, ChevronDown, ChevronRight, Check, AlertCircle, X, Save, Trash2, RefreshCw, Filter, Link2 } from 'lucide-react';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import VendorLookup from '@/components/project-detail/VendorLookup';
+import LinkSuppliersModal from '@/components/vendors/LinkSuppliersModal';
 import { MATERIAL_STATUS, resolveMaterialStatus, legacyFieldsFor, materialStatusMeta } from '@/lib/materialStatus';
 
 // Items eligible for procurement: not ordered, top-level (not panel children),
@@ -23,6 +24,8 @@ function orderQtyOf(i) {
   return Math.max(0, (Number(i.quantity) || 0) - (Number(i.stock_qty) || 0));
 }
 
+const norm = (s) => (s || '').trim().replace(/\s+/g, ' ').toLowerCase();
+
 // Session cache so locally-deleted procurement items (and the frozen BOM
 // snapshot) survive tab switches / unmounts WITHOUT touching the BOM entity.
 // Cleared by "Sync with BOM" or a full page reload.
@@ -30,6 +33,7 @@ const procurementCache = {}; // { [projectId]: { snapshot: array|null, hiddenIds
 
 export default function TabProcurement({ projectId, project }) {
   const { data: all = [], isLoading } = useEntityList('BOMItem', { project_id: projectId }, ENTITY_QUERY.BOMItem.sort, ENTITY_QUERY.BOMItem.limit);
+  const { data: vendors = [] } = useEntityList('Vendor', {}, '-created_date', 500);
   const [snapshot, setSnapshot] = useState(() => procurementCache[projectId]?.snapshot ?? null);
   const [hiddenIds, setHiddenIds] = useState(() => new Set(procurementCache[projectId]?.hiddenIds ?? []));
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -37,10 +41,13 @@ export default function TabProcurement({ projectId, project }) {
   const [bulkEdit, setBulkEdit] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [materialFilter, setMaterialFilter] = useState('');
+  const [showLinkSuppliers, setShowLinkSuppliers] = useState(false);
   const queryClient = useQueryClient();
   const confirmDialog = useConfirm();
   const saveTimers = useRef({});
   const pendingChanges = useRef({});
+
+  const vendorById = useMemo(() => Object.fromEntries(vendors.map(v => [v.id, v])), [vendors]);
 
   useEffect(() => {
     procurementCache[projectId] = { snapshot, hiddenIds };
@@ -81,16 +88,36 @@ export default function TabProcurement({ projectId, project }) {
     setSelectedIds(new Set(snapshot.filter(isProcurementItem).map(i => i.id)));
   }, [snapshot]);
 
-  // Group by supplier
-  const grouped = useMemo(() => {
-    const map = {};
+  // Group by vendor_id (linked) or normalized supplier string (unlinked)
+  const { linkedGroups, unlinkedGroups, unlinkedCount } = useMemo(() => {
+    const linked = {};
+    const unlinked = {};
     items.forEach(i => {
-      const sup = i.supplier || '(No Supplier)';
-      if (!map[sup]) map[sup] = [];
-      map[sup].push(i);
+      if (i.vendor_id) {
+        if (!linked[i.vendor_id]) linked[i.vendor_id] = { vendorId: i.vendor_id, items: [] };
+        linked[i.vendor_id].items.push(i);
+      } else {
+        const sup = (i.supplier || '').trim() || '(No Supplier)';
+        const key = norm(sup);
+        if (!unlinked[key]) unlinked[key] = { key, label: sup, items: [] };
+        unlinked[key].items.push(i);
+      }
     });
-    return Object.entries(map).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [items]);
+    const lg = Object.values(linked).map(g => ({
+      key: g.vendorId,
+      label: vendorById[g.vendorId]?.name || '(Unknown Vendor)',
+      vendorId: g.vendorId,
+      items: g.items,
+      isLinked: true,
+    })).sort((a, b) => a.label.localeCompare(b.label));
+    const ug = Object.values(unlinked).map(g => ({
+      key: g.key,
+      label: g.label,
+      items: g.items,
+      isLinked: false,
+    })).sort((a, b) => a.label.localeCompare(b.label));
+    return { linkedGroups: lg, unlinkedGroups: ug, unlinkedCount: ug.reduce((s, g) => s + g.items.length, 0) };
+  }, [items, vendorById]);
 
   function toggleItem(id) {
     setSelectedIds(prev => {
@@ -287,6 +314,11 @@ export default function TabProcurement({ projectId, project }) {
             <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
             {syncing ? 'Syncing…' : 'Sync with BOM'}
           </button>
+          <button onClick={() => setShowLinkSuppliers(true)} disabled={syncing}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-blue-300 rounded hover:bg-blue-50 text-blue-700 font-semibold disabled:opacity-60">
+            <Link2 className="w-3.5 h-3.5" />
+            Link suppliers
+          </button>
         </div>
       </div>
 
@@ -377,119 +409,195 @@ export default function TabProcurement({ projectId, project }) {
 
           {/* Supplier groups */}
           <div className="space-y-4">
-            {grouped.map(([supplier, supplierItems]) => {
-              const isCollapsed = collapsedSuppliers.has(supplier);
-              const allSupSelected = supplierItems.every(i => selectedIds.has(i.id));
-              const someSupSelected = supplierItems.some(i => selectedIds.has(i.id));
-
-              return (
-                <div key={supplier} className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
-                  {/* Supplier header */}
-                  <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 border-b border-slate-200">
-                    <button onClick={() => toggleSupplierAll(supplier, supplierItems)}
-                      className="flex items-center justify-center shrink-0">
-                      <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${allSupSelected ? 'bg-amber-400 border-amber-400' : someSupSelected ? 'bg-amber-200 border-amber-400' : 'border-slate-300'}`}>
-                        {allSupSelected && <Check className="w-2.5 h-2.5 text-slate-900" />}
-                        {someSupSelected && !allSupSelected && <div className="w-1.5 h-1.5 bg-amber-500 rounded-sm" />}
-                      </div>
-                    </button>
-
-                    <button onClick={() => toggleSupplierCollapse(supplier)} className="flex items-center gap-2 text-left shrink-0">
-                      {isCollapsed ? <ChevronRight className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
-                      <Package className="w-4 h-4 text-amber-500 shrink-0" />
-                    </button>
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <VendorLookup supplier={supplier} projectId={projectId} project={project} variant="link" className="font-semibold text-slate-800 hover:text-amber-700" />
-                      <span className="text-xs text-slate-400">{supplierItems.length} item{supplierItems.length !== 1 ? 's' : ''}</span>
-                    </div>
-                  </div>
-
-                  {/* Items table */}
-                  {!isCollapsed && (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-xs min-w-[1100px]">
-                        <thead className="bg-slate-100 text-slate-500 uppercase">
-                          <tr>
-                            <th className="px-3 py-2 w-8"></th>
-                            <th className="px-3 py-2 text-left">Description</th>
-                            <th className="px-3 py-2 text-left">Part No.</th>
-                            <th className="px-3 py-2 text-left">Category</th>
-                            <th className="px-3 py-2 text-left">Supplier</th>
-                            <th className="px-3 py-2 text-right">Qty</th>
-                            <th className="px-3 py-2 text-right">Stock Qty</th>
-                            <th className="px-3 py-2 text-right">Order Qty</th>
-                            <th className="px-3 py-2 text-left">Material Status</th>
-                            <th className="px-3 py-2 text-right">Received Qty</th>
-                            <th className="px-3 py-2 text-left">Exp. Delivery</th>
-                            <th className="px-3 py-2 text-left">PO Number</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {supplierItems.map((item, idx) => {
-                            const isChecked = selectedIds.has(item.id);
-                            const qty = Number(item.quantity) || 0;
-                            const stock = Number(item.stock_qty) || 0;
-                            const oQty = orderQtyOf(item);
-                            const msMeta = materialStatusMeta(item);
-                            const ms = msMeta.status;
-                            const received = Number(item.received_qty) || Number(item.delivered_qty) || 0;
-                            const partial = ms === 'ordered' && received > 0 && (qty === 0 || received < qty);
-                            return (
-                              <tr
-                                key={item.id}
-                                onClick={() => toggleItem(item.id)}
-                                className={`border-t border-slate-100 cursor-pointer transition ${isChecked ? 'bg-amber-50' : idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'} hover:bg-amber-50/70`}
-                              >
-                                <td className="px-3 py-2">
-                                  <div className={`w-4 h-4 rounded border-2 flex items-center justify-center mx-auto transition-colors ${isChecked ? 'bg-amber-400 border-amber-400' : 'border-slate-300'}`}>
-                                    {isChecked && <Check className="w-2.5 h-2.5 text-slate-900" />}
-                                  </div>
-                                </td>
-                                <td className="px-3 py-2 font-medium text-slate-800 max-w-[200px]">
-                                  <div className="truncate">{item.description || '—'}</div>
-                                </td>
-                                <td className="px-3 py-2 font-mono text-slate-500">{item.manufacturer_part_number || '—'}</td>
-                                <td className="px-3 py-2">
-                                  <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-semibold">
-                                    {BOM_CATEGORY_LABELS[item.category] || item.category || '—'}
-                                  </span>
-                                </td>
-                                <td className="px-3 py-2 text-slate-600"><VendorLookup supplier={item.supplier} projectId={projectId} project={project} variant="link" /></td>
-                                <td className="px-3 py-2 text-right font-semibold text-slate-700">{qty}</td>
-                                <td className="px-1 py-1 text-right">
-                                  <input type="number" min="0" onClick={stop} value={stock} onChange={e => updateField(item, 'stock_qty', e.target.value)} onBlur={e => handleStockBlur(item, e.target.value)} className={inp + ' text-right'} style={{ width: 56 }} />
-                                </td>
-                                <td className="px-3 py-2 text-right text-slate-700">{oQty}</td>
-                                <td className="px-1 py-1">
-                                  <select onClick={stop} value={ms} onChange={e => handleMaterialStatusChange(item, e.target.value)} className={`text-[10px] font-semibold border-0 rounded px-1.5 py-1 cursor-pointer ${msMeta.cls}`}>
-                                    {Object.entries(MATERIAL_STATUS).map(([key, s]) => <option key={key} value={key}>{s.label}</option>)}
-                                    <option value="partially_received">Partially Received</option>
-                                  </select>
-                                  {partial && <div className="text-[10px] text-amber-600 mt-0.5">partial {received}/{qty}</div>}
-                                </td>
-                                <td className="px-1 py-1 text-right">
-                                  <input type="number" min="0" max={qty} onClick={stop} value={received} onChange={e => updateField(item, 'received_qty', e.target.value)} onBlur={e => handleReceivedBlur(item, e.target.value)} className={inp + ' text-right'} style={{ width: 56 }} />
-                                </td>
-                                <td className="px-3 py-2 text-slate-500">{formatDate(item.expected_delivery_date)}</td>
-                                <td className="px-3 py-2 font-mono text-slate-500">{item.po_number || '—'}</td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                        <tfoot className="border-t-2 border-slate-200 bg-slate-50">
-                          <tr>
-                            <td colSpan={11} className="px-3 py-2 text-slate-500 text-xs font-semibold">Supplier Total — {supplierItems.length} item{supplierItems.length !== 1 ? 's' : ''}</td>
-                            <td></td>
-                          </tr>
-                        </tfoot>
-                      </table>
-                    </div>
-                  )}
+            {/* Linked groups */}
+            {linkedGroups.map(group => (
+              <SupplierGroup
+                key={group.key}
+                group={group}
+                collapsedSuppliers={collapsedSuppliers}
+                selectedIds={selectedIds}
+                toggleSupplierAll={toggleSupplierAll}
+                toggleSupplierCollapse={toggleSupplierCollapse}
+                toggleItem={toggleItem}
+                updateField={updateField}
+                handleStockBlur={handleStockBlur}
+                handleMaterialStatusChange={handleMaterialStatusChange}
+                handleReceivedBlur={handleReceivedBlur}
+                orderQtyOf={orderQtyOf}
+                materialStatusMeta={materialStatusMeta}
+                resolveMaterialStatus={resolveMaterialStatus}
+                projectId={projectId}
+                project={project}
+                inp={inp}
+                stop={stop}
+              />
+            ))}
+            {/* Unlinked group pinned to bottom */}
+            {unlinkedGroups.length > 0 && (
+              <div className="border-2 border-dashed border-amber-300 rounded-lg p-3 bg-amber-50/30">
+                <div className="flex items-center gap-2 mb-3">
+                  <AlertCircle className="w-4 h-4 text-amber-500" />
+                  <h4 className="font-semibold text-amber-800 text-sm">Unlinked Suppliers</h4>
+                  <span className="text-xs text-amber-600 bg-amber-100 rounded-full px-2 py-0.5 font-semibold">{unlinkedCount} item{unlinkedCount !== 1 ? 's' : ''}</span>
+                  <span className="text-xs text-amber-500">·</span>
+                  <span className="text-xs text-amber-600">{unlinkedGroups.length} supplier string{unlinkedGroups.length !== 1 ? 's' : ''}</span>
+                  <button onClick={() => setShowLinkSuppliers(true)}
+                    className="ml-auto flex items-center gap-1 px-2 py-1 text-xs bg-amber-500 hover:bg-amber-400 text-slate-900 rounded font-semibold">
+                    <Link2 className="w-3 h-3" /> Link now
+                  </button>
                 </div>
-              );
-            })}
+                <div className="space-y-4">
+                  {unlinkedGroups.map(group => (
+                    <SupplierGroup
+                      key={group.key}
+                      group={group}
+                      collapsedSuppliers={collapsedSuppliers}
+                      selectedIds={selectedIds}
+                      toggleSupplierAll={toggleSupplierAll}
+                      toggleSupplierCollapse={toggleSupplierCollapse}
+                      toggleItem={toggleItem}
+                      updateField={updateField}
+                      handleStockBlur={handleStockBlur}
+                      handleMaterialStatusChange={handleMaterialStatusChange}
+                      handleReceivedBlur={handleReceivedBlur}
+                      orderQtyOf={orderQtyOf}
+                      materialStatusMeta={materialStatusMeta}
+                      resolveMaterialStatus={resolveMaterialStatus}
+                      projectId={projectId}
+                      project={project}
+                      inp={inp}
+                      stop={stop}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </>
+      )}
+
+      {showLinkSuppliers && (
+        <LinkSuppliersModal
+          projectId={projectId}
+          bomItems={snapshot || all}
+          onClose={() => setShowLinkSuppliers(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Supplier group renderer (extracted for reuse) ─────────────────────────
+function SupplierGroup({ group, collapsedSuppliers, selectedIds, toggleSupplierAll, toggleSupplierCollapse, toggleItem, updateField, handleStockBlur, handleMaterialStatusChange, handleReceivedBlur, orderQtyOf, materialStatusMeta, resolveMaterialStatus, projectId, project, inp, stop }) {
+  const isCollapsed = collapsedSuppliers.has(group.key);
+  const allSupSelected = group.items.every(i => selectedIds.has(i.id));
+  const someSupSelected = group.items.some(i => selectedIds.has(i.id));
+  const groupValue = group.items.reduce((s, i) => s + (Number(i.planned_cost_price) || Number(i.cost_price) || 0) * (Number(i.quantity) || 1), 0);
+
+  return (
+    <div className={`bg-white rounded-lg shadow-sm border ${group.isLinked ? 'border-slate-200' : 'border-amber-200'} overflow-hidden`}>
+      {/* Supplier header */}
+      <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 border-b border-slate-200">
+        <button onClick={() => toggleSupplierAll(group.key, group.items)}
+          className="flex items-center justify-center shrink-0">
+          <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${allSupSelected ? 'bg-amber-400 border-amber-400' : someSupSelected ? 'bg-amber-200 border-amber-400' : 'border-slate-300'}`}>
+            {allSupSelected && <Check className="w-2.5 h-2.5 text-slate-900" />}
+            {someSupSelected && !allSupSelected && <div className="w-1.5 h-1.5 bg-amber-500 rounded-sm" />}
+          </div>
+        </button>
+
+        <button onClick={() => toggleSupplierCollapse(group.key)} className="flex items-center gap-2 text-left shrink-0">
+          {isCollapsed ? <ChevronRight className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+          <Package className="w-4 h-4 text-amber-500 shrink-0" />
+        </button>
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <VendorLookup vendorId={group.vendorId} supplier={group.label} projectId={projectId} project={project} variant="link" className="font-semibold text-slate-800 hover:text-amber-700" />
+          <span className="text-xs text-slate-400">{group.items.length} item{group.items.length !== 1 ? 's' : ''}</span>
+          <span className="text-xs text-slate-400">·</span>
+          <span className="text-xs text-slate-500 font-medium">{formatCurrency(groupValue, project?.currency || 'SAR')}</span>
+        </div>
+      </div>
+
+      {/* Items table */}
+      {!isCollapsed && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs min-w-[1100px]">
+            <thead className="bg-slate-100 text-slate-500 uppercase">
+              <tr>
+                <th className="px-3 py-2 w-8"></th>
+                <th className="px-3 py-2 text-left">Description</th>
+                <th className="px-3 py-2 text-left">Part No.</th>
+                <th className="px-3 py-2 text-left">Category</th>
+                <th className="px-3 py-2 text-left">Supplier</th>
+                <th className="px-3 py-2 text-right">Qty</th>
+                <th className="px-3 py-2 text-right">Stock Qty</th>
+                <th className="px-3 py-2 text-right">Order Qty</th>
+                <th className="px-3 py-2 text-left">Material Status</th>
+                <th className="px-3 py-2 text-right">Received Qty</th>
+                <th className="px-3 py-2 text-left">Exp. Delivery</th>
+                <th className="px-3 py-2 text-left">PO Number</th>
+              </tr>
+            </thead>
+            <tbody>
+              {group.items.map((item, idx) => {
+                const isChecked = selectedIds.has(item.id);
+                const qty = Number(item.quantity) || 0;
+                const stock = Number(item.stock_qty) || 0;
+                const oQty = orderQtyOf(item);
+                const msMeta = materialStatusMeta(item);
+                const ms = msMeta.status;
+                const received = Number(item.received_qty) || Number(item.delivered_qty) || 0;
+                const partial = ms === 'ordered' && received > 0 && (qty === 0 || received < qty);
+                return (
+                  <tr
+                    key={item.id}
+                    onClick={() => toggleItem(item.id)}
+                    className={`border-t border-slate-100 cursor-pointer transition ${isChecked ? 'bg-amber-50' : idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'} hover:bg-amber-50/70`}
+                  >
+                    <td className="px-3 py-2">
+                      <div className={`w-4 h-4 rounded border-2 flex items-center justify-center mx-auto transition-colors ${isChecked ? 'bg-amber-400 border-amber-400' : 'border-slate-300'}`}>
+                        {isChecked && <Check className="w-2.5 h-2.5 text-slate-900" />}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 font-medium text-slate-800 max-w-[200px]">
+                      <div className="truncate">{item.description || '—'}</div>
+                    </td>
+                    <td className="px-3 py-2 font-mono text-slate-500">{item.manufacturer_part_number || '—'}</td>
+                    <td className="px-3 py-2">
+                      <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-semibold">
+                        {BOM_CATEGORY_LABELS[item.category] || item.category || '—'}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-slate-600"><VendorLookup vendorId={item.vendor_id} supplier={item.supplier} projectId={projectId} project={project} variant="link" /></td>
+                    <td className="px-3 py-2 text-right font-semibold text-slate-700">{qty}</td>
+                    <td className="px-1 py-1 text-right">
+                      <input type="number" min="0" onClick={stop} value={stock} onChange={e => updateField(item, 'stock_qty', e.target.value)} onBlur={e => handleStockBlur(item, e.target.value)} className={inp + ' text-right'} style={{ width: 56 }} />
+                    </td>
+                    <td className="px-3 py-2 text-right text-slate-700">{oQty}</td>
+                    <td className="px-1 py-1">
+                      <select onClick={stop} value={ms} onChange={e => handleMaterialStatusChange(item, e.target.value)} className={`text-[10px] font-semibold border-0 rounded px-1.5 py-1 cursor-pointer ${msMeta.cls}`}>
+                        {Object.entries(MATERIAL_STATUS).map(([key, s]) => <option key={key} value={key}>{s.label}</option>)}
+                        <option value="partially_received">Partially Received</option>
+                      </select>
+                      {partial && <div className="text-[10px] text-amber-600 mt-0.5">partial {received}/{qty}</div>}
+                    </td>
+                    <td className="px-1 py-1 text-right">
+                      <input type="number" min="0" max={qty} onClick={stop} value={received} onChange={e => updateField(item, 'received_qty', e.target.value)} onBlur={e => handleReceivedBlur(item, e.target.value)} className={inp + ' text-right'} style={{ width: 56 }} />
+                    </td>
+                    <td className="px-3 py-2 text-slate-500">{formatDate(item.expected_delivery_date)}</td>
+                    <td className="px-3 py-2 font-mono text-slate-500">{item.po_number || '—'}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot className="border-t-2 border-slate-200 bg-slate-50">
+              <tr>
+                <td colSpan={11} className="px-3 py-2 text-slate-500 text-xs font-semibold">Supplier Total — {group.items.length} item{group.items.length !== 1 ? 's' : ''}</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
       )}
     </div>
   );

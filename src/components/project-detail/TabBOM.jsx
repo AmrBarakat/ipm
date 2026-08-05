@@ -48,6 +48,7 @@ const addInp = 'border border-slate-200 rounded px-2 py-1.5 text-xs focus:outlin
 
 export default function TabBOM({ projectId }) {
   const { data: bomData = [], isLoading } = useEntityList('BOMItem', { project_id: projectId }, ENTITY_QUERY.BOMItem.sort, ENTITY_QUERY.BOMItem.limit);
+  const { data: vendors = [] } = useEntityList('Vendor', {}, '-created_date', 500);
   const bomMutation = useEntityMutation('BOMItem');
   const queryClient = useQueryClient();
   const confirmDialog = useConfirm();
@@ -233,7 +234,10 @@ export default function TabBOM({ projectId }) {
     return Math.max(0, (Number(item.quantity) || 1) - (Number(item.stock_qty) || 0));
   }
 
-  const suppliers = useMemo(() => [...new Set(items.map(i => i.supplier).filter(Boolean))], [items]);
+  const vendorsWithBOM = useMemo(() => {
+    const ids = new Set(items.map(i => i.vendor_id).filter(Boolean));
+    return vendors.filter(v => ids.has(v.id));
+  }, [vendors, items]);
 
   // Separate panel parents, panel children, and standalone items
   const panelParents = useMemo(() => items.filter(i => !i.parent_id && i.category === 'panel'), [items]);
@@ -272,7 +276,8 @@ export default function TabBOM({ projectId }) {
 
   const filtered = useMemo(() => allTopLevel.filter(item => {
     if (filterCategory && item.category !== filterCategory) return false;
-    if (filterSupplier && item.supplier !== filterSupplier) return false;
+    if (filterSupplier === '__unlinked') { if (item.vendor_id) return false; }
+    else if (filterSupplier && item.vendor_id !== filterSupplier) return false;
     if (filterCostBasis === 'actual' && !(Number(item.actual_cost_price) > 0)) return false;
     if (filterCostBasis === 'planned' && Number(item.actual_cost_price) > 0) return false;
     if (filterMaterialStatus === 'partial') {
@@ -366,10 +371,11 @@ export default function TabBOM({ projectId }) {
             <option value="delivered">Delivered</option>
             <option value="partial">Partially received</option>
           </select>
-          {suppliers.length > 0 && (
+          {vendorsWithBOM.length > 0 && (
             <select value={filterSupplier} onChange={e => setFilterSupplier(e.target.value)} className={selCls}>
               <option value="">All Suppliers</option>
-              {suppliers.map(s => <option key={s} value={s}>{s}</option>)}
+              <option value="__unlinked">Unlinked</option>
+              {vendorsWithBOM.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
             </select>
           )}
           <select value={filterCostBasis} onChange={e => setFilterCostBasis(e.target.value)} className={selCls}>
@@ -378,8 +384,7 @@ export default function TabBOM({ projectId }) {
             <option value="planned">Planned only</option>
           </select>
           {(filterCategory || filterMaterialStatus || filterSupplier || filterCostBasis) && (
-            <button onClick={() => { setFilterCategory(''); setFilterMaterialStatus(''); setFilterSupplier(''); setFilterCostBasis(''); }}
-              className="text-xs text-slate-500 hover:text-red-500 underline">Clear</button>
+            <button onClick={() => { setFilterCategory(''); setFilterMaterialStatus(''); setFilterSupplier(''); setFilterCostBasis(''); }} className="text-xs text-slate-500 hover:text-red-500 underline">Clear</button>
           )}
         </div>
         <Can create>
@@ -670,7 +675,7 @@ export default function TabBOM({ projectId }) {
                                   <td className="px-1 py-1">
                                     <div className="flex items-center gap-1">
                                       <input className={inp} value={item.supplier || ''} onChange={e => updateField(item.id, 'supplier', e.target.value)} onBlur={e => handleBlur(item, 'supplier', e.target.value)} placeholder="Supplier" />
-                                      <VendorLookup supplier={item.supplier} projectId={projectId} variant="icon" />
+                                      <VendorLookup vendorId={item.vendor_id} supplier={item.supplier} projectId={projectId} variant="icon" onLink={async (vid, vname) => { const updated = { ...item, vendor_id: vid, supplier: vname }; setItems(prev => prev.map(i => i.id === item.id ? updated : i)); if (saveTimers.current[item.id]) clearTimeout(saveTimers.current[item.id]); saveTimers.current[item.id] = setTimeout(() => saveItem(updated), 300); }} />
                                     </div>
                                   </td>
                                   <td className="px-1 py-1 text-right">
