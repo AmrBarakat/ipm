@@ -30,13 +30,34 @@ export function resolveMaterialStatus(item) {
 }
 
 // Keep the legacy pair consistent with the merged field.
+// When the user manually downgrades, clear the quantity / date fields that
+// drove the higher status — otherwise resolveMaterialStatus() immediately
+// re-upgrades and the select snaps back.
 export function legacyFieldsFor(status, item) {
+  const qty = Number(item?.quantity) || 0;
+  const prevDq = Number(item?.delivered_qty) || Number(item?.received_qty) || 0;
+
+  // Downgrading below 'received' → zero out received quantities.
+  const clearReceived = status === 'not_ordered' || status === 'ordered';
+  const delivered_qty = clearReceived ? 0 : prevDq;
+  const received_qty  = clearReceived ? 0 : prevDq;
+  const remaining_qty = clearReceived ? qty : Math.max(0, qty - delivered_qty);
+
+  // Downgrading below 'delivered' → clear site delivery date.
+  const site_delivered_date = status === 'delivered'
+    ? (item?.site_delivered_date || new Date().toISOString().slice(0, 10))
+    : null;
+
   return {
     order_status:    status === 'not_ordered' ? 'not_ordered' : 'ordered',
     ordered:         status !== 'not_ordered',
     delivery_status: status === 'delivered' ? 'delivered'
-                   : (Number(item?.delivered_qty) || 0) > 0 ? 'partially_delivered'
+                   : delivered_qty > 0 ? 'partially_delivered'
                    : 'not_delivered',
+    delivered_qty,
+    received_qty,
+    remaining_qty,
+    site_delivered_date,
   };
 }
 
