@@ -14,24 +14,7 @@ import { Can } from '@/lib/can';
 import PanelCompositionView from '@/components/project-detail/PanelCompositionView';
 import VendorLookup from '@/components/project-detail/VendorLookup';
 import { effectiveCostUnit, marginPct, costBasis } from '@/lib/margin';
-
-const DELIVERY_COLORS = {
-  not_delivered: 'bg-slate-100 text-slate-600',
-  partially_delivered: 'bg-amber-100 text-amber-800',
-  delivered: 'bg-emerald-100 text-emerald-700',
-};
-
-/** Status is always derived from delivered_qty vs total quantity — never assumed or manually set. */
-function deriveDeliveryStatus(item) {
-  const dq = Number(item.delivered_qty) || 0;
-  const tq = Number(item.quantity) || 0;
-  if (dq <= 0) return 'not_delivered';
-  if (tq > 0 && dq < tq) return 'partially_delivered';
-  return 'delivered';
-}
-function deliveryLabel(ds) {
-  return ds === 'delivered' ? 'Delivered' : ds === 'partially_delivered' ? 'Partial' : 'Not Del.';
-}
+import { MATERIAL_STATUS, resolveMaterialStatus, legacyFieldsFor, materialStatusMeta } from '@/lib/materialStatus';
 
 /** Margin pill: emerald ≥25%, amber 10–25%, red <10%; "—" when cost is 0/missing.
  *  Uses effectiveCostUnit (actual cost where known, else planned) and the shared
@@ -52,16 +35,11 @@ function marginPill(item) {
   );
 }
 
-const ORDER_COLORS = {
-  ordered: 'bg-blue-100 text-blue-700',
-  not_ordered: 'bg-slate-100 text-slate-500',
-};
-
 const EMPTY_FORM = {
   description: '', category: 'other', quantity: 1, stock_qty: 0, unit: 'pcs',
   planned_cost_price: '', actual_cost_price: '', selling_price: '', currency: 'SAR',
   supplier: '', manufacturer_part_number: '',
-  order_status: 'not_ordered', delivery_status: 'not_delivered', expected_delivery_date: '',
+  material_status: 'not_ordered', expected_delivery_date: '',
 };
 
 const inp = 'border border-transparent rounded px-1.5 py-1 text-xs focus:outline-none focus:border-amber-400 focus:bg-white bg-transparent w-full hover:bg-slate-100 transition-colors';
@@ -91,13 +69,12 @@ export default function TabBOM({ projectId }) {
 
   // Filters
   const [filterCategory, setFilterCategory] = useState('');
-  const [filterOrderStatus, setFilterOrderStatus] = useState('');
-  const [filterDelivery, setFilterDelivery] = useState('');
+  const [filterMaterialStatus, setFilterMaterialStatus] = useState('');
   const [filterSupplier, setFilterSupplier] = useState('');
   const [filterCostBasis, setFilterCostBasis] = useState('');
 
   // Clear selection when filters change
-  useEffect(() => { setSelectedIds(new Set()); }, [filterCategory, filterOrderStatus, filterDelivery, filterSupplier, filterCostBasis]);
+  useEffect(() => { setSelectedIds(new Set()); }, [filterCategory, filterMaterialStatus, filterSupplier, filterCostBasis]);
 
   // Seed the editable grid from the cached query; inline edits stay local
   // and are reconciled when create/delete/bulk ops invalidate the query.
@@ -120,7 +97,7 @@ export default function TabBOM({ projectId }) {
       actual_cost_price: Number(item.actual_cost_price) || 0,
       cost_price: Number(item.planned_cost_price) || 0,
       selling_price: Number(item.selling_price) || 0,
-      ordered: item.order_status === 'ordered',
+      ...legacyFieldsFor(item.material_status || 'not_ordered', item),
     });
     setSaving(s => ({ ...s, [item.id]: false }));
   }, []);
@@ -182,15 +159,20 @@ export default function TabBOM({ projectId }) {
     // Expand selected (possibly aggregated) rows into their underlying BOMItem ids
     const selectedRows = allTopLevel.filter(i => selectedIds.has(i.id));
     const ids = selectedRows.flatMap(i => i._ids || [i.id]);
+    const isMs = field === 'material_status';
+    const computeLegacy = (item) => isMs ? legacyFieldsFor(value, item) : {};
     // Optimistic UI update first
     setItems(prev => prev.map(i =>
-      ids.includes(i.id) ? { ...i, [field]: value, ...(field === 'order_status' ? { ordered: value === 'ordered' } : {}) } : i
+      ids.includes(i.id) ? { ...i, [field]: value, ...computeLegacy(i) } : i
     ));
     setBulkEdit(null);
     setSelectedIds(new Set());
     // Single batched request instead of one call per item
-    const extra = field === 'order_status' ? { ordered: value === 'ordered' } : {};
-    await base44.entities.BOMItem.bulkUpdate(ids.map(id => ({ id, [field]: value, ...extra })));
+    const updates = ids.map(id => {
+      const item = items.find(i => i.id === id) || {};
+      return { id, [field]: value, ...computeLegacy(item) };
+    });
+    await base44.entities.BOMItem.bulkUpdate(updates);
     queryClient.invalidateQueries({ queryKey: ['BOMItem'] });
   }
 
@@ -211,6 +193,14 @@ export default function TabBOM({ projectId }) {
     saveTimers.current[item.id] = setTimeout(() => saveItem(updated), 300);
   }
 
+  function handleMaterialStatusChange(item, value) {
+    const legacy = legacyFieldsFor(value, item);
+    const updated = { ...item, material_status: value, ...legacy };
+    setItems(prev => prev.map(i => i.id === item.id ? updated : i));
+    if (saveTimers.current[item.id]) clearTimeout(saveTimers.current[item.id]);
+    saveTimers.current[item.id] = setTimeout(() => saveItem(updated), 300);
+  }
+
   async function create(e) {
     e.preventDefault();
     if (!form.description.trim()) return;
@@ -225,7 +215,7 @@ export default function TabBOM({ projectId }) {
         actual_cost_price: Number(form.actual_cost_price) || 0,
         cost_price: Number(form.planned_cost_price) || 0,
         selling_price: Number(form.selling_price) || 0,
-        ordered: form.order_status === 'ordered',
+        ...legacyFieldsFor(form.material_status || 'not_ordered', form),
       },
     });
     setForm(EMPTY_FORM);
@@ -280,14 +270,16 @@ export default function TabBOM({ projectId }) {
 
   const filtered = useMemo(() => allTopLevel.filter(item => {
     if (filterCategory && item.category !== filterCategory) return false;
-    const os = item.order_status || (item.ordered ? 'ordered' : 'not_ordered');
-    if (filterOrderStatus && os !== filterOrderStatus) return false;
-    if (filterDelivery && item.delivery_status !== filterDelivery) return false;
     if (filterSupplier && item.supplier !== filterSupplier) return false;
     if (filterCostBasis === 'actual' && !(Number(item.actual_cost_price) > 0)) return false;
     if (filterCostBasis === 'planned' && Number(item.actual_cost_price) > 0) return false;
+    if (filterMaterialStatus === 'partial') {
+      const dq = Number(item.delivered_qty) || 0;
+      const qty = Number(item.quantity) || 0;
+      if (!(dq > 0 && (qty === 0 || dq < qty))) return false;
+    } else if (filterMaterialStatus && resolveMaterialStatus(item) !== filterMaterialStatus) return false;
     return true;
-  }), [allTopLevel, filterCategory, filterOrderStatus, filterDelivery, filterSupplier, filterCostBasis]);
+  }), [allTopLevel, filterCategory, filterMaterialStatus, filterSupplier, filterCostBasis]);
 
   // Dashboard KPIs — totals based on top-level items (panels + aggregated standalone)
   const totalItems = allTopLevel.length;
@@ -299,10 +291,10 @@ export default function TabBOM({ projectId }) {
   // Procurement status KPIs: top-level, non-service items only (exclude panel
   // children and category 'service') so counts reconcile with the table.
   const procurementKpiItems = allTopLevel.filter(i => i.category !== 'service');
-  const orderedCount = procurementKpiItems.filter(i => (i.order_status || (i.ordered ? 'ordered' : 'not_ordered')) === 'ordered').length;
-  const notOrderedCount = procurementKpiItems.length - orderedCount;
-  const deliveredCount = procurementKpiItems.filter(i => i.delivery_status === 'delivered').length;
-  const pendingDelivery = procurementKpiItems.filter(i => i.delivery_status === 'not_delivered' || i.delivery_status === 'partially_delivered').length;
+  const notOrderedCount = procurementKpiItems.filter(i => resolveMaterialStatus(i) === 'not_ordered').length;
+  const orderedCount = procurementKpiItems.filter(i => resolveMaterialStatus(i) === 'ordered').length;
+  const receivedCount = procurementKpiItems.filter(i => resolveMaterialStatus(i) === 'received').length;
+  const deliveredCount = procurementKpiItems.filter(i => resolveMaterialStatus(i) === 'delivered').length;
 
   const byCategory = useMemo(() => {
     const map = {};
@@ -345,10 +337,10 @@ export default function TabBOM({ projectId }) {
         <KpiCard label="Sell Value" value={formatCurrency(totalSell, 'SAR')} icon={<TrendingUp className="w-5 h-5" />} color="border-emerald-400" />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard label="Ordered" value={orderedCount} icon={<Truck className="w-5 h-5" />} color="border-blue-400" />
         <KpiCard label="Not Ordered" value={notOrderedCount} icon={<ShoppingCart className="w-5 h-5" />} color="border-slate-400" />
+        <KpiCard label="Ordered" value={orderedCount} icon={<Truck className="w-5 h-5" />} color="border-blue-400" />
+        <KpiCard label="Received" value={receivedCount} icon={<Package className="w-5 h-5" />} color="border-indigo-400" />
         <KpiCard label="Delivered" value={deliveredCount} icon={<CheckCircle className="w-5 h-5" />} color="border-emerald-400" />
-        <KpiCard label="Pending Delivery" value={pendingDelivery} icon={<Clock className="w-5 h-5" />} color="border-amber-400" />
         <KpiCard label="Margin (actual where known)" value={overallMargin != null ? (overallMargin * 100).toFixed(1) + '%' : '—'} icon={<TrendingUp className="w-5 h-5" />} color="border-emerald-400" />
       </div>
 
@@ -364,16 +356,13 @@ export default function TabBOM({ projectId }) {
             <option value="">All Categories</option>
             {BOM_CATEGORY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
-          <select value={filterOrderStatus} onChange={e => setFilterOrderStatus(e.target.value)} className={selCls}>
-            <option value="">All Order Status</option>
-            <option value="ordered">Ordered</option>
+          <select value={filterMaterialStatus} onChange={e => setFilterMaterialStatus(e.target.value)} className={selCls}>
+            <option value="">All Material Status</option>
             <option value="not_ordered">Not Ordered</option>
-          </select>
-          <select value={filterDelivery} onChange={e => setFilterDelivery(e.target.value)} className={selCls}>
-            <option value="">All Delivery</option>
-            <option value="not_delivered">Not Delivered</option>
-            <option value="partially_delivered">Partially Delivered</option>
+            <option value="ordered">Ordered</option>
+            <option value="received">Received</option>
             <option value="delivered">Delivered</option>
+            <option value="partial">Partially received</option>
           </select>
           {suppliers.length > 0 && (
             <select value={filterSupplier} onChange={e => setFilterSupplier(e.target.value)} className={selCls}>
@@ -386,8 +375,8 @@ export default function TabBOM({ projectId }) {
             <option value="actual">Actual cost known</option>
             <option value="planned">Planned only</option>
           </select>
-          {(filterCategory || filterOrderStatus || filterDelivery || filterSupplier || filterCostBasis) && (
-            <button onClick={() => { setFilterCategory(''); setFilterOrderStatus(''); setFilterDelivery(''); setFilterSupplier(''); setFilterCostBasis(''); }}
+          {(filterCategory || filterMaterialStatus || filterSupplier || filterCostBasis) && (
+            <button onClick={() => { setFilterCategory(''); setFilterMaterialStatus(''); setFilterSupplier(''); setFilterCostBasis(''); }}
               className="text-xs text-slate-500 hover:text-red-500 underline">Clear</button>
           )}
         </div>
@@ -405,16 +394,18 @@ export default function TabBOM({ projectId }) {
           <span className="text-slate-400">·</span>
           <span className="text-slate-300 text-xs">Bulk edit:</span>
 
-          {/* Order Status */}
+          {/* Material Status */}
           <div className="flex items-center gap-1.5">
             <select
               className="text-xs bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white focus:outline-none focus:border-amber-400"
-              value={bulkEdit?.field === 'order_status' ? bulkEdit.value : ''}
-              onChange={e => setBulkEdit(e.target.value ? { field: 'order_status', value: e.target.value } : null)}
+              value={bulkEdit?.field === 'material_status' ? bulkEdit.value : ''}
+              onChange={e => setBulkEdit(e.target.value ? { field: 'material_status', value: e.target.value } : null)}
             >
-              <option value="">Order Status…</option>
-              <option value="ordered">Ordered</option>
+              <option value="">Material Status…</option>
               <option value="not_ordered">Not Ordered</option>
+              <option value="ordered">Ordered</option>
+              <option value="received">Received</option>
+              <option value="delivered">Delivered</option>
             </select>
           </div>
 
@@ -477,14 +468,11 @@ export default function TabBOM({ projectId }) {
           <input type="number" value={form.planned_cost_price} onChange={e => setForm(f => ({ ...f, planned_cost_price: e.target.value }))} placeholder="Planned Cost/Unit" className={addInp} min="0" />
           <input type="number" value={form.actual_cost_price} onChange={e => setForm(f => ({ ...f, actual_cost_price: e.target.value }))} placeholder="Actual Cost/Unit" className={addInp} min="0" />
           <input type="number" value={form.selling_price} onChange={e => setForm(f => ({ ...f, selling_price: e.target.value }))} placeholder="Selling Price" className={addInp} min="0" />
-          <select value={form.order_status} onChange={e => setForm(f => ({ ...f, order_status: e.target.value }))} className={addInp}>
+          <select value={form.material_status} onChange={e => setForm(f => ({ ...f, material_status: e.target.value }))} className={addInp}>
             <option value="not_ordered">Not Ordered</option>
             <option value="ordered">Ordered</option>
-          </select>
-          <select value={form.delivery_status} onChange={e => setForm(f => ({ ...f, delivery_status: e.target.value }))} className={addInp}>
-            <option value="pending">Pending</option>
-            <option value="partially_received">Partially Received</option>
             <option value="received">Received</option>
+            <option value="delivered">Delivered</option>
           </select>
           <input type="date" value={form.expected_delivery_date} onChange={e => setForm(f => ({ ...f, expected_delivery_date: e.target.value }))} className={addInp} />
           <div className="col-span-2 flex gap-2">
@@ -525,8 +513,7 @@ export default function TabBOM({ projectId }) {
             total_selling: (Number(i.selling_price) || 0) * (Number(i.quantity) || 1),
             margin: (() => { const c = effectiveCostUnit(i); const s = Number(i.selling_price) || 0; const m = marginPct(c, s); return m == null ? '—' : (m * 100).toFixed(1) + '%'; })(),
             cost_basis: costBasis(i),
-            order_status: i.order_status || (i.ordered ? 'ordered' : 'not_ordered'),
-            delivery_status: i.delivery_status || 'not_delivered',
+            material_status: MATERIAL_STATUS[resolveMaterialStatus(i)]?.label || 'Not Ordered',
             delivered_qty: i.delivered_qty || 0,
             remaining: Math.max(0, (Number(i.quantity) || 0) - (Number(i.delivered_qty) || 0)),
             expected_delivery: i.expected_delivery_date || '',
@@ -540,7 +527,7 @@ export default function TabBOM({ projectId }) {
             { key: 'total_planned', label: 'Total Planned' }, { key: 'total_actual', label: 'Total Actual' },
             { key: 'unit_selling', label: 'Unit Selling' },
             { key: 'total_selling', label: 'Total Selling' }, { key: 'margin', label: 'Margin' }, { key: 'cost_basis', label: 'Cost Basis' },
-            { key: 'order_status', label: 'Order Status' }, { key: 'delivery_status', label: 'Delivery' }, { key: 'remaining', label: 'Remaining' },
+            { key: 'material_status', label: 'Material Status' }, { key: 'remaining', label: 'Remaining' },
             { key: 'expected_delivery', label: 'Expected Delivery' },
           ]}
         >
@@ -592,8 +579,7 @@ export default function TabBOM({ projectId }) {
                     <th className="px-3 py-3 text-right">Unit Selling</th>
                     <th className="px-3 py-3 text-right">Total Selling</th>
                     <th className="px-3 py-3 text-right">Margin</th>
-                    <th className="px-3 py-3 text-left">Order</th>
-                    <th className="px-3 py-3 text-left">Delivery</th>
+                    <th className="px-3 py-3 text-left">Material Status</th>
                     <th className="px-3 py-3 text-right">Remaining</th>
                     <th className="px-3 py-3 text-left">Exp. Delivery</th>
                     <th className="px-3 py-3 w-8"></th>
@@ -634,7 +620,8 @@ export default function TabBOM({ projectId }) {
                               const oQty = orderQty(item);
                               const plannedUnit = Number(item.planned_cost_price) || Number(item.cost_price) || 0;
                               const actualUnit = Number(item.actual_cost_price) || 0;
-                              const itemOrderStatus = item.order_status || (item.ordered ? 'ordered' : 'not_ordered');
+                              const ms = resolveMaterialStatus(item);
+                              const msMeta = materialStatusMeta(item);
                               const isSaving = saving[item.id];
                               const isSelected = selectedIds.has(item.id);
                               const isPanel = item.category === 'panel';
@@ -713,13 +700,10 @@ export default function TabBOM({ projectId }) {
                                   <td className="px-3 py-2 text-right text-xs font-medium text-emerald-700">{formatCurrency((Number(item.selling_price) || 0) * (Number(item.quantity) || 1), item.currency || 'SAR')}</td>
                                   <td className="px-3 py-2 text-right">{marginPill(item)}</td>
                                   <td className="px-1 py-1">
-                                    <select className={`text-xs px-2 py-1 rounded font-semibold border-0 cursor-pointer ${ORDER_COLORS[itemOrderStatus] || 'bg-slate-100 text-slate-600'}`} value={itemOrderStatus} onChange={e => handleSelectChange(item, 'order_status', e.target.value)}>
-                                      <option value="not_ordered">Not Ordered</option>
-                                      <option value="ordered">Ordered</option>
+                                    <select className={`text-xs px-2 py-1 rounded font-semibold border-0 cursor-pointer ${msMeta.cls}`} value={ms} onChange={e => handleMaterialStatusChange(item, e.target.value)}>
+                                      {Object.values(MATERIAL_STATUS).map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                                     </select>
-                                  </td>
-                                  <td className="px-1 py-1">
-                                    {(() => { const ds = deriveDeliveryStatus(item); return <span className={`text-xs px-2 py-1 rounded font-semibold ${DELIVERY_COLORS[ds]}`}>{deliveryLabel(ds)}</span>; })()}
+                                    {msMeta.partial && <span className="text-[10px] text-slate-500 mt-0.5 block">{msMeta.label}</span>}
                                   </td>
                                   <td className="px-1 py-1 text-right">
                                     <span className="text-xs font-semibold text-slate-600">{Math.max(0, (Number(item.quantity) || 0) - (Number(item.delivered_qty) || 0))}</span>
@@ -787,7 +771,7 @@ export default function TabBOM({ projectId }) {
                               <td className="px-3 py-2"></td>
                               <td className="px-3 py-2 text-right text-emerald-700">{formatCurrency(catSell, 'SAR')}</td>
                               <td className="px-3 py-2"></td>
-                              <td colSpan={6}></td>
+                              <td colSpan={5}></td>
                             </tr>
                           </tfoot>
                         </table>

@@ -7,6 +7,7 @@ import { formatCurrency, formatDate, BOM_CATEGORY_LABELS, BOM_CATEGORY_OPTIONS }
 import { ShoppingCart, Package, ChevronDown, ChevronRight, Check, AlertCircle, X, Save, Trash2, RefreshCw, Filter } from 'lucide-react';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import VendorLookup from '@/components/project-detail/VendorLookup';
+import { MATERIAL_STATUS, resolveMaterialStatus, legacyFieldsFor, materialStatusMeta } from '@/lib/materialStatus';
 
 // Items eligible for procurement: not ordered, top-level (not panel children),
 // and not an engineering/service line item.
@@ -15,26 +16,6 @@ function isProcurementItem(i) {
   const pn = (i.manufacturer_part_number || '').trim().toLowerCase();
   if (i.category === 'service' || pn === 'engineering') return false;
   return true;
-}
-
-// Material-status options with their badge / select styling.
-const MATERIAL_STATUS = [
-  { value: 'not_ordered', label: 'Not Ordered', badge: 'bg-slate-100 text-slate-600', sel: 'border-slate-300 text-slate-700' },
-  { value: 'ordered', label: 'Ordered', badge: 'bg-blue-100 text-blue-700', sel: 'border-blue-400 text-blue-700 font-semibold' },
-  { value: 'received', label: 'Received', badge: 'bg-amber-100 text-amber-700', sel: 'border-amber-400 text-amber-700 font-semibold' },
-  { value: 'delivered', label: 'Delivered', badge: 'bg-emerald-100 text-emerald-700', sel: 'border-emerald-400 text-emerald-700 font-semibold' },
-];
-const MS_BY_VALUE = Object.fromEntries(MATERIAL_STATUS.map(s => [s.value, s]));
-
-/** Effective material_status, deriving from legacy fields when missing (one-time migration). */
-function effectiveMaterialStatus(i) {
-  const ms = i.material_status;
-  if (ms && ms !== 'not_ordered') return ms;
-  const dq = Number(i.delivered_qty) || 0;
-  const qty = Number(i.quantity) || 0;
-  if (qty > 0 && dq >= qty) return 'received';
-  if (i.order_status === 'ordered' || i.ordered) return 'ordered';
-  return 'not_ordered';
 }
 
 /** Order qty = max(0, quantity − stock_qty). Read-only computed field. */
@@ -82,7 +63,16 @@ export default function TabProcurement({ projectId, project }) {
   }, [all, snapshot]);
 
   const items = useMemo(
-    () => (snapshot || all).filter(i => isProcurementItem(i) && !hiddenIds.has(i.id) && (!materialFilter || effectiveMaterialStatus(i) === materialFilter)),
+    () => (snapshot || all).filter(i => {
+      if (!isProcurementItem(i) || hiddenIds.has(i.id)) return false;
+      if (!materialFilter) return true;
+      if (materialFilter === 'partial') {
+        const dq = Number(i.delivered_qty) || 0;
+        const qty = Number(i.quantity) || 0;
+        return dq > 0 && (qty === 0 || dq < qty);
+      }
+      return resolveMaterialStatus(i) === materialFilter;
+    }),
     [snapshot, all, hiddenIds, materialFilter]
   );
 
@@ -168,7 +158,7 @@ export default function TabProcurement({ projectId, project }) {
     const qty = Number(item.quantity) || 0;
     let v = Math.max(0, Number(value) || 0);
     if (qty > 0) v = Math.min(v, qty);
-    const cur = effectiveMaterialStatus(item);
+    const cur = resolveMaterialStatus(item);
     let ms;
     if (cur === 'delivered') ms = 'delivered'; // never downgrade
     else if (v === 0) ms = cur === 'ordered' || cur === 'not_ordered' ? cur : 'not_ordered';
@@ -184,19 +174,8 @@ export default function TabProcurement({ projectId, project }) {
   }
 
   function handleMaterialStatusChange(item, value) {
-    const changes = { material_status: value };
-    const qty = Number(item.quantity) || 0;
-    const received = Number(item.received_qty) || Number(item.delivered_qty) || 0;
-    if (value === 'ordered') {
-      changes.order_status = 'ordered';
-      changes.ordered = true;
-    } else if (value === 'received') {
-      if (qty > 0 && received >= qty) {
-        changes.delivered_qty = received;
-        changes.remaining_qty = 0;
-        changes.delivery_status = 'delivered';
-      }
-    } else if (value === 'delivered') {
+    const changes = { material_status: value, ...legacyFieldsFor(value, item) };
+    if (value === 'delivered') {
       changes.site_delivered_date = new Date().toISOString().slice(0, 10);
     }
     patchAndSave(item, changes);
@@ -210,9 +189,8 @@ export default function TabProcurement({ projectId, project }) {
     if (field === 'material_status') {
       const today = new Date().toISOString().slice(0, 10);
       updates = ids.map(id => {
-        const extra = {};
-        if (value === 'ordered') { extra.order_status = 'ordered'; extra.ordered = true; }
-        else if (value === 'delivered') { extra.site_delivered_date = today; }
+        const extra = legacyFieldsFor(value, {});
+        if (value === 'delivered') extra.site_delivered_date = today;
         return { id, material_status: value, ...extra };
       });
     } else {
@@ -245,11 +223,11 @@ export default function TabProcurement({ projectId, project }) {
 
   // KPIs
   const totalItems = items.length;
-  const orderedCount = items.filter(i => effectiveMaterialStatus(i) === 'ordered').length;
-  const receivedCount = items.filter(i => effectiveMaterialStatus(i) === 'received').length;
-  const deliveredCount = items.filter(i => effectiveMaterialStatus(i) === 'delivered').length;
+  const orderedCount = items.filter(i => resolveMaterialStatus(i) === 'ordered').length;
+  const receivedCount = items.filter(i => resolveMaterialStatus(i) === 'received').length;
+  const deliveredCount = items.filter(i => resolveMaterialStatus(i) === 'delivered').length;
   const outstandingOrderQty = items
-    .filter(i => effectiveMaterialStatus(i) === 'not_ordered')
+    .filter(i => resolveMaterialStatus(i) === 'not_ordered')
     .reduce((s, i) => s + orderQtyOf(i), 0);
   const totalValue = items.reduce((s, i) => s + (Number(i.planned_cost_price) || Number(i.cost_price) || 0) * (Number(i.quantity) || 1), 0);
   const selectedValue = items
@@ -292,7 +270,8 @@ export default function TabProcurement({ projectId, project }) {
             <select value={materialFilter} onChange={e => setMaterialFilter(e.target.value)}
               className="text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white">
               <option value="">All Material Status</option>
-              {MATERIAL_STATUS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+              {Object.values(MATERIAL_STATUS).map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+              <option value="partial">Partially received</option>
             </select>
           </div>
         </div>
@@ -343,7 +322,7 @@ export default function TabProcurement({ projectId, project }) {
                 onChange={e => setBulkEdit(e.target.value ? { field: 'material_status', value: e.target.value } : null)}
               >
                 <option value="">Material Status…</option>
-                {MATERIAL_STATUS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                {Object.values(MATERIAL_STATUS).map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
               </select>
 
               <input type="number" min="0"
@@ -449,8 +428,8 @@ export default function TabProcurement({ projectId, project }) {
                             const qty = Number(item.quantity) || 0;
                             const stock = Number(item.stock_qty) || 0;
                             const oQty = orderQtyOf(item);
-                            const ms = effectiveMaterialStatus(item);
-                            const msMeta = MS_BY_VALUE[ms] || MATERIAL_STATUS[0];
+                            const msMeta = materialStatusMeta(item);
+                            const ms = msMeta.status;
                             const received = Number(item.received_qty) || Number(item.delivered_qty) || 0;
                             const partial = ms === 'ordered' && received > 0 && (qty === 0 || received < qty);
                             return (
@@ -480,7 +459,7 @@ export default function TabProcurement({ projectId, project }) {
                                 </td>
                                 <td className="px-3 py-2 text-right text-slate-700">{oQty}</td>
                                 <td className="px-1 py-1">
-                                  <select onClick={stop} value={ms} onChange={e => handleMaterialStatusChange(item, e.target.value)} className={`text-[10px] font-semibold border rounded px-1.5 py-1 bg-white ${msMeta.sel}`}>
+                                  <select onClick={stop} value={ms} onChange={e => handleMaterialStatusChange(item, e.target.value)} className={`text-[10px] font-semibold border-0 rounded px-1.5 py-1 cursor-pointer ${msMeta.cls}`}>
                                     {MATERIAL_STATUS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                                   </select>
                                   {partial && <div className="text-[10px] text-amber-600 mt-0.5">partial {received}/{qty}</div>}
