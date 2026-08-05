@@ -14,7 +14,9 @@ import { Can } from '@/lib/can';
 import PanelCompositionView from '@/components/project-detail/PanelCompositionView';
 import VendorLookup from '@/components/project-detail/VendorLookup';
 import { effectiveCostUnit, marginPct, costBasis } from '@/lib/margin';
-import { MATERIAL_STATUS, resolveMaterialStatus, legacyFieldsFor, materialStatusMeta } from '@/lib/materialStatus';
+import { MATERIAL_STATUS, MATERIAL_STATUS_ORDER, resolveMaterialStatus, legacyFieldsFor, materialStatusMeta } from '@/lib/materialStatus';
+import MaterialStatusPill from '@/components/bom/MaterialStatusPill';
+import MaterialStatusLegend from '@/components/bom/MaterialStatusLegend';
 
 /** Margin pill: emerald ≥25%, amber 10–25%, red <10%; "—" when cost is 0/missing.
  *  Uses effectiveCostUnit (actual cost where known, else planned) and the shared
@@ -194,11 +196,24 @@ export default function TabBOM({ projectId }) {
     saveTimers.current[item.id] = setTimeout(() => saveItem(updated), 300);
   }
 
-  function handleMaterialStatusChange(item, value) {
-    // 'partially_received' is a display-only status — persist as 'received'.
-    const persistAs = value === 'partially_received' ? 'received' : value;
-    const legacy = legacyFieldsFor(persistAs, item);
-    const updated = { ...item, material_status: persistAs, ...legacy };
+  function handleMaterialStatusCommit(item, status, partialQty) {
+    const legacy = legacyFieldsFor(status, item);
+    const updated = { ...item, material_status: status, ...legacy };
+    const qty = Number(item.quantity) || 0;
+    if (status === 'partially_ordered' && partialQty != null) {
+      updated.ordered_qty = partialQty;
+      updated.received_qty = 0;
+      updated.delivered_qty = 0;
+      updated.remaining_qty = qty;
+    } else if (status === 'partially_received' && partialQty != null) {
+      updated.ordered_qty = qty;
+      updated.received_qty = partialQty;
+      updated.delivered_qty = partialQty;
+      updated.remaining_qty = Math.max(0, qty - partialQty);
+    }
+    if (status === 'delivered') {
+      updated.site_delivered_date = new Date().toISOString().slice(0, 10);
+    }
     setItems(prev => prev.map(i => i.id === item.id ? updated : i));
     if (saveTimers.current[item.id]) clearTimeout(saveTimers.current[item.id]);
     saveTimers.current[item.id] = setTimeout(() => saveItem(updated), 300);
@@ -280,11 +295,7 @@ export default function TabBOM({ projectId }) {
     else if (filterSupplier && item.vendor_id !== filterSupplier) return false;
     if (filterCostBasis === 'actual' && !(Number(item.actual_cost_price) > 0)) return false;
     if (filterCostBasis === 'planned' && Number(item.actual_cost_price) > 0) return false;
-    if (filterMaterialStatus === 'partial') {
-      const dq = Number(item.delivered_qty) || 0;
-      const qty = Number(item.quantity) || 0;
-      if (!(dq > 0 && (qty === 0 || dq < qty))) return false;
-    } else if (filterMaterialStatus && resolveMaterialStatus(item) !== filterMaterialStatus) return false;
+    if (filterMaterialStatus && resolveMaterialStatus(item) !== filterMaterialStatus) return false;
     return true;
   }), [allTopLevel, filterCategory, filterMaterialStatus, filterSupplier, filterCostBasis]);
 
@@ -299,7 +310,9 @@ export default function TabBOM({ projectId }) {
   // children and category 'service') so counts reconcile with the table.
   const procurementKpiItems = allTopLevel.filter(i => i.category !== 'service');
   const notOrderedCount = procurementKpiItems.filter(i => resolveMaterialStatus(i) === 'not_ordered').length;
+  const partiallyOrderedCount = procurementKpiItems.filter(i => resolveMaterialStatus(i) === 'partially_ordered').length;
   const orderedCount = procurementKpiItems.filter(i => resolveMaterialStatus(i) === 'ordered').length;
+  const partiallyReceivedCount = procurementKpiItems.filter(i => resolveMaterialStatus(i) === 'partially_received').length;
   const receivedCount = procurementKpiItems.filter(i => resolveMaterialStatus(i) === 'received').length;
   const deliveredCount = procurementKpiItems.filter(i => resolveMaterialStatus(i) === 'delivered').length;
 
@@ -345,7 +358,9 @@ export default function TabBOM({ projectId }) {
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KpiCard label="Not Ordered" value={notOrderedCount} icon={<ShoppingCart className="w-5 h-5" />} color="border-slate-400" />
+        <KpiCard label="Partially Ordered" value={partiallyOrderedCount} icon={<Truck className="w-5 h-5" />} color="border-amber-400" />
         <KpiCard label="Ordered" value={orderedCount} icon={<Truck className="w-5 h-5" />} color="border-blue-400" />
+        <KpiCard label="Partially Received" value={partiallyReceivedCount} icon={<Package className="w-5 h-5" />} color="border-violet-400" />
         <KpiCard label="Received" value={receivedCount} icon={<Package className="w-5 h-5" />} color="border-indigo-400" />
         <KpiCard label="Delivered" value={deliveredCount} icon={<CheckCircle className="w-5 h-5" />} color="border-emerald-400" />
         <KpiCard label="Margin (actual where known)" value={overallMargin != null ? (overallMargin * 100).toFixed(1) + '%' : '—'} icon={<TrendingUp className="w-5 h-5" />} color="border-emerald-400" />
@@ -365,11 +380,7 @@ export default function TabBOM({ projectId }) {
           </select>
           <select value={filterMaterialStatus} onChange={e => setFilterMaterialStatus(e.target.value)} className={selCls}>
             <option value="">All Material Status</option>
-            <option value="not_ordered">Not Ordered</option>
-            <option value="ordered">Ordered</option>
-            <option value="received">Received</option>
-            <option value="delivered">Delivered</option>
-            <option value="partial">Partially received</option>
+            {MATERIAL_STATUS_ORDER.map(key => <option key={key} value={key}>{MATERIAL_STATUS[key].label}</option>)}
           </select>
           {vendorsWithBOM.length > 0 && (
             <select value={filterSupplier} onChange={e => setFilterSupplier(e.target.value)} className={selCls}>
@@ -409,10 +420,7 @@ export default function TabBOM({ projectId }) {
               onChange={e => setBulkEdit(e.target.value ? { field: 'material_status', value: e.target.value } : null)}
             >
               <option value="">Material Status…</option>
-              <option value="not_ordered">Not Ordered</option>
-              <option value="ordered">Ordered</option>
-              <option value="received">Received</option>
-              <option value="delivered">Delivered</option>
+              {MATERIAL_STATUS_ORDER.map(key => <option key={key} value={key}>{MATERIAL_STATUS[key].label}</option>)}
             </select>
           </div>
 
@@ -476,10 +484,7 @@ export default function TabBOM({ projectId }) {
           <input type="number" value={form.actual_cost_price} onChange={e => setForm(f => ({ ...f, actual_cost_price: e.target.value }))} placeholder="Actual Cost/Unit" className={addInp} min="0" />
           <input type="number" value={form.selling_price} onChange={e => setForm(f => ({ ...f, selling_price: e.target.value }))} placeholder="Selling Price" className={addInp} min="0" />
           <select value={form.material_status} onChange={e => setForm(f => ({ ...f, material_status: e.target.value }))} className={addInp}>
-            <option value="not_ordered">Not Ordered</option>
-            <option value="ordered">Ordered</option>
-            <option value="received">Received</option>
-            <option value="delivered">Delivered</option>
+            {MATERIAL_STATUS_ORDER.map(key => <option key={key} value={key}>{MATERIAL_STATUS[key].label}</option>)}
           </select>
           <input type="date" value={form.expected_delivery_date} onChange={e => setForm(f => ({ ...f, expected_delivery_date: e.target.value }))} className={addInp} />
           <div className="col-span-2 flex gap-2">
@@ -521,6 +526,7 @@ export default function TabBOM({ projectId }) {
             margin: (() => { const c = effectiveCostUnit(i); const s = Number(i.selling_price) || 0; const m = marginPct(c, s); return m == null ? '—' : (m * 100).toFixed(1) + '%'; })(),
             cost_basis: costBasis(i),
             material_status: MATERIAL_STATUS[resolveMaterialStatus(i)]?.label || 'Not Ordered',
+            qty_ordered_received: `${i.ordered_qty || 0} / ${i.received_qty || i.delivered_qty || 0} of ${i.quantity || 0}`,
             delivered_qty: i.delivered_qty || 0,
             remaining: Math.max(0, (Number(i.quantity) || 0) - (Number(i.delivered_qty) || 0)),
             expected_delivery: i.expected_delivery_date || '',
@@ -534,7 +540,7 @@ export default function TabBOM({ projectId }) {
             { key: 'total_planned', label: 'Total Planned' }, { key: 'total_actual', label: 'Total Actual' },
             { key: 'unit_selling', label: 'Unit Selling' },
             { key: 'total_selling', label: 'Total Selling' }, { key: 'margin', label: 'Margin' }, { key: 'cost_basis', label: 'Cost Basis' },
-            { key: 'material_status', label: 'Material Status' }, { key: 'remaining', label: 'Remaining' },
+            { key: 'material_status', label: 'Material Status' }, { key: 'qty_ordered_received', label: 'Qty Ordered / Received' }, { key: 'remaining', label: 'Remaining' },
             { key: 'expected_delivery', label: 'Expected Delivery' },
           ]}
         >
@@ -707,11 +713,7 @@ export default function TabBOM({ projectId }) {
                                   <td className="px-3 py-2 text-right text-xs font-medium text-emerald-700">{formatCurrency((Number(item.selling_price) || 0) * (Number(item.quantity) || 1), item.currency || 'SAR')}</td>
                                   <td className="px-3 py-2 text-right">{marginPill(item)}</td>
                                   <td className="px-1 py-1">
-                                    <select className={`text-xs px-2 py-1 rounded font-semibold border-0 cursor-pointer ${msMeta.cls}`} value={ms} onChange={e => handleMaterialStatusChange(item, e.target.value)}>
-                                      {Object.entries(MATERIAL_STATUS).map(([key, s]) => <option key={key} value={key}>{s.label}</option>)}
-                                      <option value="partially_received">Partially Received</option>
-                                    </select>
-                                    {msMeta.partial && <span className="text-[10px] text-slate-500 mt-0.5 block">{msMeta.label}</span>}
+                                    <MaterialStatusPill item={item} onCommit={(s, q) => handleMaterialStatusCommit(item, s, q)} />
                                   </td>
                                   <td className="px-1 py-1 text-right">
                                     <span className="text-xs font-semibold text-slate-600">{Math.max(0, (Number(item.quantity) || 0) - (Number(item.delivered_qty) || 0))}</span>
@@ -800,6 +802,7 @@ export default function TabBOM({ projectId }) {
             );
           })()}
         </PanelWrapper>
+        <MaterialStatusLegend className="px-1 py-1" />
         <div className="text-xs text-slate-400 px-1 py-1">A = margin based on actual cost from a purchase order.</div>
         </>
       )}
