@@ -4,6 +4,10 @@ import {
 } from '@/lib/reportExport';
 import { STATUS_LABELS } from '@/lib/constants';
 
+function healthColor(h) {
+  return h === 'green' ? 'green' : h === 'amber' ? 'amber' : 'red';
+}
+
 export default {
   id: 'topManagementPortfolio',
   audience: 'Top Management',
@@ -11,7 +15,7 @@ export default {
   description: 'All projects — total contract value, total margin, count by health status, and portfolio-level risk flags.',
   accent: 'slate',
   isPortfolio: true,
-  contents: ['Total contract value', 'Total margin', 'Count by health status', 'Portfolio-level risk flags'],
+  contents: ['KPI snapshot', 'Portfolio health', 'Margin by project', 'Portfolio summary', 'Health distribution', 'Project margin & health', 'Portfolio risk flags'],
   buildSections(data) {
     const { projects = [], invoices = [], expenses = [], collections = [], risks = [], changeOrders = [] } = data;
 
@@ -40,6 +44,53 @@ export default {
 
     const sections = [];
 
+    // 1. KPI band
+    sections.push({
+      title: 'Portfolio Snapshot',
+      type: 'kpis',
+      cards: [
+        { label: 'Projects', value: String(projects.length), color: 'blue' },
+        { label: 'Total Contract Value', value: formatCurrency(totalContract, 'SAR'), color: 'indigo' },
+        { label: 'Total Collected', value: formatCurrency(totalCollected, 'SAR'), color: 'green' },
+        { label: 'Portfolio Margin %', value: totalMarginPct == null ? '—' : `${totalMarginPct}%`, color: totalMarginPct != null && totalMarginPct >= 10 ? 'green' : 'red' },
+        { label: 'At Risk (Amber+Red)', value: String(healthCounts.amber + healthCounts.red), color: healthCounts.amber + healthCounts.red > 0 ? 'amber' : 'green' },
+      ],
+    });
+
+    // 2. Portfolio health stacked bar
+    sections.push({
+      title: 'Portfolio Health Distribution',
+      type: 'chart',
+      chart: 'stacked',
+      data: {
+        segments: [
+          { label: 'On Track', value: healthCounts.green || 0, color: 'green' },
+          { label: 'At Risk', value: healthCounts.amber || 0, color: 'amber' },
+          { label: 'Critical', value: healthCounts.red || 0, color: 'red' },
+        ],
+      },
+      opts: { h: 6 },
+    });
+
+    // 3. Margin by project as horizontal bars
+    const maxMargin = Math.max(1, ...rows.map(r => Math.abs(r.fin.marginPct || 0)));
+    const marginRows = rows.map(r => ({
+      label: truncate(r.p.name || '—', 30),
+      value: r.fin.marginPct ?? 0,
+      max: maxMargin,
+      color: r.fin.marginPct != null && r.fin.marginPct >= 10 ? 'green' : 'red',
+    })).sort((a, b) => b.value - a.value);
+    if (marginRows.length) {
+      sections.push({
+        title: 'Margin by Project',
+        type: 'chart',
+        chart: 'hbars',
+        data: { rows: marginRows },
+        opts: { labelW: 45, barH: 5, gap: 3 },
+      });
+    }
+
+    // 4. Portfolio summary
     sections.push({
       title: 'Portfolio Summary',
       type: 'summary',
@@ -54,6 +105,7 @@ export default {
       ],
     });
 
+    // 5. Health distribution table
     sections.push({
       title: 'Health Distribution',
       type: 'table',
@@ -69,6 +121,7 @@ export default {
       })),
     });
 
+    // 6. Project margin & health table
     sections.push({
       title: 'Project Margin & Health',
       type: 'table',
@@ -93,26 +146,38 @@ export default {
       }),
     });
 
-    // Portfolio-level risk flags: highest open risk per project
-    sections.push({
-      title: 'Portfolio Risk Flags',
-      type: 'table',
-      columns: [
-        { header: 'Project', key: 'name', width: 0.28 },
-        { header: 'Top Risk', key: 'risk', width: 0.4 },
-        { header: 'Impact', key: 'impact', width: 0.14 },
-        { header: 'Status', key: 'status', width: 0.18 },
-      ],
-      rows: rows.map(r => {
-        const topRisk = [...r.pRisks].filter(x => x.status === 'open').sort((a, b) => (b.risk_score || 0) - (a.risk_score || 0))[0];
-        return {
-          name: truncate(r.p.name || '—', 28),
-          risk: topRisk ? truncate(topRisk.title, 40) : '—',
-          impact: topRisk?.impact || '—',
-          status: topRisk ? (topRisk.status || '—').replace(/_/g, ' ') : '—',
-        };
-      }).filter(r => r.risk !== '—'),
-    });
+    // 7. Portfolio risk flags
+    const riskFlagRows = rows.map(r => {
+      const topRisk = [...r.pRisks].filter(x => x.status === 'open').sort((a, b) => (b.risk_score || 0) - (a.risk_score || 0))[0];
+      return {
+        name: truncate(r.p.name || '—', 28),
+        risk: topRisk ? truncate(topRisk.title, 40) : '—',
+        impact: topRisk?.impact || '—',
+        status: topRisk ? (topRisk.status || '—').replace(/_/g, ' ') : '—',
+      };
+    }).filter(r => r.risk !== '—');
+
+    if (riskFlagRows.length === 0) {
+      sections.push({
+        title: 'Portfolio Risk Flags',
+        type: 'callout',
+        tone: 'good',
+        title: 'No open risks across the portfolio',
+        body: 'There are no open risks recorded for any project.',
+      });
+    } else {
+      sections.push({
+        title: 'Portfolio Risk Flags',
+        type: 'table',
+        columns: [
+          { header: 'Project', key: 'name', width: 0.28 },
+          { header: 'Top Risk', key: 'risk', width: 0.4 },
+          { header: 'Impact', key: 'impact', width: 0.14 },
+          { header: 'Status', key: 'status', width: 0.18 },
+        ],
+        rows: riskFlagRows,
+      });
+    }
 
     return sections;
   },

@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Eye, FileText, Sheet, Loader2, ChevronRight, Check, ListFilter } from 'lucide-react';
 import { exportSectionsPDF, exportSectionsExcel } from '@/lib/reportExport';
+import { useAuth } from '@/lib/AuthContext';
 import PreviewModal from '@/components/reports/PreviewModal';
 
 const ACCENT = {
@@ -16,6 +17,9 @@ export default function BundleCard({ bundle, data, subtitle }) {
   const [preview, setPreview] = useState(false);
   const [showContent, setShowContent] = useState(false);
   const accent = ACCENT[bundle.accent] || ACCENT.slate;
+  const { user } = useAuth();
+  const projectCode = data?.project?.code || '';
+  const generatedBy = user?.full_name || '';
 
   // Build sections once; selection is a Set of indices (default = all on)
   const sections = useMemo(() => bundle.buildSections(data), [bundle, data]);
@@ -42,7 +46,7 @@ export default function BundleCard({ bundle, data, subtitle }) {
 
   async function handlePDF() {
     setBusy('pdf');
-    try { exportSectionsPDF(`${fileBase}.pdf`, bundle.title, chosenSections, { subtitle }); }
+    try { exportSectionsPDF(`${fileBase}.pdf`, bundle.title, chosenSections, { subtitle, projectCode, generatedBy }); }
     finally { setBusy(null); }
   }
   async function handleExcel() {
@@ -154,7 +158,7 @@ export default function BundleCard({ bundle, data, subtitle }) {
       </div>
 
       {preview && (
-        <PreviewModal bundle={bundle} sections={chosenSections} subtitle={subtitle} onClose={() => setPreview(false)} />
+        <PreviewModal bundle={bundle} sections={chosenSections} subtitle={subtitle} projectCode={projectCode} generatedBy={generatedBy} onClose={() => setPreview(false)} />
       )}
     </>
   );

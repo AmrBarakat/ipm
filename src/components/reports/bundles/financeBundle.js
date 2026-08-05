@@ -9,7 +9,7 @@ export default {
   title: 'Financial Report',
   description: 'Money only — contract value vs revised, invoiced/collected/outstanding, expenses vs budget, margin, and cash-flow timing.',
   accent: 'emerald',
-  contents: ['Contract value (original vs revised after change orders)', 'Invoiced vs collected vs outstanding', 'Expenses vs budget', 'Margin', 'Cash-flow timing'],
+  contents: ['KPI snapshot', 'Cumulative cash flow', 'Margin gauge', 'Expenses by category', 'Contract value', 'Invoicing', 'Cash-flow timing'],
   buildSections(data) {
     const { project, invoices = [], expenses = [], collections = [], changeOrders = [] } = data;
     const cur = project?.currency || 'SAR';
@@ -18,6 +18,93 @@ export default {
 
     const sections = [];
 
+    // 1. KPI band
+    sections.push({
+      title: 'Financial Snapshot',
+      type: 'kpis',
+      cards: [
+        { label: 'Revised Contract', value: formatCurrency(rev.revised, cur), color: 'blue' },
+        { label: 'Collected', value: formatCurrency(fin.collected, cur), color: 'green' },
+        { label: 'Spent', value: formatCurrency(fin.spent, cur), color: 'amber' },
+        { label: 'Outstanding', value: formatCurrency(fin.outstanding, cur), color: 'red' },
+        { label: 'Margin %', value: fin.marginPct == null ? '—' : `${fin.marginPct}%`, color: fin.marginPct != null && fin.marginPct >= 10 ? 'green' : 'red' },
+      ],
+    });
+
+    // 2. Cumulative invoiced vs collected vs spent line chart
+    const events = [];
+    (collections || []).forEach(c => events.push({ date: c.received_date, invoiced: 0, collected: Number(c.amount) || 0, spent: 0 }));
+    (invoices || []).forEach(i => {
+      const amt = Number(i.actual_amount) || Number(i.planned_amount) || 0;
+      if (['invoiced', 'paid', 'partial', 'overdue'].includes(i.status)) events.push({ date: i.actual_invoice_date || i.planned_date, invoiced: amt, collected: 0, spent: 0 });
+    });
+    (expenses || []).forEach(e => {
+      const amt = ['committed', 'paid'].includes(e.status) ? (Number(e.actual_amount) || Number(e.planned_amount) || 0) : 0;
+      if (amt > 0) events.push({ date: e.actual_date || e.planned_date, invoiced: 0, collected: 0, spent: amt });
+    });
+    events.sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
+    let cumInv = 0, cumCol = 0, cumSpent = 0;
+    const series = [
+      { name: 'Invoiced', color: 'blue', points: [] },
+      { name: 'Collected', color: 'green', points: [] },
+      { name: 'Spent', color: 'amber', points: [] },
+    ];
+    events.filter(e => e.date).forEach(e => {
+      cumInv += e.invoiced;
+      cumCol += e.collected;
+      cumSpent += e.spent;
+      const d = new Date(e.date).toISOString();
+      series[0].points.push({ date: d, value: cumInv });
+      series[1].points.push({ date: d, value: cumCol });
+      series[2].points.push({ date: d, value: cumSpent });
+    });
+    if (series[0].points.length >= 2) {
+      sections.push({
+        title: 'Cumulative Cash Flow',
+        type: 'chart',
+        chart: 'line',
+        data: { series },
+        opts: { h: 55, estimatedH: 65 },
+      });
+    }
+
+    // 3. Margin gauge
+    if (fin.marginPct != null) {
+      sections.push({
+        title: 'Margin Health',
+        type: 'chart',
+        chart: 'gauge',
+        data: { value: fin.marginPct, thresholds: { green: 10, amber: 20 } },
+        opts: { label: `Net Margin ${formatCurrency(fin.margin, cur)}` },
+      });
+    }
+
+    // 4. Expenses by category as horizontal bars
+    const byCat = {};
+    (expenses || []).forEach(e => {
+      const cat = e.category || 'other';
+      const amt = Number(e.actual_amount) || Number(e.planned_amount) || 0;
+      if (!byCat[cat]) byCat[cat] = 0;
+      byCat[cat] += amt;
+    });
+    const maxCat = Math.max(1, ...Object.values(byCat));
+    const catRows = Object.entries(byCat).map(([cat, amt]) => ({
+      label: cat.charAt(0).toUpperCase() + cat.slice(1),
+      value: amt,
+      max: maxCat,
+      color: 'amber',
+    })).sort((a, b) => b.value - a.value);
+    if (catRows.length) {
+      sections.push({
+        title: 'Expenses by Category',
+        type: 'chart',
+        chart: 'hbars',
+        data: { rows: catRows },
+        opts: { labelW: 35, barH: 5, gap: 3 },
+      });
+    }
+
+    // 5. Contract value summary
     sections.push({
       title: 'Contract Value (Original vs Revised)',
       type: 'summary',
@@ -29,6 +116,7 @@ export default {
       ],
     });
 
+    // 6. Invoicing table
     sections.push({
       title: 'Invoicing',
       type: 'table',
@@ -55,38 +143,16 @@ export default {
       ],
     });
 
-    sections.push({
-      title: 'Expenses vs Budget',
-      type: 'summary',
-      summary: [
-        { label: 'Total Budget (Planned Expenses)', value: formatCurrency(fin.budget, cur) },
-        { label: 'Actual / Committed Expenses', value: formatCurrency(fin.spent, cur) },
-        { label: 'Budget Variance', value: formatCurrency(fin.budget - fin.spent, cur) },
-      ],
-    });
-
-    sections.push({
-      title: 'Margin',
-      type: 'summary',
-      summary: [
-        { label: 'Revised Contract Value', value: formatCurrency(rev.revised, cur) },
-        { label: 'Collected', value: formatCurrency(fin.collected, cur) },
-        { label: 'Spent', value: formatCurrency(fin.spent, cur) },
-        { label: 'Net Margin', value: formatCurrency(fin.margin, cur) },
-        { label: 'Margin %', value: fin.marginPct == null ? '—' : `${fin.marginPct}%` },
-      ],
-    });
-
-    // Cash-flow timeline (collections in, expenses out) sorted by date
-    const events = [];
-    (collections || []).forEach(c => events.push({ date: c.received_date, desc: 'Collection', inflow: Number(c.amount) || 0, outflow: 0 }));
-    (expenses || []).forEach(e => events.push({
+    // 7. Cash-flow timing table
+    const cfEvents = [];
+    (collections || []).forEach(c => cfEvents.push({ date: c.received_date, desc: 'Collection', inflow: Number(c.amount) || 0, outflow: 0 }));
+    (expenses || []).forEach(e => cfEvents.push({
       date: e.actual_date || e.planned_date, desc: truncate(e.description || 'Expense', 30),
       inflow: 0, outflow: (['committed', 'paid'].includes(e.status) ? (Number(e.actual_amount) || Number(e.planned_amount) || 0) : 0),
     }));
-    events.sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
+    cfEvents.sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
     let balance = 0;
-    const cashRows = events.filter(e => e.date).map(e => {
+    const cashRows = cfEvents.filter(e => e.date).map(e => {
       balance += e.inflow - e.outflow;
       return {
         date: formatDate(e.date),
