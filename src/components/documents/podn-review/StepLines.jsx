@@ -1,8 +1,15 @@
 import { Fragment, useState } from 'react';
 import { ChevronDown, ChevronRight, AlertCircle } from 'lucide-react';
-import { confidenceBadge, tierLabel, fmt, fmtPct } from './helpers';
+import { confidenceBadge, tierLabel, fmt, fmtPct, buildNewBomDefaults } from './helpers';
 
 const inp = 'border border-slate-200 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white w-full';
+
+const CATEGORY_OPTIONS = [
+  ['plc', 'PLC'], ['hmi', 'HMI'], ['drive', 'Drive'], ['sensor', 'Sensor'],
+  ['meter', 'Meter'], ['panel', 'Panel'], ['network', 'Network'],
+  ['software_license', 'Software License'], ['service', 'Service'],
+  ['it_hardware', 'IT Hardware'], ['other', 'Other'],
+];
 
 function VerifyBadge() {
   return (
@@ -43,9 +50,24 @@ export default function StepLines({ draft, setDraft, bomItems }) {
   }
 
   function setTarget(idx, value) {
-    if (value === '__create__') updateLine(idx, { bom_item_id: null, _create: true, selected: true });
-    else if (value === '') updateLine(idx, { bom_item_id: null, _create: false, selected: false });
-    else updateLine(idx, { bom_item_id: value, _create: false, selected: true });
+    if (value === '__create__') {
+      const li = draft.lines[idx];
+      updateLine(idx, { bom_item_id: null, _create: true, selected: true, new_bom: buildNewBomDefaults(li, draft) });
+    } else if (value === '') {
+      updateLine(idx, { bom_item_id: null, _create: false, selected: false, new_bom: null });
+    } else {
+      updateLine(idx, { bom_item_id: value, _create: false, selected: true, new_bom: null });
+    }
+  }
+
+  function createAllUnmatched() {
+    setDraft((prev) => ({
+      ...prev,
+      lines: prev.lines.map((li) => {
+        if (li.bom_item_id || li._create) return li;
+        return { ...li, _create: true, selected: true, new_bom: buildNewBomDefaults(li, prev) };
+      }),
+    }));
   }
 
   return (
@@ -60,6 +82,7 @@ export default function StepLines({ draft, setDraft, bomItems }) {
         <button onClick={() => setAllSelected(true)} className="px-2.5 py-1 border border-slate-200 rounded hover:bg-slate-100 text-slate-600">Select all</button>
         <button onClick={() => setAllSelected(false)} className="px-2.5 py-1 border border-slate-200 rounded hover:bg-slate-100 text-slate-600">Select none</button>
         <button onClick={selectHighConfidence} className="px-2.5 py-1 border border-slate-200 rounded hover:bg-slate-100 text-slate-600">Only high-confidence</button>
+        <button onClick={createAllUnmatched} className="px-2.5 py-1 border border-emerald-300 rounded hover:bg-emerald-50 text-emerald-700 font-medium">Create all unmatched as new</button>
       </div>
 
       <div className="border border-slate-200 rounded-lg overflow-hidden">
@@ -118,6 +141,7 @@ export default function StepLines({ draft, setDraft, bomItems }) {
                       <td className="px-2 py-1.5">
                         <select value={li._create ? '__create__' : (li.bom_item_id || '')} onChange={(e) => setTarget(idx, e.target.value)} className={inp}>
                           <option value="">— Skip this line —</option>
+                          <option value="__create__">+ Create new BOM item from this line</option>
                           {li.candidates && li.candidates.length > 0 && (
                             <optgroup label="Candidates">
                               {li.candidates.map((c) => {
@@ -127,10 +151,9 @@ export default function StepLines({ draft, setDraft, bomItems }) {
                             </optgroup>
                           )}
                           <optgroup label="All BOM items">
-                            {bomItems.map((b) => <option key={b.id} value={b.id}>{(b.manufacturer_part_number || b.item_code || '?')} — {(b.description || '').slice(0, 50)}</option>)}
-                          </optgroup>
-                          <option value="__create__">Create new BOM item from this line</option>
-                        </select>
+                             {bomItems.map((b) => <option key={b.id} value={b.id}>{(b.manufacturer_part_number || b.item_code || '?')} — {(b.description || '').slice(0, 50)}</option>)}
+                           </optgroup>
+                          </select>
                       </td>
                       <td className="px-2 py-1.5">
                         <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${badge.cls}`} title={tierLabel(li.match_tier)}>{badge.label}</span>
@@ -142,6 +165,13 @@ export default function StepLines({ draft, setDraft, bomItems }) {
                         </button>
                       </td>
                     </tr>
+                    {li._create && (
+                      <tr className="border-t border-slate-100 bg-emerald-50/30">
+                        <td colSpan={14} className="px-4 py-2 text-xs border-l-4 border-emerald-400">
+                          <NewBomItemPanel li={li} idx={idx} updateLine={updateLine} />
+                        </td>
+                      </tr>
+                    )}
                     {isExpanded && bom && (
                       <tr className="border-t border-slate-100 bg-slate-50">
                         <td colSpan={14} className="px-4 py-2 text-xs">
@@ -156,6 +186,64 @@ export default function StepLines({ draft, setDraft, bomItems }) {
           </table>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Inline editor for a new BOM item when a line's target is __create__. */
+function NewBomItemPanel({ li, idx, updateLine }) {
+  const nb = li.new_bom || {};
+
+  function updateField(field, value) {
+    updateLine(idx, { new_bom: { ...nb, [field]: value } });
+  }
+
+  function handlePricingBlur() {
+    const cost = Number(nb.planned_cost_price) || 0;
+    updateField('selling_price', +(cost * 1.37).toFixed(2));
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="font-semibold text-emerald-700">New BOM item</div>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+        <label className="text-slate-500 col-span-2">Description
+          <input value={nb.description || ''} onChange={(e) => updateField('description', e.target.value)} className={inp} />
+        </label>
+        <label className="text-slate-500">Manufacturer part #
+          <input value={nb.manufacturer_part_number || ''} onChange={(e) => updateField('manufacturer_part_number', e.target.value)} className={inp} />
+        </label>
+        <label className="text-slate-500">ERP item code
+          <input value={nb.erp_item_code || ''} onChange={(e) => updateField('erp_item_code', e.target.value)} className={inp} />
+        </label>
+        <label className="text-slate-500">Item code
+          <input value={nb.item_code || ''} onChange={(e) => updateField('item_code', e.target.value)} className={inp} />
+        </label>
+        <label className="text-slate-500">Category
+          <select value={nb.category || 'other'} onChange={(e) => updateField('category', e.target.value)} className={inp}>
+            {CATEGORY_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+        </label>
+        <label className="text-slate-500">Unit
+          <input value={nb.unit || ''} onChange={(e) => updateField('unit', e.target.value)} className={inp} />
+        </label>
+        <label className="text-slate-500">Quantity
+          <input type="number" step="any" value={nb.quantity ?? ''} onChange={(e) => updateField('quantity', e.target.value === '' ? null : Number(e.target.value))} className={inp} />
+        </label>
+        <label className="text-slate-500">Planned cost price
+          <input type="number" step="any" value={nb.planned_cost_price ?? ''} onChange={(e) => updateField('planned_cost_price', e.target.value === '' ? null : Number(e.target.value))} onBlur={handlePricingBlur} className={inp} />
+        </label>
+        <label className="text-slate-500">Selling price
+          <input type="number" step="any" value={nb.selling_price ?? ''} onChange={(e) => updateField('selling_price', e.target.value === '' ? null : Number(e.target.value))} className={inp} />
+        </label>
+        <label className="text-slate-500">Supplier
+          <input value={nb.supplier || ''} onChange={(e) => updateField('supplier', e.target.value)} className={inp} />
+        </label>
+        <label className="text-slate-500 col-span-2">Notes
+          <input value={nb.notes || ''} onChange={(e) => updateField('notes', e.target.value)} className={inp} />
+        </label>
+      </div>
+      <div className="text-[10px] text-slate-400">Planned cost defaults to the PO price, so this item will show zero cost variance. Change it if you had a different plan.</div>
     </div>
   );
 }

@@ -273,15 +273,22 @@ Deno.serve(async (req) => {
       const createNew = li.create_new_bom || li._create;
 
       if (createNew) {
-        // create a BOMItem, then treat as matched
+        // create a BOMItem from li.new_bom (edited in the review modal), then treat as matched
+        const nb = li.new_bom || {};
         const created = await base44.asServiceRole.entities.BOMItem.create({
           project_id,
-          description: li.description || '',
+          description: nb.description || li.description || '',
           erp_item_code: li.erp_item_code || '',
-          manufacturer_part_number: li.part_number || '',
-          quantity: Number(li.qty) || 0,
-          unit: li.uom || 'pcs',
-          category: 'other',
+          manufacturer_part_number: nb.manufacturer_part_number || li.part_number || '',
+          item_code: nb.item_code || '',
+          category: nb.category || 'other',
+          unit: nb.unit || li.uom || 'pcs',
+          quantity: Number(nb.quantity ?? li.qty) || 0,
+          planned_cost_price: Number(nb.planned_cost_price ?? li.unit_price) || 0,
+          cost_price: Number(nb.planned_cost_price ?? li.unit_price) || 0,
+          selling_price: Number(nb.selling_price) || 0,
+          supplier: nb.supplier || vendor_name || '',
+          notes: nb.notes || `Created from ${po_number}`,
           ordered_qty: Number(li.qty) || 0,
           po_unit_price: Number(li.unit_price) || 0,
           po_line_net_amount: Number(li.net_amount) || 0,
@@ -301,8 +308,8 @@ Deno.serve(async (req) => {
           entity_id: created.id,
           action: 'updated',
           actor,
-          summary: `Created & marked ordered per ${po_number}`,
-          metadata: { source_document: po_number, match_tier: li.match_tier || 'none', unit_price: Number(li.unit_price) || 0, ordered_qty: Number(li.qty) || 0 },
+          summary: `Created from ${po_number} line ${li.line_no ?? '?'} & marked ordered`,
+          metadata: { source_document: po_number, match_tier: li.match_tier || 'none', unit_price: Number(li.unit_price) || 0, ordered_qty: Number(li.qty) || 0, created_from_po: true },
         });
         refs.push({ entity_type: 'BOMItem', entity_id: created.id, action: 'created', before: {}, applied_updated_date: created?.updated_date });
         return { bom: created, bomId: created.id, li, appliedStatus: 'Ordered' };

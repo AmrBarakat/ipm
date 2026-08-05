@@ -215,7 +215,38 @@ export function liveSummary(draft) {
   if (draft.vendor?.name) parts.push('1 vendor');
   if (draft.po?.createToggle) parts.push('1 PO');
   const sel = draft.lines.filter((l) => l.selected).length;
-  parts.push(`${sel} BOM line${sel !== 1 ? 's' : ''}`);
+  const created = draft.lines.filter((l) => l.selected && l._create).length;
+  const updated = sel - created;
+  if (created > 0) {
+    parts.push(`${updated} BOM line${updated !== 1 ? 's' : ''} updated, ${created} new BOM item${created !== 1 ? 's' : ''}`);
+  } else {
+    parts.push(`${sel} BOM line${sel !== 1 ? 's' : ''}`);
+  }
   if (draft.expense?.createToggle) parts.push('1 expense');
   return parts.join(', ');
+}
+
+/** Strips a leading [ES.xxx] bracket prefix so the BOM gets a clean description. */
+export function stripBracketPrefix(desc) {
+  return String(desc || '').replace(/^\s*\[[^\]]*\]\s*/, '').trim();
+}
+
+/** Builds the default new_bom fields for a line entering __create__ mode. */
+export function buildNewBomDefaults(li, draft) {
+  const poNumber = draft?.po?.po_number || '';
+  const vendorName = draft?.vendor?.name || '';
+  const unitPrice = Number(li.unit_price) || 0;
+  return {
+    description: stripBracketPrefix(li.description),
+    manufacturer_part_number: li.part_number || '',
+    erp_item_code: li.erp_item_code || '',
+    item_code: '',
+    category: 'other',
+    unit: li.uom || 'pcs',
+    quantity: Number(li.qty) || 0,
+    planned_cost_price: unitPrice,
+    selling_price: +(unitPrice * 1.37).toFixed(2),
+    supplier: vendorName,
+    notes: poNumber ? `Created from ${poNumber} line ${li.line_no ?? '?'}` : '',
+  };
 }
