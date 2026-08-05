@@ -2,7 +2,14 @@ import { Fragment, useState } from 'react';
 import { ChevronDown, ChevronRight, AlertCircle } from 'lucide-react';
 import { confidenceBadge, tierLabel, fmt, fmtPct, buildNewBomDefaults } from './helpers';
 
-const inp = 'border border-slate-200 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white w-full';
+const inpBase = 'border border-slate-200 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white';
+const inpErp = inpBase + ' w-24';
+const inpPart = inpBase + ' w-40';
+const inpDesc = inpBase + ' w-[380px]';
+const inpUom = inpBase + ' w-16';
+const inpQty = inpBase + ' w-24 text-right';
+const inpPrice = inpBase + ' w-28 text-right';
+const inpSelect = inpBase + ' w-[260px]';
 
 const CATEGORY_OPTIONS = [
   ['plc', 'PLC'], ['hmi', 'HMI'], ['drive', 'Drive'], ['sensor', 'Sensor'],
@@ -86,24 +93,29 @@ export default function StepLines({ draft, setDraft, bomItems }) {
       </div>
 
       <div className="border border-slate-200 rounded-lg overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead className="bg-slate-100 text-slate-500">
+        <style>{`
+          .podn-lines input[type=number] { -moz-appearance: textfield; }
+          .podn-lines input[type=number]::-webkit-outer-spin-button,
+          .podn-lines input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        `}</style>
+        <div className="overflow-x-auto podn-lines">
+          <table className="min-w-max text-xs border-collapse">
+            <thead className="sticky top-0 z-10 text-slate-500">
               <tr>
-                <th className="px-2 py-2 w-8"></th>
-                <th className="px-2 py-2 text-left">Line</th>
-                <th className="px-2 py-2 text-left">ERP code</th>
-                <th className="px-2 py-2 text-left">Part #</th>
-                <th className="px-2 py-2 text-left min-w-[200px]">Description</th>
-                <th className="px-2 py-2 text-left">UOM</th>
-                <th className="px-2 py-2 text-right">Qty</th>
-                <th className="px-2 py-2 text-right">Unit price</th>
-                <th className="px-2 py-2 text-right">Net amount</th>
-                <th className="px-2 py-2 text-right">Quoted</th>
-                <th className="px-2 py-2 text-right">Var %</th>
-                <th className="px-2 py-2 text-left min-w-[200px]">Matched BOM row</th>
-                <th className="px-2 py-2 text-left">Confidence</th>
-                <th className="px-2 py-2 text-left">Action</th>
+                <th className="px-2 py-2 w-8 sticky left-0 bg-slate-100 z-20"></th>
+                <th className="px-2 py-2 text-left whitespace-nowrap sticky left-8 bg-slate-100 z-20">Line</th>
+                <th className="px-2 py-2 text-left whitespace-nowrap bg-slate-100">ERP code</th>
+                <th className="px-2 py-2 text-left whitespace-nowrap bg-slate-100">Part #</th>
+                <th className="px-2 py-2 text-left whitespace-nowrap bg-slate-100">Description</th>
+                <th className="px-2 py-2 text-left whitespace-nowrap bg-slate-100">UOM</th>
+                <th className="px-2 py-2 text-right whitespace-nowrap bg-slate-100">Qty</th>
+                <th className="px-2 py-2 text-right whitespace-nowrap bg-slate-100">Unit price</th>
+                <th className="px-2 py-2 text-right whitespace-nowrap bg-slate-100">Net amount</th>
+                <th className="px-2 py-2 text-right whitespace-nowrap bg-slate-100">Quoted</th>
+                <th className="px-2 py-2 text-right whitespace-nowrap bg-slate-100">Var %</th>
+                <th className="px-2 py-2 text-left whitespace-nowrap bg-slate-100">Matched BOM row</th>
+                <th className="px-2 py-2 text-left whitespace-nowrap bg-slate-100">Confidence</th>
+                <th className="px-2 py-2 text-left whitespace-nowrap bg-slate-100">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -114,24 +126,25 @@ export default function StepLines({ draft, setDraft, bomItems }) {
                 const sel = li.selected;
                 const variance = li.price_variance_pct;
                 const varianceComparable = li.variance_comparable !== false && li.quoted_unit_price != null;
+                const rowBg = li.ocr_uncertain ? 'bg-amber-50' : (!sel ? 'bg-amber-50/40' : 'bg-white');
                 return (
                   <Fragment key={idx}>
-                    <tr className={`border-t border-slate-100 ${!sel ? 'bg-amber-50/40' : ''} ${li.ocr_uncertain ? 'bg-amber-50' : ''}`}>
-                      <td className="px-2 py-1.5 text-center">
+                    <tr className={`border-t border-slate-100 ${rowBg}`}>
+                      <td className="px-2 py-1.5 text-center sticky left-0 z-10" style={{ backgroundColor: 'inherit' }}>
                         <input type="checkbox" checked={!!sel} onChange={(e) => updateLine(idx, { selected: e.target.checked })} className="w-3.5 h-3.5 accent-amber-500" />
                       </td>
-                      <td className="px-2 py-1.5 text-slate-500">{li.line_no ?? idx + 1}
+                      <td className="px-2 py-1.5 text-slate-500 whitespace-nowrap sticky left-8 z-10" style={{ backgroundColor: 'inherit' }}>{li.line_no ?? idx + 1}
                         {li.ocr_uncertain && <div className="mt-0.5"><VerifyBadge /></div>}
                       </td>
-                      <td className="px-2 py-1.5"><input value={li.erp_item_code || ''} onChange={(e) => updateLine(idx, { erp_item_code: e.target.value })} className={inp} /></td>
-                      <td className="px-2 py-1.5"><input value={li.part_number || ''} onChange={(e) => updateLine(idx, { part_number: e.target.value })} className={inp} /></td>
-                      <td className="px-2 py-1.5"><input value={li.description || ''} onChange={(e) => updateLine(idx, { description: e.target.value })} className={inp} /></td>
-                      <td className="px-2 py-1.5"><input value={li.uom || ''} onChange={(e) => updateLine(idx, { uom: e.target.value })} className={inp + ' w-16'} /></td>
-                      <td className="px-2 py-1.5 text-right"><input type="number" step="any" value={li.qty ?? ''} onChange={(e) => updateLine(idx, { qty: e.target.value === '' ? null : Number(e.target.value) })} className={inp + ' w-20 text-right'} /></td>
-                      <td className="px-2 py-1.5 text-right"><input type="number" step="any" value={li.unit_price ?? ''} onChange={(e) => updateLine(idx, { unit_price: e.target.value === '' ? null : Number(e.target.value) })} className={inp + ' w-24 text-right'} /></td>
-                      <td className="px-2 py-1.5 text-right font-medium text-slate-700">{fmt(li.net_amount, '')}</td>
-                      <td className="px-2 py-1.5 text-right text-slate-500">{li.quoted_unit_price != null ? fmt(li.quoted_unit_price, '') : ''}</td>
-                      <td className="px-2 py-1.5 text-right">
+                      <td className="px-2 py-1.5"><input value={li.erp_item_code || ''} onChange={(e) => updateLine(idx, { erp_item_code: e.target.value })} className={inpErp} /></td>
+                      <td className="px-2 py-1.5"><input value={li.part_number || ''} onChange={(e) => updateLine(idx, { part_number: e.target.value })} className={inpPart} /></td>
+                      <td className="px-2 py-1.5"><input value={li.description || ''} onChange={(e) => updateLine(idx, { description: e.target.value })} className={inpDesc} /></td>
+                      <td className="px-2 py-1.5"><input value={li.uom || ''} onChange={(e) => updateLine(idx, { uom: e.target.value })} className={inpUom} /></td>
+                      <td className="px-2 py-1.5 text-right"><input type="number" step="any" value={li.qty ?? ''} onChange={(e) => updateLine(idx, { qty: e.target.value === '' ? null : Number(e.target.value) })} className={inpQty} /></td>
+                      <td className="px-2 py-1.5 text-right"><input type="number" step="any" value={li.unit_price ?? ''} onChange={(e) => updateLine(idx, { unit_price: e.target.value === '' ? null : Number(e.target.value) })} className={inpPrice} /></td>
+                      <td className="px-2 py-1.5 text-right font-medium text-slate-700 whitespace-nowrap">{fmt(li.net_amount, '')}</td>
+                      <td className="px-2 py-1.5 text-right text-slate-500 whitespace-nowrap">{li.quoted_unit_price != null ? fmt(li.quoted_unit_price, '') : ''}</td>
+                      <td className="px-2 py-1.5 text-right whitespace-nowrap">
                         {li.quoted_unit_price != null ? (
                           <span className={`font-semibold ${!varianceComparable ? 'text-slate-300' : variance < 0 ? 'text-emerald-600' : variance > 0 ? 'text-red-600' : 'text-slate-500'}`} title={!varianceComparable ? 'Quotation figures include tax — not comparable' : undefined}>
                             {varianceComparable ? fmtPct(variance) : 'n/a'}
@@ -139,7 +152,7 @@ export default function StepLines({ draft, setDraft, bomItems }) {
                         ) : ''}
                       </td>
                       <td className="px-2 py-1.5">
-                        <select value={li._create ? '__create__' : (li.bom_item_id || '')} onChange={(e) => setTarget(idx, e.target.value)} className={inp}>
+                        <select value={li._create ? '__create__' : (li.bom_item_id || '')} onChange={(e) => setTarget(idx, e.target.value)} className={inpSelect}>
                           <option value="">— Skip this line —</option>
                           <option value="__create__">+ Create new BOM item from this line</option>
                           {li.candidates && li.candidates.length > 0 && (
@@ -153,9 +166,9 @@ export default function StepLines({ draft, setDraft, bomItems }) {
                           <optgroup label="All BOM items">
                              {bomItems.map((b) => <option key={b.id} value={b.id}>{(b.manufacturer_part_number || b.item_code || '?')} — {(b.description || '').slice(0, 50)}</option>)}
                            </optgroup>
-                          </select>
+                        </select>
                       </td>
-                      <td className="px-2 py-1.5">
+                      <td className="px-2 py-1.5 whitespace-nowrap">
                         <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${badge.cls}`} title={tierLabel(li.match_tier)}>{badge.label}</span>
                         <span className="block text-[10px] text-slate-400 mt-0.5">{tierLabel(li.match_tier)}</span>
                       </td>
@@ -203,44 +216,46 @@ function NewBomItemPanel({ li, idx, updateLine }) {
     updateField('selling_price', +(cost * 1.37).toFixed(2));
   }
 
+  const inpFull = inpBase + ' w-full';
+
   return (
     <div className="space-y-2">
       <div className="font-semibold text-emerald-700">New BOM item</div>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
         <label className="text-slate-500 col-span-2">Description
-          <input value={nb.description || ''} onChange={(e) => updateField('description', e.target.value)} className={inp} />
+          <input value={nb.description || ''} onChange={(e) => updateField('description', e.target.value)} className={inpFull} />
         </label>
         <label className="text-slate-500">Manufacturer part #
-          <input value={nb.manufacturer_part_number || ''} onChange={(e) => updateField('manufacturer_part_number', e.target.value)} className={inp} />
+          <input value={nb.manufacturer_part_number || ''} onChange={(e) => updateField('manufacturer_part_number', e.target.value)} className={inpFull} />
         </label>
         <label className="text-slate-500">ERP item code
-          <input value={nb.erp_item_code || ''} onChange={(e) => updateField('erp_item_code', e.target.value)} className={inp} />
+          <input value={nb.erp_item_code || ''} onChange={(e) => updateField('erp_item_code', e.target.value)} className={inpFull} />
         </label>
         <label className="text-slate-500">Item code
-          <input value={nb.item_code || ''} onChange={(e) => updateField('item_code', e.target.value)} className={inp} />
+          <input value={nb.item_code || ''} onChange={(e) => updateField('item_code', e.target.value)} className={inpFull} />
         </label>
         <label className="text-slate-500">Category
-          <select value={nb.category || 'other'} onChange={(e) => updateField('category', e.target.value)} className={inp}>
+          <select value={nb.category || 'other'} onChange={(e) => updateField('category', e.target.value)} className={inpFull}>
             {CATEGORY_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </label>
         <label className="text-slate-500">Unit
-          <input value={nb.unit || ''} onChange={(e) => updateField('unit', e.target.value)} className={inp} />
+          <input value={nb.unit || ''} onChange={(e) => updateField('unit', e.target.value)} className={inpFull} />
         </label>
         <label className="text-slate-500">Quantity
-          <input type="number" step="any" value={nb.quantity ?? ''} onChange={(e) => updateField('quantity', e.target.value === '' ? null : Number(e.target.value))} className={inp} />
+          <input type="number" step="any" value={nb.quantity ?? ''} onChange={(e) => updateField('quantity', e.target.value === '' ? null : Number(e.target.value))} className={inpFull} />
         </label>
         <label className="text-slate-500">Planned cost price
-          <input type="number" step="any" value={nb.planned_cost_price ?? ''} onChange={(e) => updateField('planned_cost_price', e.target.value === '' ? null : Number(e.target.value))} onBlur={handlePricingBlur} className={inp} />
+          <input type="number" step="any" value={nb.planned_cost_price ?? ''} onChange={(e) => updateField('planned_cost_price', e.target.value === '' ? null : Number(e.target.value))} onBlur={handlePricingBlur} className={inpFull} />
         </label>
         <label className="text-slate-500">Selling price
-          <input type="number" step="any" value={nb.selling_price ?? ''} onChange={(e) => updateField('selling_price', e.target.value === '' ? null : Number(e.target.value))} className={inp} />
+          <input type="number" step="any" value={nb.selling_price ?? ''} onChange={(e) => updateField('selling_price', e.target.value === '' ? null : Number(e.target.value))} className={inpFull} />
         </label>
         <label className="text-slate-500">Supplier
-          <input value={nb.supplier || ''} onChange={(e) => updateField('supplier', e.target.value)} className={inp} />
+          <input value={nb.supplier || ''} onChange={(e) => updateField('supplier', e.target.value)} className={inpFull} />
         </label>
         <label className="text-slate-500 col-span-2">Notes
-          <input value={nb.notes || ''} onChange={(e) => updateField('notes', e.target.value)} className={inp} />
+          <input value={nb.notes || ''} onChange={(e) => updateField('notes', e.target.value)} className={inpFull} />
         </label>
       </div>
       <div className="text-[10px] text-slate-400">Planned cost defaults to the PO price, so this item will show zero cost variance. Change it if you had a different plan.</div>
