@@ -13,6 +13,7 @@ import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { Can } from '@/lib/can';
 import PanelCompositionView from '@/components/project-detail/PanelCompositionView';
 import VendorLookup from '@/components/project-detail/VendorLookup';
+import { effectiveCostUnit, marginPct, costBasis } from '@/lib/margin';
 
 const DELIVERY_COLORS = {
   not_delivered: 'bg-slate-100 text-slate-600',
@@ -32,13 +33,23 @@ function deliveryLabel(ds) {
   return ds === 'delivered' ? 'Delivered' : ds === 'partially_delivered' ? 'Partial' : 'Not Del.';
 }
 
-/** Margin pill: emerald ≥25%, amber 10–25%, red <10%; "—" when planned is 0/missing. */
-function marginPill(plannedUnit, sellUnit) {
-  if (!plannedUnit || plannedUnit === 0) return <span className="text-slate-300">—</span>;
-  const m = (sellUnit - plannedUnit) / plannedUnit;
+/** Margin pill: emerald ≥25%, amber 10–25%, red <10%; "—" when cost is 0/missing.
+ *  Uses effectiveCostUnit (actual cost where known, else planned) and the shared
+ *  marginPct so the pill matches the Excel export and respects MARKUP_MODE. */
+function marginPill(item) {
+  const cost = effectiveCostUnit(item);
+  const sell = Number(item.selling_price) || 0;
+  const m = marginPct(cost, sell);
+  if (m == null) return <span className="text-slate-300">—</span>;
+  const basis = costBasis(item);
   const pct = (m * 100).toFixed(1) + '%';
   const cls = m >= 0.25 ? 'bg-emerald-100 text-emerald-700' : m >= 0.10 ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-700';
-  return <span className={`px-2 py-0.5 rounded text-xs font-semibold ${cls}`}>{pct}</span>;
+  return (
+    <span className={`px-2 py-0.5 rounded text-xs font-semibold ${cls}`} title={`Based on ${basis} cost ${cost.toFixed(2)}`}>
+      {pct}
+      {basis === 'actual' && <sup className="ml-0.5 text-[9px] opacity-70">A</sup>}
+    </span>
+  );
 }
 
 const ORDER_COLORS = {
@@ -83,9 +94,10 @@ export default function TabBOM({ projectId }) {
   const [filterOrderStatus, setFilterOrderStatus] = useState('');
   const [filterDelivery, setFilterDelivery] = useState('');
   const [filterSupplier, setFilterSupplier] = useState('');
+  const [filterCostBasis, setFilterCostBasis] = useState('');
 
   // Clear selection when filters change
-  useEffect(() => { setSelectedIds(new Set()); }, [filterCategory, filterOrderStatus, filterDelivery, filterSupplier]);
+  useEffect(() => { setSelectedIds(new Set()); }, [filterCategory, filterOrderStatus, filterDelivery, filterSupplier, filterCostBasis]);
 
   // Seed the editable grid from the cached query; inline edits stay local
   // and are reconciled when create/delete/bulk ops invalidate the query.
@@ -137,7 +149,9 @@ export default function TabBOM({ projectId }) {
       const net = lp * (1 - disc);
       const cost = net * (1 + trans);
       updated.planned_cost_price = cost;
-      updated.actual_cost_price = cost;
+      // Never overwrite an actual_cost_price that was set by a purchase order —
+      // only seed it when none exists yet.
+      if (!(Number(item.actual_cost_price) > 0)) updated.actual_cost_price = cost;
       updated.selling_price = cost * (1 + marg);
     }
     setItems(prev => prev.map(i => i.id === item.id ? updated : i));
@@ -270,14 +284,18 @@ export default function TabBOM({ projectId }) {
     if (filterOrderStatus && os !== filterOrderStatus) return false;
     if (filterDelivery && item.delivery_status !== filterDelivery) return false;
     if (filterSupplier && item.supplier !== filterSupplier) return false;
+    if (filterCostBasis === 'actual' && !(Number(item.actual_cost_price) > 0)) return false;
+    if (filterCostBasis === 'planned' && Number(item.actual_cost_price) > 0) return false;
     return true;
-  }), [allTopLevel, filterCategory, filterOrderStatus, filterDelivery, filterSupplier]);
+  }), [allTopLevel, filterCategory, filterOrderStatus, filterDelivery, filterSupplier, filterCostBasis]);
 
   // Dashboard KPIs — totals based on top-level items (panels + aggregated standalone)
   const totalItems = allTopLevel.length;
   const totalPlannedCost = allTopLevel.reduce((s, i) => s + (Number(i.planned_cost_price) || Number(i.cost_price) || 0) * (Number(i.quantity) || 1), 0);
   const totalActualCost = allTopLevel.reduce((s, i) => s + (Number(i.actual_cost_price) || 0) * (Number(i.quantity) || 1), 0);
   const totalSell = allTopLevel.reduce((s, i) => s + (Number(i.selling_price) || 0) * (Number(i.quantity) || 1), 0);
+  const totalEffectiveCost = allTopLevel.reduce((s, i) => s + effectiveCostUnit(i) * (Number(i.quantity) || 1), 0);
+  const overallMargin = marginPct(totalEffectiveCost, totalSell);
   // Procurement status KPIs: top-level, non-service items only (exclude panel
   // children and category 'service') so counts reconcile with the table.
   const procurementKpiItems = allTopLevel.filter(i => i.category !== 'service');
@@ -290,10 +308,11 @@ export default function TabBOM({ projectId }) {
     const map = {};
     allTopLevel.forEach(i => {
       const cat = i.category || 'other';
-      if (!map[cat]) map[cat] = { count: 0, plannedCost: 0, actualCost: 0, sellValue: 0 };
+      if (!map[cat]) map[cat] = { count: 0, plannedCost: 0, actualCost: 0, sellValue: 0, effectiveCost: 0 };
       map[cat].count++;
       map[cat].plannedCost += (Number(i.planned_cost_price) || Number(i.cost_price) || 0) * (Number(i.quantity) || 1);
       map[cat].actualCost += (Number(i.actual_cost_price) || 0) * (Number(i.quantity) || 1);
+      map[cat].effectiveCost += effectiveCostUnit(i) * (Number(i.quantity) || 1);
       map[cat].sellValue += (Number(i.selling_price) || 0) * (Number(i.quantity) || 1);
     });
     return Object.entries(map).sort((a, b) => b[1].plannedCost - a[1].plannedCost);
@@ -303,10 +322,11 @@ export default function TabBOM({ projectId }) {
     const map = {};
     allTopLevel.forEach(i => {
       const sup = i.supplier || '(No Supplier)';
-      if (!map[sup]) map[sup] = { count: 0, plannedCost: 0, actualCost: 0, sellValue: 0 };
+      if (!map[sup]) map[sup] = { count: 0, plannedCost: 0, actualCost: 0, sellValue: 0, effectiveCost: 0 };
       map[sup].count++;
       map[sup].plannedCost += (Number(i.planned_cost_price) || Number(i.cost_price) || 0) * (Number(i.quantity) || 1);
       map[sup].actualCost += (Number(i.actual_cost_price) || 0) * (Number(i.quantity) || 1);
+      map[sup].effectiveCost += effectiveCostUnit(i) * (Number(i.quantity) || 1);
       map[sup].sellValue += (Number(i.selling_price) || 0) * (Number(i.quantity) || 1);
     });
     return Object.entries(map).sort((a, b) => b[1].plannedCost - a[1].plannedCost);
@@ -329,6 +349,7 @@ export default function TabBOM({ projectId }) {
         <KpiCard label="Not Ordered" value={notOrderedCount} icon={<ShoppingCart className="w-5 h-5" />} color="border-slate-400" />
         <KpiCard label="Delivered" value={deliveredCount} icon={<CheckCircle className="w-5 h-5" />} color="border-emerald-400" />
         <KpiCard label="Pending Delivery" value={pendingDelivery} icon={<Clock className="w-5 h-5" />} color="border-amber-400" />
+        <KpiCard label="Margin (actual where known)" value={overallMargin != null ? (overallMargin * 100).toFixed(1) + '%' : '—'} icon={<TrendingUp className="w-5 h-5" />} color="border-emerald-400" />
       </div>
 
       {/* Toolbar */}
@@ -360,8 +381,13 @@ export default function TabBOM({ projectId }) {
               {suppliers.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           )}
-          {(filterCategory || filterOrderStatus || filterDelivery || filterSupplier) && (
-            <button onClick={() => { setFilterCategory(''); setFilterOrderStatus(''); setFilterDelivery(''); setFilterSupplier(''); }}
+          <select value={filterCostBasis} onChange={e => setFilterCostBasis(e.target.value)} className={selCls}>
+            <option value="">All Cost Basis</option>
+            <option value="actual">Actual cost known</option>
+            <option value="planned">Planned only</option>
+          </select>
+          {(filterCategory || filterOrderStatus || filterDelivery || filterSupplier || filterCostBasis) && (
+            <button onClick={() => { setFilterCategory(''); setFilterOrderStatus(''); setFilterDelivery(''); setFilterSupplier(''); setFilterCostBasis(''); }}
               className="text-xs text-slate-500 hover:text-red-500 underline">Clear</button>
           )}
         </div>
@@ -481,6 +507,7 @@ export default function TabBOM({ projectId }) {
           ]}
         />
       ) : (
+        <>
         <PanelWrapper title="Bill of Materials"
           exportData={filtered.map(i => ({
             description: i.description,
@@ -496,7 +523,8 @@ export default function TabBOM({ projectId }) {
             total_actual: (Number(i.actual_cost_price) || 0) * (Number(i.quantity) || 1),
             unit_selling: Number(i.selling_price) || 0,
             total_selling: (Number(i.selling_price) || 0) * (Number(i.quantity) || 1),
-            margin: (() => { const p = Number(i.planned_cost_price) || Number(i.cost_price) || 0; const s = Number(i.selling_price) || 0; if (!p) return '—'; return (((s - p) / p) * 100).toFixed(1) + '%'; })(),
+            margin: (() => { const c = effectiveCostUnit(i); const s = Number(i.selling_price) || 0; const m = marginPct(c, s); return m == null ? '—' : (m * 100).toFixed(1) + '%'; })(),
+            cost_basis: costBasis(i),
             order_status: i.order_status || (i.ordered ? 'ordered' : 'not_ordered'),
             delivery_status: i.delivery_status || 'not_delivered',
             delivered_qty: i.delivered_qty || 0,
@@ -511,7 +539,7 @@ export default function TabBOM({ projectId }) {
             { key: 'planned_cost_unit', label: 'Planned Cost/Unit' }, { key: 'actual_cost_unit', label: 'Actual Cost/Unit' },
             { key: 'total_planned', label: 'Total Planned' }, { key: 'total_actual', label: 'Total Actual' },
             { key: 'unit_selling', label: 'Unit Selling' },
-            { key: 'total_selling', label: 'Total Selling' }, { key: 'margin', label: 'Margin' },
+            { key: 'total_selling', label: 'Total Selling' }, { key: 'margin', label: 'Margin' }, { key: 'cost_basis', label: 'Cost Basis' },
             { key: 'order_status', label: 'Order Status' }, { key: 'delivery_status', label: 'Delivery' }, { key: 'remaining', label: 'Remaining' },
             { key: 'expected_delivery', label: 'Expected Delivery' },
           ]}
@@ -683,7 +711,7 @@ export default function TabBOM({ projectId }) {
                                     <input type="number" className={inp + ' text-right'} style={{ width: 90 }} value={item.selling_price ?? 0} onChange={e => updateField(item.id, 'selling_price', e.target.value)} onBlur={e => handleBlur(item, 'selling_price', e.target.value)} min="0" placeholder="0" />
                                   </td>
                                   <td className="px-3 py-2 text-right text-xs font-medium text-emerald-700">{formatCurrency((Number(item.selling_price) || 0) * (Number(item.quantity) || 1), item.currency || 'SAR')}</td>
-                                  <td className="px-3 py-2 text-right">{marginPill(plannedUnit, Number(item.selling_price) || 0)}</td>
+                                  <td className="px-3 py-2 text-right">{marginPill(item)}</td>
                                   <td className="px-1 py-1">
                                     <select className={`text-xs px-2 py-1 rounded font-semibold border-0 cursor-pointer ${ORDER_COLORS[itemOrderStatus] || 'bg-slate-100 text-slate-600'}`} value={itemOrderStatus} onChange={e => handleSelectChange(item, 'order_status', e.target.value)}>
                                       <option value="not_ordered">Not Ordered</option>
@@ -780,6 +808,8 @@ export default function TabBOM({ projectId }) {
             );
           })()}
         </PanelWrapper>
+        <div className="text-xs text-slate-400 px-1 py-1">A = margin based on actual cost from a purchase order.</div>
+        </>
       )}
 
       {/* Summary tables */}
@@ -795,6 +825,7 @@ export default function TabBOM({ projectId }) {
                   <th className="text-right py-1">Planned Cost</th>
                   <th className="text-right py-1">Actual Cost</th>
                   <th className="text-right py-1">Sell Value</th>
+                  <th className="text-right py-1">Margin</th>
                 </tr>
               </thead>
               <tbody>
@@ -805,6 +836,7 @@ export default function TabBOM({ projectId }) {
                     <td className="py-1.5 text-right text-slate-700">{formatCurrency(data.plannedCost, 'SAR')}</td>
                     <td className="py-1.5 text-right text-slate-600">{data.actualCost > 0 ? formatCurrency(data.actualCost, 'SAR') : '—'}</td>
                     <td className="py-1.5 text-right text-emerald-700">{data.sellValue > 0 ? formatCurrency(data.sellValue, 'SAR') : '—'}</td>
+                    <td className="py-1.5 text-right text-slate-700">{(() => { const m = marginPct(data.effectiveCost, data.sellValue); return m == null ? '—' : (m * 100).toFixed(1) + '%'; })()}</td>
                   </tr>
                 ))}
               </tbody>
@@ -820,6 +852,7 @@ export default function TabBOM({ projectId }) {
                   <th className="text-right py-1">Planned Cost</th>
                   <th className="text-right py-1">Actual Cost</th>
                   <th className="text-right py-1">Sell Value</th>
+                  <th className="text-right py-1">Margin</th>
                 </tr>
               </thead>
               <tbody>
@@ -830,6 +863,7 @@ export default function TabBOM({ projectId }) {
                     <td className="py-1.5 text-right text-slate-700">{formatCurrency(data.plannedCost, 'SAR')}</td>
                     <td className="py-1.5 text-right text-slate-600">{data.actualCost > 0 ? formatCurrency(data.actualCost, 'SAR') : '—'}</td>
                     <td className="py-1.5 text-right text-emerald-700">{data.sellValue > 0 ? formatCurrency(data.sellValue, 'SAR') : '—'}</td>
+                    <td className="py-1.5 text-right text-slate-700">{(() => { const m = marginPct(data.effectiveCost, data.sellValue); return m == null ? '—' : (m * 100).toFixed(1) + '%'; })()}</td>
                   </tr>
                 ))}
               </tbody>
