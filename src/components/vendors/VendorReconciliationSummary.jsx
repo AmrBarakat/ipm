@@ -1,8 +1,8 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useEntityList } from '@/hooks/useEntity';
 import { formatCurrency, formatDate, BOM_CATEGORY_LABELS } from '@/lib/constants';
-import { MATERIAL_STATUS, resolveMaterialStatus, materialStatusMeta } from '@/lib/materialStatus';
-import { Package, FileText, TrendingUp, ShoppingCart } from 'lucide-react';
+import { MATERIAL_STATUS, MATERIAL_STATUS_ORDER, resolveMaterialStatus, materialStatusMeta } from '@/lib/materialStatus';
+import { Package, FileText, TrendingUp, ShoppingCart, Search, X } from 'lucide-react';
 
 const PO_STATUS_STYLES = {
   draft: 'bg-slate-100 text-slate-600',
@@ -34,6 +34,24 @@ export default function VendorReconciliationSummary({ vendorId, currency = 'SAR'
     'BOMItem', { vendor_id: vendorId }, '-created_date', 500,
   );
 
+  const [query, setQuery] = useState('');
+  const q = query.trim().toLowerCase();
+
+  // Quick-search filter across PO number / description and BOM description / part no.
+  const filteredPos = useMemo(() => {
+    if (!q) return pos;
+    return pos.filter(p =>
+      `${p.po_number || ''} ${p.description || ''} ${p.vendor_name || ''}`.toLowerCase().includes(q)
+    );
+  }, [pos, q]);
+
+  const filteredBom = useMemo(() => {
+    if (!q) return bom;
+    return bom.filter(i =>
+      `${i.description || ''} ${i.manufacturer_part_number || ''} ${i.erp_item_code || ''} ${i.supplier || ''}`.toLowerCase().includes(q)
+    );
+  }, [bom, q]);
+
   const poTotals = useMemo(() => {
     const active = pos.filter(p => p.status !== 'cancelled');
     const committed = active.reduce((s, p) => s + (Number(p.amount) || Number(p.subtotal_net) || 0), 0);
@@ -45,13 +63,27 @@ export default function VendorReconciliationSummary({ vendorId, currency = 'SAR'
     const count = bom.length;
     const plannedCost = bom.reduce((s, i) => s + (Number(i.planned_cost_price) || Number(i.cost_price) || 0) * (Number(i.quantity) || 1), 0);
     const sellValue = bom.reduce((s, i) => s + (Number(i.selling_price) || 0) * (Number(i.quantity) || 1), 0);
+    // Always show all six tracking states (zeros included) for at-a-glance status.
     const byStatus = {};
+    for (const key of MATERIAL_STATUS_ORDER) byStatus[key] = 0;
     for (const i of bom) {
       const st = resolveMaterialStatus(i);
       byStatus[st] = (byStatus[st] || 0) + 1;
     }
     return { count, plannedCost, sellValue, byStatus };
   }, [bom]);
+
+  const filteredBomTotals = useMemo(() => ({
+    count: filteredBom.length,
+    plannedCost: filteredBom.reduce((s, i) => s + (Number(i.planned_cost_price) || Number(i.cost_price) || 0) * (Number(i.quantity) || 1), 0),
+    sellValue: filteredBom.reduce((s, i) => s + (Number(i.selling_price) || 0) * (Number(i.quantity) || 1), 0),
+  }), [filteredBom]);
+
+  const filteredPoTotals = useMemo(() => {
+    const active = filteredPos.filter(p => p.status !== 'cancelled');
+    const committed = active.reduce((s, p) => s + (Number(p.amount) || Number(p.subtotal_net) || 0), 0);
+    return { active: active.length, committed };
+  }, [filteredPos]);
 
   const loading = posLoading || bomLoading;
 
@@ -83,13 +115,56 @@ export default function VendorReconciliationSummary({ vendorId, currency = 'SAR'
         <MiniKpi icon={<TrendingUp className="w-3.5 h-3.5" />} label="BOM Sell Value" value={formatCurrency(bomTotals.sellValue, currency)} />
       </div>
 
+      {/* Quick search */}
+      <div className="relative">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+        <input
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          placeholder="Search POs & BOM items by number, description, part no…"
+          className="w-full border border-slate-200 rounded-md pl-8 pr-8 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+        />
+        {query && (
+          <button onClick={() => setQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+
+      {/* Six-state material tracking breakdown */}
+      {bom.length > 0 && (
+        <div className="grid grid-cols-3 md:grid-cols-6 gap-1.5">
+          {MATERIAL_STATUS_ORDER.map(key => {
+            const meta = MATERIAL_STATUS[key];
+            const n = bomTotals.byStatus[key] || 0;
+            return (
+              <button
+                key={key}
+                onClick={() => setQuery('')}
+                className={`text-center px-1.5 py-2 rounded-lg border ${meta.cls} ${n === 0 ? 'opacity-50' : ''}`}
+                title={meta.label}
+              >
+                <div className="text-base font-bold leading-none">{n}</div>
+                <div className="text-[9px] uppercase tracking-wide mt-1 leading-tight">{meta.label}</div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {(q && filteredPos.length === 0 && filteredBom.length === 0) && (
+        <div className="text-center py-6 text-xs text-slate-400">
+          No POs or BOM items match "{query}".
+        </div>
+      )}
+
       {/* Purchase Orders */}
-      {pos.length > 0 && (
+      {filteredPos.length > 0 && (
         <div className="border border-slate-200 rounded-lg overflow-hidden">
           <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 flex items-center gap-2">
             <FileText className="w-3.5 h-3.5 text-amber-500" />
             <h5 className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Purchase Orders</h5>
-            <span className="text-xs text-slate-400">· {pos.length}</span>
+            <span className="text-xs text-slate-400">· {filteredPos.length}{q && filteredPos.length !== pos.length ? ` of ${pos.length}` : ''}</span>
           </div>
           <div className="max-h-64 overflow-y-auto">
             <table className="w-full text-xs">
@@ -103,7 +178,7 @@ export default function VendorReconciliationSummary({ vendorId, currency = 'SAR'
                 </tr>
               </thead>
               <tbody>
-                {pos.map(po => (
+                {filteredPos.map(po => (
                   <tr key={po.id} className="border-t border-slate-100 hover:bg-amber-50/40">
                     <td className="px-3 py-1.5 font-mono text-slate-700">{po.po_number || '—'}</td>
                     <td className="px-3 py-1.5">
@@ -121,8 +196,8 @@ export default function VendorReconciliationSummary({ vendorId, currency = 'SAR'
               </tbody>
               <tfoot className="border-t-2 border-slate-200 bg-slate-50">
                 <tr>
-                  <td colSpan={4} className="px-3 py-1.5 text-slate-500 font-semibold">Total Committed ({poTotals.active} active)</td>
-                  <td className="px-3 py-1.5 text-right font-bold text-slate-700">{formatCurrency(poTotals.committed, currency)}</td>
+                  <td colSpan={4} className="px-3 py-1.5 text-slate-500 font-semibold">Total Committed ({filteredPoTotals.active} active)</td>
+                  <td className="px-3 py-1.5 text-right font-bold text-slate-700">{formatCurrency(filteredPoTotals.committed, currency)}</td>
                 </tr>
               </tfoot>
             </table>
@@ -131,19 +206,12 @@ export default function VendorReconciliationSummary({ vendorId, currency = 'SAR'
       )}
 
       {/* BOM Items */}
-      {bom.length > 0 && (
+      {filteredBom.length > 0 && (
         <div className="border border-slate-200 rounded-lg overflow-hidden">
           <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 flex items-center gap-2">
             <Package className="w-3.5 h-3.5 text-amber-500" />
             <h5 className="text-xs font-semibold text-slate-600 uppercase tracking-wide">BOM Items</h5>
-            <span className="text-xs text-slate-400">· {bom.length}</span>
-            <div className="ml-auto flex flex-wrap gap-1">
-              {Object.entries(bomTotals.byStatus).map(([st, n]) => (
-                <span key={st} className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${MATERIAL_STATUS[st]?.cls || 'bg-slate-100 text-slate-500'}`}>
-                  {MATERIAL_STATUS[st]?.label || st}: {n}
-                </span>
-              ))}
-            </div>
+            <span className="text-xs text-slate-400">· {filteredBom.length}{q && filteredBom.length !== bom.length ? ` of ${bom.length}` : ''}</span>
           </div>
           <div className="max-h-72 overflow-y-auto">
             <table className="w-full text-xs">
@@ -159,7 +227,7 @@ export default function VendorReconciliationSummary({ vendorId, currency = 'SAR'
                 </tr>
               </thead>
               <tbody>
-                {bom.map(item => {
+                {filteredBom.map(item => {
                   const meta = materialStatusMeta(item);
                   const qty = Number(item.quantity) || 0;
                   const unitCost = Number(item.planned_cost_price) || Number(item.cost_price) || 0;
@@ -185,9 +253,9 @@ export default function VendorReconciliationSummary({ vendorId, currency = 'SAR'
               </tbody>
               <tfoot className="border-t-2 border-slate-200 bg-slate-50">
                 <tr>
-                  <td colSpan={4} className="px-3 py-1.5 text-slate-500 font-semibold">Totals ({bom.length} items)</td>
-                  <td className="px-3 py-1.5 text-right text-slate-600 font-semibold">{formatCurrency(bomTotals.plannedCost, currency)}</td>
-                  <td className="px-3 py-1.5 text-right text-emerald-700 font-bold">{formatCurrency(bomTotals.sellValue, currency)}</td>
+                  <td colSpan={4} className="px-3 py-1.5 text-slate-500 font-semibold">Totals ({filteredBomTotals.count} items)</td>
+                  <td className="px-3 py-1.5 text-right text-slate-600 font-semibold">{formatCurrency(filteredBomTotals.plannedCost, currency)}</td>
+                  <td className="px-3 py-1.5 text-right text-emerald-700 font-bold">{formatCurrency(filteredBomTotals.sellValue, currency)}</td>
                   <td></td>
                 </tr>
               </tfoot>
