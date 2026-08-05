@@ -5,6 +5,7 @@ import { TYPE_LABELS, RATING_STYLES, ratingLabel } from './vendorConstants';
 import VendorForm from './VendorForm';
 import VendorDocuments from './VendorDocuments';
 import VendorRatingHistory from './VendorRatingHistory';
+import VendorReconciliationSummary from './VendorReconciliationSummary';
 
 /**
  * VendorDrawer — right-side detail panel for a single vendor. Edits contact
@@ -85,6 +86,12 @@ export default function VendorDrawer({ vendor, bomStats, onSave, onDelete, onClo
               </div>
             </section>
           )}
+
+          {/* Reconciliation summary — all POs & BOM items for this vendor */}
+          <section>
+            <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Reconciliation Summary</h4>
+            <VendorReconciliationSummary vendorId={vendor.id} currency="SAR" />
+          </section>
 
           {/* Edit details */}
           <section>
