@@ -49,6 +49,18 @@
       "type": "string",
       "description": "Reference to the source row/section in the charter document."
     },
+    "expense_category": {
+      "type": "string",
+      "enum": [
+        "material",
+        "labor",
+        "subcontract",
+        "travel",
+        "other"
+      ],
+      "default": "material",
+      "description": "Expense category used when mapping this baseline line to an Expense record."
+    },
     "notes": {
       "type": "string"
     }

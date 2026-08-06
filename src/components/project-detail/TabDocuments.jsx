@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import ProjectPlanExtractModal from './ProjectPlanExtractModal';
 import BomImportSkill from '@/components/bom/BomImportSkill';
+import CharterReviewModal from './CharterReviewModal';
 import DocumentExtractionModal from './DocumentExtractionModal';
 import PODNExtractionPanel from '@/components/documents/PODNExtractionPanel';
 import ExtractionsList from '@/components/documents/ExtractionsList';
@@ -66,6 +67,7 @@ export default function TabDocuments({ projectId, project, onNavigateTab }) {
   const [extractError, setExtractError] = useState(null); // { message, stage, detail, raw }
   const [podnResult, setPodnResult] = useState(null); // { document, result }
   const [standardDoc, setStandardDoc] = useState(null); // { document, result }
+  const [charterResult, setCharterResult] = useState(null); // { document, result }
 
   async function upload(e) {
     e.preventDefault();
@@ -167,6 +169,32 @@ export default function TabDocuments({ projectId, project, onNavigateTab }) {
     // Zero line items is NOT an error — open the review modal and let step 1
     // surface warnings; the user may still want to create the vendor / PO / expense.
     setPodnResult({ document: doc, result: r, canPersist: !!r.extraction_id });
+  }
+
+  // Charter baseline extraction: extractCharterBaseline creates the
+  // CharterBaseline (draft) + Extraction (review) with BaselineLine proposals.
+  // The review modal handles activation / revert.
+  async function handleCharterExtract(doc) {
+    setExtractingId(doc.id);
+    setExtractError(null);
+    try {
+      const res = await base44.functions.invoke('extractCharterBaseline', {
+        file_url: doc.file_url,
+        project_id: projectId,
+        document_id: doc.id,
+      });
+      const r = res?.data;
+      if (!r) throw { message: 'Empty response from extractCharterBaseline.' };
+      if (r.error) throw { message: r.error, stage: r.stage };
+      setCharterResult({ document: doc, result: r });
+    } catch (err) {
+      setExtractError({
+        message: err?.message || 'Charter extraction failed.',
+        detail: err?.response?.data?.error || err?.message || '',
+        raw: JSON.stringify({ status: err?.response?.status, data: err?.response?.data, message: err?.message }).slice(0, 2000),
+      });
+    }
+    setExtractingId(null);
   }
 
   async function copyExtractError() {
@@ -430,10 +458,16 @@ export default function TabDocuments({ projectId, project, onNavigateTab }) {
                                         : <Wand2 className="w-3 h-3" />} Extract
                                     </button>
                                   )}
-                                  {['engineering', 'drawing', 'submittal', 'other', 'bom', 'charter'].includes(doc.category) && (
+                                  {['engineering', 'drawing', 'submittal', 'other', 'bom'].includes(doc.category) && (
                                     <button onClick={() => setBomSkillDoc(doc)}
                                       className="flex items-center gap-1 px-2.5 py-1 text-xs border border-amber-300 rounded hover:bg-amber-50 text-amber-700 font-medium">
                                       <Cpu className="w-3 h-3" /> Import BOM
+                                    </button>
+                                  )}
+                                  {doc.category === 'charter' && (
+                                    <button onClick={() => handleCharterExtract(doc)} disabled={extractingId === doc.id}
+                                      className="flex items-center gap-1 px-2.5 py-1 text-xs border border-blue-300 rounded hover:bg-blue-50 text-blue-700 font-medium disabled:opacity-60">
+                                      {extractingId === doc.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <FileText className="w-3 h-3" />} Import Charter
                                     </button>
                                   )}
                                   {doc.category === 'project_plan' && (
@@ -494,6 +528,15 @@ export default function TabDocuments({ projectId, project, onNavigateTab }) {
           initialDocument={bomSkillDoc?.id ? bomSkillDoc : null}
           onClose={() => setBomSkillDoc(null)}
           onImported={() => { setBomSkillDoc(null); queryClient.invalidateQueries({ queryKey: ['BOMItem'] }); queryClient.invalidateQueries({ queryKey: ['Document'] }); }} />
+      )}
+      {charterResult && (
+        <CharterReviewModal
+          document={charterResult.document}
+          result={charterResult.result}
+          projectId={projectId}
+          project={project}
+          onClose={() => setCharterResult(null)}
+          onApplied={() => { setCharterResult(null); queryClient.invalidateQueries({ queryKey: ['Extraction'] }); queryClient.invalidateQueries({ queryKey: ['Project'] }); queryClient.invalidateQueries({ queryKey: ['CharterBaseline'] }); queryClient.invalidateQueries({ queryKey: ['BaselineLine'] }); queryClient.invalidateQueries({ queryKey: ['AuditLog'] }); }} />
       )}
 
       <LegacyExtractionCleanup projectId={projectId} />

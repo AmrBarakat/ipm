@@ -442,6 +442,7 @@ Deno.serve(async (req) => {
       extraction_id: extraction.id,
       sheet: sheetName,
       identity,
+      proposals,
       totals: {
         revenue_goods: toNumber(totals.revenue_goods) || 0,
         revenue_services: toNumber(totals.revenue_services) || 0,
