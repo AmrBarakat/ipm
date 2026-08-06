@@ -5,7 +5,7 @@
 
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 import * as XLSX from 'npm:xlsx@0.18.5';
-import { classifyItem, buildPanelLookup, allocationPanelName, addAllocation } from '../../shared/bomClassify.ts';
+import { classifyItem, buildPanelLookup, allocationPanelName, addAllocation, buildGroupRowDetector, resolveSectionName } from '../../shared/bomClassify.ts';
 
 function toNumber(v) {
   if (v == null || v === '') return null;
@@ -17,17 +17,7 @@ function normalizeHeader(raw) {
   return String(raw ?? '').toLowerCase().replace(/\r?\n/g, ' ').replace(/\s*\(.*?\)\s*/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
-function isNumbery(v) { return toNumber(v) !== null; }
-
-function isGroupRow(row, fieldMap) {
-  const keyFields = ['supplier', 'part_no', 'description'].filter(f => fieldMap[f]);
-  const firstNonEmpty = row.find(v => v != null && v !== '');
-  if (firstNonEmpty == null || isNumbery(firstNonEmpty)) return false;
-  return keyFields.every(f => {
-    const idx = fieldMap[f]?.col_idx;
-    return idx == null || row[idx] == null || row[idx] === '';
-  });
-}
+// isGroupRow is imported from ../../shared/bomClassify.ts as buildGroupRowDetector + resolveSectionName
 
 function isSubtotalRow(row, fieldMap) {
   const hasTotal = row.some(v => v != null && /total|subtotal|grand/i.test(String(v)));
@@ -77,13 +67,14 @@ Deno.serve(async (req) => {
     const warnings = [];
     const groups = [];
     let currentGroup = null;
+    const isGroup = buildGroupRowDetector(fieldMap);
 
     for (const row of dataRows) {
       if (row.every(v => v == null || v === '')) continue;
       if (isSubtotalRow(row, fieldMap)) continue;
 
-      if (isGroupRow(row, fieldMap)) {
-        const groupName = String(row.find(v => v != null && v !== '') ?? '').trim();
+      if (isGroup(row)) {
+        const groupName = resolveSectionName(row);
         const lastWord = (groupName.split(/\s+/).pop() || '').toLowerCase();
         const isPanel = lastWord === panelKeyword.toLowerCase() || new RegExp(panelKeyword, 'i').test(groupName);
         currentGroup = { name: groupName, isPanel, items: [] };

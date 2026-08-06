@@ -301,6 +301,49 @@ function buildPanelAggregate(normalizedKey, members, panelIdx) {
   };
 }
 
+// ─── C2-bis. CSV section header helpers (same rule as the XLSX path) ──────────
+
+const LONE_SEP_RE = /^[\.\-_—–\\/|]*$/;
+
+function isLoneSep(s) {
+  const t = String(s ?? '').trim();
+  return t === '' || LONE_SEP_RE.test(t);
+}
+
+/** Count columns holding non-numeric, non-separator text. */
+function csvTextColCount(cols) {
+  return cols.filter(c => !isLoneSep(c) && toNumber(c, null) === null).length;
+}
+
+/** True when the description column is empty or unmapped. */
+function csvDescColEmpty(cols, resolved) {
+  const idx = getCol(resolved, 'description');
+  if (idx < 0 || idx >= cols.length) return true;
+  return cols[idx].trim() === '';
+}
+
+/** Look ahead: do the next few non-empty lines match SECTION_KEYWORDS? */
+function followedByKeywordLines(lines, startIdx, maxCheck) {
+  let checked = 0;
+  for (let i = startIdx + 1; i < lines.length && checked < maxCheck; i++) {
+    const t = lines[i].trim();
+    if (!t) continue;
+    checked++;
+    if (SECTION_KEYWORDS.test(t)) return true;
+  }
+  return false;
+}
+
+/** Resolve section name: longest non-separator, non-numeric text cell. */
+function resolveCSVSectionName(cols) {
+  const candidates = cols.filter(c => !isLoneSep(c) && toNumber(c, null) === null);
+  if (candidates.length > 0) {
+    return candidates.reduce((a, b) => b.length > a.length ? b : a, '');
+  }
+  const fb = cols.filter(c => !isLoneSep(c));
+  return fb[0] || '';
+}
+
 // ─── Main workbook parser ─────────────────────────────────────────────────────
 
 function parseWorkbookText(plainText, tplPanelKeyword, tplDefaultSupplier, tplDefaultCategory) {
@@ -322,7 +365,8 @@ function parseWorkbookText(plainText, tplPanelKeyword, tplDefaultSupplier, tplDe
   // Track TOTAL rows for reconciliation
   let workbookTotal     = null;
 
-  for (const rawLine of allLines) {
+  for (let li = 0; li < allLines.length; li++) {
+    const rawLine = allLines[li];
     rowIndex++;
     const trimmed = rawLine.trim();
 
@@ -373,17 +417,34 @@ function parseWorkbookText(plainText, tplPanelKeyword, tplDefaultSupplier, tplDe
       continue;
     }
 
-    // C2: Section header detection
-    // A section header: has keyword AND no significant commercial values AND very few columns with data
+    // C2: Section header detection (CSV path — same rule as XLSX buildGroupRowDetector)
+    //   a. description column is empty (or unmapped)
+    //   b. no more than two columns hold non-numeric text
+    //   c. text matches SECTION_KEYWORDS, or is followed by rows that do
+    // Drop the old numericCols.length === 0 condition — headers may carry roll-up numbers.
     const nonEmptyCols = cols.filter(c => c.length > 0);
-    const numericCols = cols.map(c => toNumber(c, null)).filter(n => n !== null);
-    const looksLikeSectionHeader = (
-      nonEmptyCols.length <= 3 ||
-      (SECTION_KEYWORDS.test(trimmed) && numericCols.length === 0)
-    ) && !(/^\s*\d+[\s,]/.test(trimmed)); // serial lines are not headers
+
+    // Guard (inverse regression): real part + description + quantity → never a header
+    const _partIdx = getCol(resolvedCols, 'part_no');
+    const _descIdx = getCol(resolvedCols, 'description');
+    const _qtyIdx = getCol(resolvedCols, 'qty');
+    const _hasPart = _partIdx >= 0 && _partIdx < cols.length && cols[_partIdx].trim() !== '';
+    const _hasDesc = _descIdx >= 0 && _descIdx < cols.length && cols[_descIdx].trim() !== '';
+    const _hasQty = _qtyIdx >= 0 && _qtyIdx < cols.length && cols[_qtyIdx].trim() !== '' && toNumber(cols[_qtyIdx], null) !== null;
+    const _guardBlocks = _hasPart && _hasDesc && _hasQty;
+
+    const descEmpty = csvDescColEmpty(cols, resolvedCols);
+    const textColCount = csvTextColCount(cols);
+    const matchesKeywords = SECTION_KEYWORDS.test(trimmed);
+    const followedByKeywords = matchesKeywords ? false : followedByKeywordLines(allLines, li, 3);
+    const looksLikeSectionHeader = !_guardBlocks
+      && descEmpty
+      && textColCount <= 2
+      && (matchesKeywords || followedByKeywords)
+      && !(/^\s*\d+[\s,]/.test(trimmed)); // serial lines are not headers
 
     if (looksLikeSectionHeader && nonEmptyCols.length >= 1) {
-      const rawSectionName = nonEmptyCols[0] || trimmed;
+      const rawSectionName = resolveCSVSectionName(cols);
       currentSection = rawSectionName;
 
       // C3: is it a panel section?

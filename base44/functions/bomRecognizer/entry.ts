@@ -6,7 +6,7 @@
 
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 import * as XLSX from 'npm:xlsx@0.18.5';
-import { classifyItem, buildPanelLookup, allocationPanelName, addAllocation } from '../../shared/bomClassify.ts';
+import { classifyItem, buildPanelLookup, allocationPanelName, addAllocation, buildGroupRowDetector, resolveSectionName } from '../../shared/bomClassify.ts';
 
 // ─── Normalization ─────────────────────────────────────────────────────────────
 
@@ -166,21 +166,7 @@ function layer3Infer(resolved, headers, dataRows) {
 }
 
 // ─── Layer 4: Group/header row detection ─────────────────────────────────────
-
-function buildGroupRowDetector(fieldMap) {
-  const keyFields = ['supplier', 'part_no', 'description'].filter(f => fieldMap[f]);
-  return function isGroupRow(row) {
-    // First non-empty cell must be text
-    const firstNonEmpty = row.find(v => v != null && v !== '');
-    if (firstNonEmpty == null || isNumbery(firstNonEmpty)) return false;
-    // All key field columns must be empty
-    const keyEmpty = keyFields.every(f => {
-      const idx = fieldMap[f]?.col_idx;
-      return idx == null || row[idx] == null || row[idx] === '';
-    });
-    return keyEmpty;
-  };
-}
+// buildGroupRowDetector + resolveSectionName are imported from ../../shared/bomClassify.ts
 
 function isSubtotalRow(row, fieldMap) {
   const labelCols = row.filter(v => v != null && /total|subtotal|grand/i.test(String(v)));
@@ -291,7 +277,7 @@ function recognize(sheetData, synonymDict, sheetName) {
     header_signature: headerSignature,
     field_map: fieldMap,
     excluded_columns: excludedColumns,
-    group_row_rule: 'first_cell_text_and_key_fields_empty',
+    group_row_rule: 'desc_empty_few_text_cells_longest_name',
     missing_required: missingRequired,
     overall_confidence: avgConf,
     sample_values: sampleValues,
@@ -324,7 +310,7 @@ function extractRows(sheetData, profile, config) {
     if (isSubtotalRow(row, field_map)) continue;
 
     if (isGroup(row)) {
-      const groupName = String(row.find(v => v != null && v !== '') ?? '').trim();
+      const groupName = resolveSectionName(row);
       const isPanel = new RegExp(panelKeyword, 'i').test(groupName.split(' ').pop() || groupName);
       currentGroup = { name: groupName, isPanel, items: [] };
       groups.push(currentGroup);
