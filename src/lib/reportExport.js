@@ -2,7 +2,8 @@
 // Detached from the old per-tab export buttons so the Reports hub can reuse them.
 import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx-js-style';
-import { formatCurrency, formatDate } from '@/lib/constants';
+import { formatCurrency, formatDate, isTopLevelBOM } from '@/lib/constants';
+import { effectiveCostUnit, marginPct } from '@/lib/margin';
 import {
   drawKpiCards, drawDonut, drawHBars, drawStackedBar, drawLineChart, drawGauge,
   drawCallout, resolveColor,
@@ -81,6 +82,154 @@ export function projectMargin(invoices, expenses, collections) {
   const margin = collected - spent;
   const marginPct = collected > 0 ? Math.round((margin / collected) * 100) : null;
   return { invoiced, collected, spent, budget, outstanding, margin, marginPct };
+}
+
+// ── Charter baseline variance ────────────────────────────────────────────────
+// Compares the active CharterBaseline (commercial bid model) against actual
+// costs from BOM + Expenses. Per-stream planned / committed / actual / variance,
+// uncategorised_actual as its own row, margin_at_baseline vs margin_at_completion
+// with erosion in points, and five deterministic insight checks.
+//
+// Cost selection uses effectiveCostUnit from margin.js (actual-else-planned) —
+// the same rule used by the BOM tabs and BaselineManager. Margin uses marginPct
+// from margin.js, which honours the app-wide MARKUP_MODE flag.
+// BOM actuals are filtered by isTopLevelBOM from constants.js so panel children
+// (parent_id set) are never double-counted — their cost is inside the parent.
+export function baselineVariance(project, charterBaselines, baselineLines, bomItems, expenses) {
+  const activeBaseline = (charterBaselines || []).find(b => b.status === 'active')
+    || (charterBaselines || []).find(b => b.id === project?.active_charter_baseline_id)
+    || null;
+  if (!activeBaseline) return { hasBaseline: false };
+
+  const cur = project?.currency || activeBaseline.currency || 'SAR';
+  const lines = (baselineLines || []).filter(l => l.baseline_id === activeBaseline.id);
+
+  // Per-stream baseline planned cost (direct + indirect) and revenue
+  const baselineCost = {
+    goods:    (Number(activeBaseline.direct_cost_goods)    || 0) + (Number(activeBaseline.indirect_cost_goods)    || 0),
+    services: (Number(activeBaseline.direct_cost_services) || 0) + (Number(activeBaseline.indirect_cost_services) || 0),
+    support:  (Number(activeBaseline.direct_cost_support)  || 0) + (Number(activeBaseline.indirect_cost_support)  || 0),
+  };
+  const baselineRevenue = {
+    goods:    Number(activeBaseline.revenue_goods)    || 0,
+    services: Number(activeBaseline.revenue_services) || 0,
+    support:  Number(activeBaseline.revenue_support)  || 0,
+  };
+
+  // BOM actuals (goods) — exclude panel children (parent_id) and service lines
+  const topBom = (bomItems || []).filter(i => isTopLevelBOM(i) && i.category !== 'service');
+  const bomActualCost = topBom.reduce((s, i) =>
+    s + effectiveCostUnit(i) * (Number(i.quantity) || 1), 0);
+
+  // Expense actuals by category → stream
+  const committedExp = (expenses || []).filter(e => ['committed', 'paid'].includes(e.status));
+  const expActual = (cats) => committedExp
+    .filter(e => cats.includes(e.category))
+    .reduce((s, e) => s + (Number(e.actual_amount) || Number(e.planned_amount) || 0), 0);
+  const expPlanned = (cats) => committedExp
+    .filter(e => cats.includes(e.category))
+    .reduce((s, e) => s + (Number(e.planned_amount) || 0), 0);
+
+  const actualGoods    = bomActualCost + expActual(['material']);
+  const actualServices = expActual(['labor', 'subcontract']);
+  const actualSupport  = expActual(['travel', 'other']);
+  const uncategorisedActual = committedExp
+    .filter(e => !e.baseline_line_id && !['material', 'labor', 'subcontract', 'travel', 'other'].includes(e.category))
+    .reduce((s, e) => s + (Number(e.actual_amount) || Number(e.planned_amount) || 0), 0);
+
+  const committedGoods    = bomActualCost + expPlanned(['material']);
+  const committedServices = expPlanned(['labor', 'subcontract']);
+  const committedSupport  = expPlanned(['travel', 'other']);
+
+  const streams = [
+    { stream: 'goods',    planned: baselineCost.goods,    committed: committedGoods,    actual: actualGoods,    variance: actualGoods    - baselineCost.goods },
+    { stream: 'services', planned: baselineCost.services, committed: committedServices, actual: actualServices, variance: actualServices - baselineCost.services },
+    { stream: 'support',  planned: baselineCost.support,  committed: committedSupport,  actual: actualSupport,  variance: actualSupport  - baselineCost.support },
+  ];
+
+  const totalBaselineRevenue = baselineRevenue.goods + baselineRevenue.services + baselineRevenue.support;
+  const totalBaselineCost    = baselineCost.goods + baselineCost.services + baselineCost.support;
+  const totalActualCost      = actualGoods + actualServices + actualSupport + uncategorisedActual;
+
+  const marginAtBaseline     = marginPct(totalBaselineCost, totalBaselineRevenue);
+  const marginAtCompletion   = marginPct(totalActualCost, totalBaselineRevenue);
+  const erosionPoints        = (marginAtBaseline != null && marginAtCompletion != null)
+    ? Math.round((marginAtBaseline - marginAtCompletion) * 100)
+    : null;
+
+  // Five deterministic insight checks
+  const insights = [];
+  const overrun = streams.find(s => s.variance > 0 && s.planned > 0);
+  if (overrun) insights.push({
+    type: 'cost_overrun',
+    text: `${overrun.stream.charAt(0).toUpperCase() + overrun.stream.slice(1)} costs overrunning baseline by ${formatCurrency(overrun.variance, cur)} (${Math.round(overrun.variance / overrun.planned * 100)}%).`,
+  });
+  if (erosionPoints != null && erosionPoints > 3) insights.push({
+    type: 'margin_erosion',
+    text: `Margin eroded ${erosionPoints} points from baseline (${marginAtBaseline != null ? Math.round(marginAtBaseline * 100) : 0}% → ${marginAtCompletion != null ? Math.round(marginAtCompletion * 100) : 0}%).`,
+  });
+  if (uncategorisedActual > 0) insights.push({
+    type: 'uncategorised',
+    text: `${formatCurrency(uncategorisedActual, cur)} of actual spend not mapped to any baseline stream.`,
+  });
+  if (totalActualCost > totalBaselineCost && totalBaselineCost > 0) insights.push({
+    type: 'total_overrun',
+    text: `Total actual cost ${formatCurrency(totalActualCost, cur)} exceeds baseline ${formatCurrency(totalBaselineCost, cur)} by ${formatCurrency(totalActualCost - totalBaselineCost, cur)}.`,
+  });
+  if (lines.length === 0) insights.push({
+    type: 'no_lines',
+    text: `Active baseline has no line items — variance is computed from header totals only.`,
+  });
+
+  return {
+    hasBaseline: true,
+    baselineId: activeBaseline.id,
+    revisionLabel: activeBaseline.revision_label,
+    currency: cur,
+    streams,
+    uncategorisedActual,
+    marginAtBaseline,
+    marginAtCompletion,
+    erosionPoints,
+    insights,
+    totalBaselineRevenue,
+    totalBaselineCost,
+    totalActualCost,
+  };
+}
+
+// PDF section builder for baseline variance — returns an array of section
+// objects consumable by exportSectionsPDF. Insights are rendered as a callout
+// whose body is wrapped via splitTextToSize (through the shared wrap() helper).
+export function baselineVarianceSection(bv) {
+  if (!bv || !bv.hasBaseline) return [];
+  const cur = bv.currency;
+  const pctStr = (v) => v != null ? `${Math.round(v * 100)}%` : '—';
+
+  const summary = bv.streams.map(s => ({
+    label: `${s.stream.charAt(0).toUpperCase() + s.stream.slice(1)} — planned ${formatCurrency(s.planned, cur)} · committed ${formatCurrency(s.committed, cur)} · actual ${formatCurrency(s.actual, cur)}`,
+    value: `${formatCurrency(s.variance, cur)} (${s.planned > 0 ? Math.round(s.variance / s.planned * 100) : 0}%)`,
+  }));
+  summary.push({ label: 'Uncategorised actual', value: formatCurrency(bv.uncategorisedActual, cur) });
+  summary.push({ label: 'Margin at baseline', value: pctStr(bv.marginAtBaseline) });
+  summary.push({ label: 'Margin at completion', value: pctStr(bv.marginAtCompletion) });
+  summary.push({ label: 'Margin erosion', value: bv.erosionPoints != null ? `${bv.erosionPoints} pts` : '—' });
+
+  const sections = [{
+    title: `Charter Baseline Variance — ${bv.revisionLabel || 'Rev 0'}`,
+    type: 'summary',
+    summary,
+  }];
+
+  if (bv.insights.length > 0) {
+    sections.push({
+      title: 'Baseline Insights',
+      type: 'callout',
+      tone: bv.erosionPoints != null && bv.erosionPoints > 5 ? 'bad' : 'warn',
+      body: bv.insights.map(i => `• ${i.text}`).join('\n'),
+    });
+  }
+  return sections;
 }
 
 // ── Project health (RAG) ─────────────────────────────────────────────────────

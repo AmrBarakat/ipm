@@ -112,6 +112,8 @@ Deno.serve(async (req) => {
       vendors: () => base44.asServiceRole.entities.Vendor.filter({}, '-created_date', 300),
       tasks: () => base44.asServiceRole.entities.Task.filter({ project_id }, '-created_date', 1000),
       notes: () => base44.asServiceRole.entities.Note.filter({ project_id }, '-created_date', 200),
+      charterBaselines: () => base44.asServiceRole.entities.CharterBaseline.filter({ project_id }, '-created_date', 20),
+      baselineLines: () => base44.asServiceRole.entities.BaselineLine.filter({ project_id }, '-created_date', 200),
       priorMessages: () => base44.asServiceRole.entities.Message.filter({ conversation_id: convId }, 'created_date', 50),
     };
     const keys = Object.keys(loads);
@@ -140,6 +142,8 @@ Deno.serve(async (req) => {
     const vendors = data.vendors || [];
     const tasks = data.tasks || [];
     const notes = data.notes || [];
+    const charterBaselines = data.charterBaselines || [];
+    const baselineLines = data.baselineLines || [];
     const priorMessages = data.priorMessages || [];
 
     const today = tzDateStr(new Date());
@@ -247,6 +251,62 @@ Deno.serve(async (req) => {
         `- Next invoices due (showing top ${nextInv.length} of ${invoices.length}):`,
         ...nextInv.map((i) => `   • ${i.description || '—'} — ${i.planned_date}, ${money(i.planned_amount)} ${project?.currency || 'SAR'}, status ${i.status}`),
       ].join('\n'));
+    }
+
+    // CHARTER BASELINE VARIANCE
+    if (loadGaps.includes('charterBaselines') || loadGaps.includes('baselineLines')) {
+      sections.push('BASELINE VARIANCE: (unavailable — baseline context failed to load)');
+    } else {
+      const activeBl = charterBaselines.find((b) => b.status === 'active')
+        || charterBaselines.find((b) => b.id === project?.active_charter_baseline_id)
+        || null;
+      if (!activeBl) {
+        sections.push('BASELINE VARIANCE: No active charter baseline for this project.');
+      } else {
+        const blCost = {
+          goods: (Number(activeBl.direct_cost_goods) || 0) + (Number(activeBl.indirect_cost_goods) || 0),
+          services: (Number(activeBl.direct_cost_services) || 0) + (Number(activeBl.indirect_cost_services) || 0),
+          support: (Number(activeBl.direct_cost_support) || 0) + (Number(activeBl.indirect_cost_support) || 0),
+        };
+        const blRevenue = {
+          goods: Number(activeBl.revenue_goods) || 0,
+          services: Number(activeBl.revenue_services) || 0,
+          support: Number(activeBl.revenue_support) || 0,
+        };
+        // BOM actuals (goods) — exclude panel children and service lines
+        const topBom = bom.filter((i) => !i.parent_id && i.category !== 'service');
+        const bomActualCost = topBom.reduce((s, i) => {
+          const actual = Number(i.actual_cost_price) || 0;
+          const planned = Number(i.planned_cost_price) || Number(i.cost_price) || 0;
+          return s + (actual > 0 ? actual : planned) * (Number(i.quantity) || 1);
+        }, 0);
+        const cexp = expenses.filter((e) => ['committed', 'paid'].includes(e.status));
+        const expActual = (cats: string[]) => cexp
+          .filter((e) => cats.includes(e.category))
+          .reduce((s, e) => s + (Number(e.actual_amount) || Number(e.planned_amount) || 0), 0);
+        const aGoods = bomActualCost + expActual(['material']);
+        const aServices = expActual(['labor', 'subcontract']);
+        const aSupport = expActual(['travel', 'other']);
+        const uncategorised = cexp
+          .filter((e) => !e.baseline_line_id && !['material', 'labor', 'subcontract', 'travel', 'other'].includes(e.category))
+          .reduce((s, e) => s + (Number(e.actual_amount) || Number(e.planned_amount) || 0), 0);
+        const totalBlRev = blRevenue.goods + blRevenue.services + blRevenue.support;
+        const totalBlCost = blCost.goods + blCost.services + blCost.support;
+        const totalActual = aGoods + aServices + aSupport + uncategorised;
+        // Margin on revenue: (sell - cost) / sell (matches marginPct with MARKUP_MODE=false)
+        const mBaseline = totalBlRev > 0 ? (totalBlRev - totalBlCost) / totalBlRev : null;
+        const mCompletion = totalBlRev > 0 ? (totalBlRev - totalActual) / totalBlRev : null;
+        const erosion = (mBaseline != null && mCompletion != null) ? Math.round((mBaseline - mCompletion) * 100) : null;
+        sections.push([
+          'BASELINE VARIANCE:',
+          `- Active baseline: ${activeBl.revision_label || 'Rev 0'}.`,
+          `- Goods: planned ${money(blCost.goods)}, actual ${money(aGoods)}, variance ${money(aGoods - blCost.goods)}.`,
+          `- Services: planned ${money(blCost.services)}, actual ${money(aServices)}, variance ${money(aServices - blCost.services)}.`,
+          `- Support: planned ${money(blCost.support)}, actual ${money(aSupport)}, variance ${money(aSupport - blCost.support)}.`,
+          `- Uncategorised actual: ${money(uncategorised)}.`,
+          `- Margin at baseline: ${mBaseline != null ? pct(mBaseline) : '—'}. At completion: ${mCompletion != null ? pct(mCompletion) : '—'}. Erosion: ${erosion != null ? erosion + ' pts' : '—'}.`,
+        ].join('\n'));
+      }
     }
 
     // RISKS

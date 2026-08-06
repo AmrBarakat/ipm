@@ -5,6 +5,7 @@ import { CreditCard, CheckCircle, Wallet, TrendingUp, ShieldAlert, CalendarClock
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import StatusProgressChart from '@/components/project-detail/StatusProgressChart';
 import SpendingSummaryDashboard from '@/components/project-detail/SpendingSummaryDashboard';
+import BaselineVarianceCard from '@/components/project-detail/BaselineVarianceCard';
 
 export default function TabOverview({ project, onRefresh }) {
   const { data: invoices = [], isLoading: invoicesLoading } = useEntityList('Invoice', { project_id: project.id }, 'planned_date', 500);
@@ -121,6 +122,9 @@ export default function TabOverview({ project, onRefresh }) {
 
       {/* Milestone & Deliverable Progress Chart */}
       {!loading && <StatusProgressChart projectId={project.id} />}
+
+      {/* Charter Baseline Variance */}
+      {!loading && <BaselineVarianceCard project={project} />}
 
       {/* Projected Profit Section */}
       {!loading && totalReceived > 0 && (
