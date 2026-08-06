@@ -1,90 +1,60 @@
 {
-  "name": "Project",
+  "name": "BaselineLine",
   "type": "object",
   "properties": {
-    "code": {
+    "baseline_id": {
       "type": "string",
-      "description": "Unique project code e.g. AUT-2025-001"
+      "description": "Reference to the CharterBaseline this line belongs to."
     },
-    "name": {
+    "project_id": {
       "type": "string",
-      "description": "Project name"
+      "description": "Reference to the Project (denormalized for filtering)."
     },
-    "client": {
-      "type": "string"
-    },
-    "location": {
-      "type": "string"
-    },
-    "project_type": {
+    "stream": {
       "type": "string",
       "enum": [
-        "plc",
-        "plc_scada",
-        "pme",
-        "service",
-        "other"
+        "goods",
+        "services",
+        "support"
       ],
-      "default": "plc"
+      "description": "Which revenue/cost stream this line belongs to."
     },
-    "status": {
+    "line_type": {
       "type": "string",
       "enum": [
-        "planning",
-        "in_progress",
-        "commissioning",
-        "completed",
-        "closed",
-        "on_hold"
+        "revenue",
+        "direct_cost",
+        "indirect_cost"
       ],
-      "default": "planning"
+      "description": "Whether this line is a revenue, direct cost, or indirect cost entry."
     },
-    "priority": {
+    "description": {
       "type": "string",
-      "enum": [
-        "low",
-        "medium",
-        "high",
-        "critical"
-      ],
-      "default": "medium"
+      "description": "Line item description from the bid charter."
     },
-    "project_manager": {
-      "type": "string"
-    },
-    "contract_value": {
-      "type": "number"
+    "amount": {
+      "type": "number",
+      "default": 0,
+      "description": "Line amount, net of VAT, in the project currency."
     },
     "currency": {
       "type": "string",
       "default": "SAR"
     },
-    "progress": {
+    "sort_order": {
       "type": "number",
       "default": 0
     },
-    "start_date": {
+    "source_ref": {
       "type": "string",
-      "format": "date"
+      "description": "Reference to the source row/section in the charter document."
     },
-    "target_completion_date": {
-      "type": "string",
-      "format": "date"
-    },
-    "description": {
+    "notes": {
       "type": "string"
-    },
-    "scope": {
-      "type": "string"
-    },
-    "active_charter_baseline_id": {
-      "type": "string",
-      "description": "Reference to the active CharterBaseline (commercial bid model) for this project."
     }
   },
   "required": [
-    "code",
-    "name"
+    "baseline_id"
   ],
   "rls": {
     "read": {

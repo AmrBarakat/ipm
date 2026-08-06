@@ -28,6 +28,7 @@
       "enum": [
         "po",
         "delivery_note",
+        "charter",
         "other"
       ],
       "default": "other"

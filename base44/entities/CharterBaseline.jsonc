@@ -1,0 +1,206 @@
+{
+  "name": "CharterBaseline",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to the Project this commercial baseline belongs to."
+    },
+    "bom_baseline_id": {
+      "type": "string",
+      "description": "Optional link to the Baseline (BOM snapshot) taken at the same moment, so the bid model and the frozen BOM can be compared as a pair."
+    },
+    "revision_label": {
+      "type": "string",
+      "description": "Human-readable revision label, e.g. 'Rev 0', 'Rev 1'."
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "active",
+        "superseded"
+      ],
+      "default": "draft",
+      "description": "draft = being edited; active = the live commercial model the bid was won on; superseded = replaced by a newer active revision."
+    },
+    "source_document_id": {
+      "type": "string",
+      "description": "Document record (bid charter / offer) this baseline was captured from."
+    },
+    "revenue_goods": {
+      "type": "number",
+      "default": 0,
+      "description": "Revenue from goods/equipment, net of VAT."
+    },
+    "revenue_services": {
+      "type": "number",
+      "default": 0,
+      "description": "Revenue from services/engineering, net of VAT."
+    },
+    "revenue_support": {
+      "type": "number",
+      "default": 0,
+      "description": "Revenue from support/maintenance contracts, net of VAT."
+    },
+    "direct_cost_goods": {
+      "type": "number",
+      "default": 0,
+      "description": "Direct cost of goods/equipment, net of VAT."
+    },
+    "direct_cost_services": {
+      "type": "number",
+      "default": 0,
+      "description": "Direct cost of services/engineering, net of VAT."
+    },
+    "direct_cost_support": {
+      "type": "number",
+      "default": 0,
+      "description": "Direct cost of support/maintenance, net of VAT."
+    },
+    "indirect_cost_goods": {
+      "type": "number",
+      "default": 0,
+      "description": "Indirect/overhead cost allocated to goods, net of VAT."
+    },
+    "indirect_cost_services": {
+      "type": "number",
+      "default": 0,
+      "description": "Indirect/overhead cost allocated to services, net of VAT."
+    },
+    "indirect_cost_support": {
+      "type": "number",
+      "default": 0,
+      "description": "Indirect/overhead cost allocated to support, net of VAT."
+    },
+    "target_markup_pct": {
+      "type": "number",
+      "default": 0,
+      "description": "Target markup as a fraction (0.37 = 37%)."
+    },
+    "planned_manhours": {
+      "type": "number",
+      "default": 0,
+      "description": "Total planned engineering man-hours in the bid model."
+    },
+    "manhour_rate": {
+      "type": "number",
+      "default": 0,
+      "description": "Blended man-hour rate used in the bid model."
+    },
+    "fx_usd": {
+      "type": "number",
+      "default": 0,
+      "description": "USD to local currency exchange rate used in the bid model."
+    },
+    "fx_eur": {
+      "type": "number",
+      "default": 0,
+      "description": "EUR to local currency exchange rate used in the bid model."
+    },
+    "integrity_warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "Warnings detected during import/validation, e.g. 'revenue_goods missing', 'direct_cost exceeds revenue'."
+    },
+    "reconciliation": {
+      "type": "object",
+      "description": "Reconciliation of the bid model totals against source document totals.",
+      "properties": {
+        "source_total": {
+          "type": "number"
+        },
+        "calculated_total": {
+          "type": "number"
+        },
+        "variance": {
+          "type": "number"
+        },
+        "variance_pct": {
+          "type": "number"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "ok",
+            "warning",
+            "error",
+            "unverified"
+          ]
+        }
+      }
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "project_id"
+  ],
+  "rls": {
+    "read": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "account_status": "approved"
+          }
+        }
+      ]
+    },
+    "create": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "privilege": "create"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "privilege": "modify"
+          }
+        },
+        {
+          "user_condition": {
+            "privilege": "create"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "privilege": "create"
+          }
+        }
+      ]
+    }
+  }
+}

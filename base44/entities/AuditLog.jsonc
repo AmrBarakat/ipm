@@ -22,7 +22,9 @@
         "auto_completed",
         "auto_invoiced",
         "progress_synced",
-        "delay_alerted"
+        "delay_alerted",
+        "baseline_imported",
+        "baseline_activated"
       ],
       "description": "The kind of action being audited"
     },

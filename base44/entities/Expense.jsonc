@@ -57,6 +57,10 @@
     "source_document_id": {
       "type": "string"
     },
+    "baseline_line_id": {
+      "type": "string",
+      "description": "Optional link to a BaselineLine (charter commercial model) this expense is committed against."
+    },
     "notes": {
       "type": "string"
     }

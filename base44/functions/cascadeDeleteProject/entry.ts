@@ -6,7 +6,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
 const CHILD_ENTITIES = [
   'Task', 'Milestone', 'WBSItem', 'BOMItem', 'Invoice', 'Expense', 'Collection',
   'Deliverable', 'Document', 'Note', 'Risk', 'ChangeOrder', 'PurchaseOrder',
-  'Baseline', 'AuditLog', 'Conversation',
+  'Baseline', 'CharterBaseline', 'BaselineLine', 'AuditLog', 'Conversation',
 ];
 
 Deno.serve(async (req) => {

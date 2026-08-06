@@ -8,4 +8,6 @@ export const ENTITY_QUERY = {
   BOMItem:     { sort: '-created_date', limit: 2000 },
   Task:        { sort: '-created_date', limit: 1000 },
   Deliverable: { sort: '-created_date', limit: 500 },
+  CharterBaseline: { sort: '-created_date', limit: 20 },
+  BaselineLine:    { sort: '-created_date', limit: 200 },
 };
