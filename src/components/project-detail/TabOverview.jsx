@@ -6,6 +6,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import StatusProgressChart from '@/components/project-detail/StatusProgressChart';
 import SpendingSummaryDashboard from '@/components/project-detail/SpendingSummaryDashboard';
 import BaselineVarianceCard from '@/components/project-detail/BaselineVarianceCard';
+import BaselineVarianceChart from '@/components/project-detail/BaselineVarianceChart';
 
 export default function TabOverview({ project, onRefresh }) {
   const { data: invoices = [], isLoading: invoicesLoading } = useEntityList('Invoice', { project_id: project.id }, 'planned_date', 500);
@@ -124,6 +125,7 @@ export default function TabOverview({ project, onRefresh }) {
       {!loading && <StatusProgressChart projectId={project.id} />}
 
       {/* Charter Baseline Variance */}
+      {!loading && <BaselineVarianceChart project={project} />}
       {!loading && <BaselineVarianceCard project={project} />}
 
       {/* Projected Profit Section */}
