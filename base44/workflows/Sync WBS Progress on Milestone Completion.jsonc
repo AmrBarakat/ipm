@@ -1,0 +1,37 @@
+{
+  "name": "Sync WBS Progress on Milestone Completion",
+  "description": "When a Milestone is updated and its status changes to 'completed', recalculate and push the weighted WBS rollup progress to the parent project. Companion to 'Generate Invoice on Milestone Completion'.",
+  "trigger": {
+    "condition": "${ ((.trigger.changed_fields | index(\"status\") != null) and (.trigger.data.status == \"completed\")) }",
+    "config": {
+      "trigger_type": "entity",
+      "events": [
+        "update"
+      ],
+      "entity_name": "Milestone"
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "sync_wbs_progress_on_milestone_completion",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "run_function": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "syncWBSProgress",
+            "args": {}
+          },
+          "then": "end"
+        }
+      }
+    ]
+  },
+  "x-base44-migrated-from-automation": {
+    "legacy_payload_function": "syncWBSProgress"
+  }
+}

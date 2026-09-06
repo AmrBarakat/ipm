@@ -1,0 +1,37 @@
+{
+  "name": "Auto-Complete Milestone on Task Done",
+  "description": "When a task is marked as done, check if all tasks for the project's milestones are complete and auto-update milestone status.",
+  "trigger": {
+    "condition": "${ ((.trigger.data.status == \"done\") and (.trigger.changed_fields | index(\"status\") != null)) }",
+    "config": {
+      "trigger_type": "entity",
+      "events": [
+        "update"
+      ],
+      "entity_name": "Task"
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "auto_complete_milestone_on_task_done",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "run_function": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "checkMilestoneCompletion",
+            "args": {}
+          },
+          "then": "end"
+        }
+      }
+    ]
+  },
+  "x-base44-migrated-from-automation": {
+    "legacy_payload_function": "checkMilestoneCompletion"
+  }
+}
